@@ -1,33 +1,45 @@
 import 'package:go_router/go_router.dart';
 
-import '../screens/home_screen.dart';
 import '../screens/sign_in_screen.dart';
 import '../screens/sign_up_screen.dart';
 import '../screens/bookmarks_screen.dart';
 import '../screens/friends_screen.dart';
+import '../screens/home_screen.dart';
 import '../screens/navigate_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/recs_inbox_screen.dart';
 import '../screens/results_screen.dart';
+import 'session.dart';
+import '../widgets/app_shell_scaffold.dart';
 
 class AppRoutes {
-  static const home = '/';
   static const signIn = '/sign-in';
   static const signUp = '/sign-up';
-  static const results = '/results';
-  static const navigate = '/navigate';
-  static const profile = '/profile';
-  static const bookmarks = '/bookmarks';
-  static const friends = '/friends';
-  static const recs = '/recs';
 
-  static GoRouter router() {
+  static const appHome = '/app/home';
+  static const appBookmarks = '/app/bookmarks';
+  static const appProfile = '/app/profile';
+
+  static const appResults = '/app/results';
+  static const appFriends = '/app/friends';
+  static const appRecs = '/app/recs';
+  static const appNavigate = '/app/navigate';
+
+  static GoRouter router({required AppSession session}) {
     return GoRouter(
+      initialLocation: signIn,
+      refreshListenable: session,
+      redirect: (context, state) {
+        final signedIn = session.isSignedIn;
+        final goingToAuth = state.uri.path == signIn || state.uri.path == signUp;
+        final goingToApp = state.uri.path.startsWith('/app');
+
+        if (!signedIn && goingToApp) return signIn;
+        if (signedIn && goingToAuth) return appHome;
+        if (state.uri.path == '/') return signedIn ? appHome : signIn;
+        return null;
+      },
       routes: [
-        GoRoute(
-          path: home,
-          builder: (context, state) => const HomeScreen(),
-        ),
         GoRoute(
           path: signIn,
           builder: (context, state) => const SignInScreen(),
@@ -36,29 +48,38 @@ class AppRoutes {
           path: signUp,
           builder: (context, state) => const SignUpScreen(),
         ),
-        GoRoute(
-          path: results,
-          builder: (context, state) => const ResultsScreen(),
-        ),
-        GoRoute(
-          path: navigate,
-          builder: (context, state) => const NavigateScreen(),
-        ),
-        GoRoute(
-          path: profile,
-          builder: (context, state) => const ProfileScreen(),
-        ),
-        GoRoute(
-          path: bookmarks,
-          builder: (context, state) => const BookmarksScreen(),
-        ),
-        GoRoute(
-          path: friends,
-          builder: (context, state) => const FriendsScreen(),
-        ),
-        GoRoute(
-          path: recs,
-          builder: (context, state) => const RecsInboxScreen(),
+        ShellRoute(
+          builder: (context, state, child) => AppShellScaffold(child: child),
+          routes: [
+            GoRoute(
+              path: appHome,
+              builder: (context, state) => const HomeScreen(),
+            ),
+            GoRoute(
+              path: appBookmarks,
+              builder: (context, state) => const BookmarksScreen(),
+            ),
+            GoRoute(
+              path: appProfile,
+              builder: (context, state) => const ProfileScreen(),
+            ),
+            GoRoute(
+              path: appResults,
+              builder: (context, state) => const ResultsScreen(),
+            ),
+            GoRoute(
+              path: appFriends,
+              builder: (context, state) => const FriendsScreen(),
+            ),
+            GoRoute(
+              path: appRecs,
+              builder: (context, state) => const RecsInboxScreen(),
+            ),
+            GoRoute(
+              path: appNavigate,
+              builder: (context, state) => const NavigateScreen(),
+            ),
+          ],
         ),
       ],
     );

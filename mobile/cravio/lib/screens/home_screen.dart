@@ -1,32 +1,43 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-
 import '../core/app_colors.dart';
-import '../core/routes.dart';
+import '../core/session.dart';
+import '../widgets/results_sheet.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _promptController = TextEditingController();
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+    final session = AppSessionScope.of(context);
+
+    return SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 18),
+            child: Column(
               children: [
-                const SizedBox(height: 16),
-                _LogoMark(),
+                const SizedBox(height: 12),
+                const _LogoMark(),
                 const SizedBox(height: 18),
                 Text(
                   'cravio.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1,
-                      ),
+                  style: Theme.of(context).textTheme.displaySmall,
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -34,78 +45,93 @@ class HomeScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
                 ),
-                const SizedBox(height: 28),
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: 'What are you craving?',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    prefixIconColor: AppColors.textMuted,
-                  ),
+                const SizedBox(height: 24),
+                Text(
+                  'Hi ${session.displayName},\nwhat are you craving today?',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => context.go(AppRoutes.results),
-                    child: const Text('Find me a place'),
-                  ),
+                const Spacer(),
+                _PromptInput(
+                  controller: _promptController,
+                  onSend: () => showResultsSheet(context, prompt: _promptController.text),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => context.go(AppRoutes.signIn),
-                        child: const Text('Sign in'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => context.go(AppRoutes.signUp),
-                        child: const Text('Sign up'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    _QuickLink(
-                      label: 'Profile',
-                      icon: Icons.person_outline_rounded,
-                      onPressed: () => context.go(AppRoutes.profile),
-                    ),
-                    _QuickLink(
-                      label: 'Bookmarks',
-                      icon: Icons.bookmark_outline_rounded,
-                      onPressed: () => context.go(AppRoutes.bookmarks),
-                    ),
-                    _QuickLink(
-                      label: 'Friends',
-                      icon: Icons.group_outlined,
-                      onPressed: () => context.go(AppRoutes.friends),
-                    ),
-                    _QuickLink(
-                      label: 'Recs inbox',
-                      icon: Icons.inbox_outlined,
-                      onPressed: () => context.go(AppRoutes.recs),
-                    ),
-                    _QuickLink(
-                      label: 'Navigate',
-                      icon: Icons.map_outlined,
-                      onPressed: () => context.go(AppRoutes.navigate),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PromptInput extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onSend;
+  const _PromptInput({required this.controller, required this.onSend});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      // Keeps the input near the bottom, but not too low above the nav.
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'Type your craving…',
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          _SquareAction(
+            icon: Icons.mic_rounded,
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Voice input coming soon')),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+          _SquareAction(
+            icon: Icons.arrow_upward_rounded,
+            onPressed: onSend,
+            filled: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SquareAction extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool filled;
+
+  @override
+  const _SquareAction({
+    required this.icon,
+    required this.onPressed,
+    this.filled = false,
+  });
+
+  Widget build(BuildContext context) {
+    final bg = filled ? const Color(0xFF234A37) : const Color(0xFF0E1C16);
+
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF1D3329).withValues(alpha: 0.50), width: 1),
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, color: const Color(0xFFE8F2EC)),
       ),
     );
   }
@@ -121,11 +147,11 @@ class _LogoMark extends StatelessWidget {
         width: 104,
         height: 104,
         decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.9),
+          color: const Color(0xFF2E5D45),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: AppColors.accent.withValues(alpha: 0.25),
+              color: const Color(0xFF2E5D45).withValues(alpha: 0.25),
               blurRadius: 24,
               spreadRadius: 2,
             ),
@@ -135,34 +161,9 @@ class _LogoMark extends StatelessWidget {
           child: Icon(
             Icons.auto_awesome_rounded,
             size: 44,
-            color: AppColors.textSecondary,
+            color: Color(0xFFBBD6C8),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _QuickLink extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  const _QuickLink({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.textPrimary,
-        side: BorderSide(color: AppColors.border.withValues(alpha: 0.55), width: 1.5),
       ),
     );
   }
