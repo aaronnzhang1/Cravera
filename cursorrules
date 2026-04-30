@@ -1,0 +1,194 @@
+# Cravio — AI Food Concierge
+# Cursor always reads this file first. Do not delete or rename it.
+
+## WHAT THIS APP IS
+Cravio is a mobile app that eliminates food indecisiveness by acting as an AI concierge.
+Instead of clunky manual filters, the user tells the AI what they are craving in natural
+language and the AI finds a real restaurant match near them. As the user builds a profile
+over time, the AI learns their preferences and gets smarter with every interaction.
+
+---
+
+## TECH STACK
+- Frontend: Flutter (Dart)
+- Backend + Database: Supabase (PostgreSQL)
+- Version Control: Git
+- LLM API: Gemini API (free tier for MVP — Phase 1 only)
+- Restaurant Data API: Google Places API (free $200/month credit)
+- Future paid option: Yelp API (Phase 2+), OpenAI API (Phase 2+)
+
+---
+
+## CRITICAL ARCHITECTURE RULE — NEVER VIOLATE THIS
+The LLM (Gemini) NEVER generates, names, or fabricates restaurant data.
+The LLM's ONLY job is to parse the user's craving into structured JSON search filters.
+ALL restaurant data shown to the user (name, photo, address, price, hours, distance)
+comes exclusively from the Google Places API. This prevents hallucination entirely.
+
+Correct data flow:
+  User types craving
+    → Gemini interprets craving → returns JSON filters only
+    → Google Places API called with those filters
+    → Real, verified restaurant data displayed to user
+
+If a user says "something spicy and cheap", Gemini returns something like:
+  { "keyword": "spicy", "price_level": 1, "open_now": true, "radius": 1500 }
+Google Places then handles the actual restaurant lookup. Gemini never outputs a restaurant name.
+
+---
+
+## CURRENT PHASE: Phase 1 — MVP
+Goals:
+- Guest session mode only (no auth, no login required yet)
+- No data persistence yet (nothing saved to DB in this phase)
+- Core app loop must work end to end:
+    user craving → Gemini filters → Google Places result → yes/no decision → navigation
+
+What to display on the restaurant card:
+- Name
+- Photo of the place
+- Distance from user
+- Price ($/$$/$$$)
+- Cuisine type
+- Address
+- Link to restaurant page
+- HAS TO BE OPEN — always pass open_now: true to Google Places
+
+Yes/No loop:
+- YES → show navigation options (Apple Maps or Google Maps deep link)
+- NO → AI asks follow-up for more specific cravings, then searches again
+       If still no match after follow-up → show manual filter failsafe panel
+
+---
+
+## ROADMAP OVERVIEW
+
+PREPHASE   → Design wireframe (DONE)
+PHASE 1    → MVP, guest session, no auth, Gemini + Google Places, yes/no loop
+PHASE 1.5  → Authentication (login/signup), user profiles, Supabase auth, security
+PHASE 2    → Bookmarks, rating system (1–5 stars), preference memory, AI learns from history,
+             manual filter failsafe, OpenAI API upgrade considered
+PHASE 2.5  → Full UI rehaul, test cases, RLS security, input validation, bug fixes,
+             privacy & data storage compliance
+PHASE 3    → Friend system (mutual friends only, no followers/public profiles),
+             view friends' bookmarks (read-only), send restaurant recs to friends,
+             recs inbox with Save/Dismiss, badge counter on bell icon
+PHASE 4    → Beta test with friends/family, feedback website
+FINAL      → App Store deployment
+
+---
+
+## FEATURE DETAILS
+
+### Location
+- Default: use device's current GPS location
+- User can also manually select a different location (not just where they are)
+
+### Distance
+- Distance slider/gauge is a key feature — users care deeply about this
+- Options: walk / short drive / far drive  OR  0.5 mi / 1 mi / 3 mi / 10 mi
+- Always factor distance into the Google Places API radius parameter
+
+### Manual Filter Failsafe (Phase 2)
+- If AI is not satisfying the user's needs, show a manual filter panel
+- Filters: cuisine type, price range, distance gauge
+- These are a fallback, not the primary experience
+
+### Bookmarks (Phase 2)
+- User can save a restaurant they said YES to
+- Rating system: 1–5 stars per saved restaurant
+- Data saved to Supabase: cuisine, restaurant price, location, where user usually eats
+- Bookmark data feeds back into the AI to build preference profile over time
+- Bookmarks are private by default — only visible to friends
+
+### Friend System (Phase 3)
+- Search users by username
+- Send / accept / decline / remove friend requests
+- Mutual friends only — no followers, no public profiles
+- Friends can view each other's bookmarks (read-only)
+- Can copy a restaurant from a friend's bookmark into your own
+
+### Recs / Send to Friend (Phase 3)
+- Any restaurant card has a "Send to Friend" button
+- Pick a friend → they get a notification: "[Friend] thinks you'd like [Restaurant]"
+- Recs show up in a Recs inbox
+- Each notification shows: sender name, restaurant name, Save + Dismiss buttons inline
+- Bell icon shows badge counter (red dot with number) for pending recs
+- Notification panel opens as a bottom sheet or side drawer (NOT an iframe — Flutter native)
+
+### Discounts / Deals (Future / Additional)
+- When a restaurant is selected, check if there are Groupon or food service deals
+- Nice-to-have, not MVP
+
+---
+
+## DESIGN SYSTEM
+
+Color palette (dark theme only):
+- Base background:   #13131A
+- Card surface:      #1C1C26
+- Border:            #2E2E3E
+- Primary accent:    #C4866A  (terracotta/warm)
+- Secondary accent:  #7AB88A  (sage green — for positive states)
+- Primary text:      #F0EDE8
+- Secondary text:    #8A8799
+- Muted/hint text:   #4A4A5A
+
+Design principles:
+- Minimal and uncluttered — nothing unnecessary on screen
+- Sophisticated, modern — no bright colors, easy on the eyes
+- Floating restaurant photo cards on sign-in background
+- Bottom sheet / drawer for notifications (Flutter native, not webview iframe)
+
+Screens (all wireframed):
+- Sign In / Sign Up
+- Home / Chat (personalized greeting: "Hello {NAME}, what are you craving today?")
+  - Text input to talk to AI
+  - Voice button
+  - Quick-pick suggestion chips
+- Restaurant Result Card (name, photo, distance, price, cuisine, address, yes/no buttons)
+- Navigate (map view, Apple Maps + Google Maps options, Save to bookmarks)
+- Profile (avatar, stats: saved / friends / recs, menu: Bookmarks, Friends, Notifications, Preferences)
+- Bookmarks page
+- Friends page (inside profile)
+- Recs inbox (bottom sheet with badge counter on bell)
+
+---
+
+## PROJECT FILE STRUCTURE CONVENTIONS
+lib/
+  screens/       → one file per screen (home_screen.dart, restaurant_screen.dart, etc.)
+  widgets/       → reusable UI components (restaurant_card.dart, craving_input.dart, etc.)
+  services/      → all API and business logic (gemini_service.dart, places_service.dart)
+  models/        → data models (restaurant.dart, user_profile.dart)
+  core/          → theme, constants, app colors (app_theme.dart, constants.dart)
+  main.dart      → entry point and router setup
+
+---
+
+## CODING RULES
+- Never hardcode API keys — always load from .env using flutter_dotenv
+- Never put business logic inside screen widgets — use services/
+- Always pass open_now: true to Google Places — restaurants must be currently open
+- Use go_router for all navigation
+- All secrets live in .env which is gitignored — never commit it
+- Keep each file focused on one responsibility
+
+---
+
+## KEY PACKAGES (pubspec.yaml)
+- flutter_dotenv: ^5.1.0       # .env file reader
+- supabase_flutter: ^2.0.0     # Supabase client
+- go_router: ^13.0.0           # navigation
+- http: ^1.2.0                 # API calls
+- url_launcher: ^6.2.0         # opens Apple/Google Maps deep links
+- geolocator: ^11.0.0          # device GPS location
+
+---
+
+## WHAT NOT TO DO
+- Never let Gemini output a restaurant name, address, or any display data
+- Never use an iframe for notifications — use Flutter bottom sheet or drawer
+- Never store API keys in code or commit them to git
+- Never build auth or persistence in Phase 1 — that is Phase 1.5
+- Never skip the open_now filter — closed restaurants must never be shown
