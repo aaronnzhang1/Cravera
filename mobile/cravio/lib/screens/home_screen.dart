@@ -109,6 +109,11 @@ class _PromptInput extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           _SquareAction(
+            icon: Icons.tune_rounded,
+            onPressed: onManualFilter,
+          ),
+          const SizedBox(width: 10),
+          _SquareAction(
             icon: Icons.mic_rounded,
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(

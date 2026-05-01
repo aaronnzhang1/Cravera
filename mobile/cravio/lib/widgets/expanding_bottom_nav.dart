@@ -22,8 +22,9 @@ class ExpandingBottomNav extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _NavItem(selected: currentIndex == 0, label: 'Home', icon: Icons.home_outlined, onTap: () => onTap(0)),
-          _NavItem(selected: currentIndex == 1, label: 'Saved', icon: Icons.bookmark_border_rounded, onTap: () => onTap(1)),
-          _NavItem(selected: currentIndex == 2, label: 'Profile', icon: Icons.person_outline_rounded, onTap: () => onTap(2)),
+          _NavItem(selected: currentIndex == 1, label: 'Bookmarks', icon: Icons.bookmark_border_rounded, onTap: () => onTap(1)),
+          _NavItem(selected: currentIndex == 2, label: 'Friends', icon: Icons.group_outlined, onTap: () => onTap(2)),
+          _NavItem(selected: currentIndex == 3, label: 'Profile', icon: Icons.person_outline_rounded, onTap: () => onTap(3)),
         ],
       ),
     );

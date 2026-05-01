@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,13 +8,20 @@ import '../core/app_colors.dart';
 import '../core/session.dart';
 import '../models/restaurant.dart';
 
-Future<void> showResultsSheet(BuildContext context, {String? prompt}) async {
+Future<void> showResultsSheet(
+  BuildContext context, {
+  String? prompt,
+  int? selectedIndex,
+  FutureOr<void> Function()? onNo,
+  VoidCallback? onReprompt,
+}) async {
   final session = AppSessionScope.of(context);
   final items = session.suggestedRestaurants;
   if (items.isEmpty) return;
 
-  // Demo: pick a stable "random" result each open.
-  final selected = items[DateTime.now().millisecondsSinceEpoch % max(1, items.length)];
+  final selected = selectedIndex == null
+      ? items[DateTime.now().millisecondsSinceEpoch % max(1, items.length)]
+      : items[selectedIndex % max(1, items.length)];
 
   await showModalBottomSheet<void>(
     context: context,
@@ -21,7 +29,7 @@ Future<void> showResultsSheet(BuildContext context, {String? prompt}) async {
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.55),
     builder: (context) {
-      return _ResultsSheetBody(restaurant: selected, prompt: prompt);
+      return _ResultsSheetBody(restaurant: selected, prompt: prompt, onNo: onNo, onReprompt: onReprompt);
     },
   );
 }
@@ -29,7 +37,9 @@ Future<void> showResultsSheet(BuildContext context, {String? prompt}) async {
 class _ResultsSheetBody extends StatelessWidget {
   final Restaurant restaurant;
   final String? prompt;
-  const _ResultsSheetBody({required this.restaurant, required this.prompt});
+  final FutureOr<void> Function()? onNo;
+  final VoidCallback? onReprompt;
+  const _ResultsSheetBody({required this.restaurant, required this.prompt, this.onNo, this.onReprompt});
 
   @override
   Widget build(BuildContext context) {

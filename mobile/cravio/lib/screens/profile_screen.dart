@@ -90,7 +90,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 class _StatCard extends StatelessWidget {
   final String value;
   final String label;
-  const _StatCard({required this.value, required this.label});
+  final VoidCallback onTap;
+  const _StatCard({required this.value, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

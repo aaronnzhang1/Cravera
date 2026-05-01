@@ -40,7 +40,7 @@ class BookmarksScreen extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Saved', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Bookmarks', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 4),
                 Text('${bookmarks.length} restaurants', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
                 const SizedBox(height: 12),
