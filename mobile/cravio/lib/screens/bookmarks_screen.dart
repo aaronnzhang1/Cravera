@@ -11,7 +11,8 @@ class BookmarksScreen extends StatelessWidget {
     final session = AppSessionScope.of(context);
     final bookmarks = session.bookmarks;
 
-    return SafeArea(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: bookmarks.isEmpty
           ? Center(
               child: Padding(
@@ -22,7 +23,7 @@ class BookmarksScreen extends StatelessWidget {
                     const Icon(Icons.bookmark_outline_rounded, size: 42, color: AppColors.textSecondary),
                     const SizedBox(height: 12),
                     Text(
-                      'No saved restaurants yet.\nWhen you save one, it’ll show up here.',
+                      'No saved restaurants yet.\nWhen you save one, it will show up here.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
                     ),
@@ -35,8 +36,15 @@ class BookmarksScreen extends StatelessWidget {
                 ),
               ),
             )
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Saved', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text('${bookmarks.length} restaurants', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
+                const SizedBox(height: 16),
+                Expanded(child: ListView.separated(
+              padding: EdgeInsets.zero,
               itemCount: bookmarks.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
@@ -52,6 +60,8 @@ class BookmarksScreen extends StatelessWidget {
                   onRemove: () => session.toggleBookmark(r),
                 );
               },
+            )),
+              ],
             ),
     );
   }
