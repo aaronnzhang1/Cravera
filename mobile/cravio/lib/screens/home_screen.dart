@@ -90,7 +90,8 @@ class _PromptInput extends StatelessWidget {
   final TextEditingController controller;
   final bool isBusy;
   final VoidCallback onSend;
-  const _PromptInput({required this.controller, required this.isBusy, required this.onSend});
+  final VoidCallback? onManualFilter;
+  const _PromptInput({required this.controller, required this.isBusy, required this.onSend, this.onManualFilter});
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +111,7 @@ class _PromptInput extends StatelessWidget {
           const SizedBox(width: 12),
           _SquareAction(
             icon: Icons.tune_rounded,
-            onPressed: onManualFilter,
+            onPressed: onManualFilter ?? () {},
           ),
           const SizedBox(width: 10),
           _SquareAction(
