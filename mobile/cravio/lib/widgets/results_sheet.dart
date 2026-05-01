@@ -162,17 +162,14 @@ class _ResultsSheetBody extends StatelessWidget {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () async {
-                                  Navigator.of(context).maybePop();
-                                  await onNo?.call();
-                                },
+                                onPressed: () => Navigator.of(context).maybePop(),
                                 child: const Text('No'),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: FilledButton(
-                                onPressed: () => _showNextActions(context, restaurant, onReprompt: onReprompt),
+                                onPressed: () => _showNextActions(context, restaurant),
                                 child: const Text('Yes'),
                               ),
                             ),
@@ -192,7 +189,7 @@ class _ResultsSheetBody extends StatelessWidget {
   }
 }
 
-Future<void> _showNextActions(BuildContext context, Restaurant restaurant, {VoidCallback? onReprompt}) {
+Future<void> _showNextActions(BuildContext context, Restaurant restaurant) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface2,
@@ -211,15 +208,6 @@ Future<void> _showNextActions(BuildContext context, Restaurant restaurant, {Void
               onTap: () async {
                 Navigator.of(context).pop();
                 await _openNavigation(context, restaurant);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.tune_rounded),
-              title: const Text('Refine prompt'),
-              subtitle: const Text('Add more details to your craving'),
-              onTap: () {
-                Navigator.of(context).pop();
-                onReprompt?.call();
               },
             ),
             ListTile(

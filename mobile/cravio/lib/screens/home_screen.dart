@@ -14,8 +14,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _promptController = TextEditingController();
   bool _isFinding = false;
-  int _resultCursor = 0;
-  int _noCount = 0;
 
   @override
   void dispose() {
@@ -59,7 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 _PromptInput(
                   controller: _promptController,
                   isBusy: _isFinding,
-                  onManualFilter: _openRefinePrompt,
                   onSend: _runFindFlow,
                 ),
               ],
@@ -77,95 +74,23 @@ class _HomeScreenState extends State<HomeScreen> {
     if (prompt.isEmpty) return;
 
     setState(() => _isFinding = true);
-    await Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        opaque: false,
-        pageBuilder: (_, __, ___) => const _FindingPage(),
-        transitionDuration: const Duration(milliseconds: 180),
-      ),
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _FindingDialog(),
     );
 
     if (!mounted) return;
-    await _showResult(prompt);
-    if (mounted) setState(() => _isFinding = false);
-  }
-
-  Future<void> _showResult(String prompt) {
-    return showResultsSheet(
-      context,
-      prompt: prompt,
-      selectedIndex: _resultCursor,
-      onNo: () async {
-        setState(() {
-          _resultCursor += 1;
-          _noCount += 1;
-        });
-        if (_noCount >= 2 && mounted) _showRefineSnack();
-        if (!mounted) return;
-        await Navigator.of(context).push(
-          PageRouteBuilder<void>(
-            opaque: false,
-            pageBuilder: (_, __, ___) => const _FindingPage(),
-            transitionDuration: const Duration(milliseconds: 180),
-          ),
-        );
-        if (!mounted) return;
-        await _showResult(prompt);
-      },
-      onReprompt: () => _openRefinePrompt(),
-    );
-  }
-
-  void _showRefineSnack() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Want to refine? Add cuisine, vibe, budget, or distance.')),
-    );
-  }
-
-  Future<void> _openRefinePrompt() async {
-    final controller = TextEditingController(text: _promptController.text);
-    final next = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface2,
-      builder: (context) {
-        final inset = MediaQuery.viewInsetsOf(context).bottom;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + inset),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: controller, decoration: const InputDecoration(hintText: 'Add details: sushi, casual, under $$, within 5 miles')),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-                  child: const Text('Search again'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    controller.dispose();
-    if (next == null || next.isEmpty || !mounted) return;
-    setState(() {
-      _promptController.text = next;
-      _noCount = 0;
-      _resultCursor += 1;
-    });
-    await _showResult(next);
+    setState(() => _isFinding = false);
+    await showResultsSheet(context, prompt: prompt);
   }
 }
 
 class _PromptInput extends StatelessWidget {
   final TextEditingController controller;
   final bool isBusy;
-  final VoidCallback onManualFilter;
   final VoidCallback onSend;
-  const _PromptInput({required this.controller, required this.isBusy, required this.onManualFilter, required this.onSend});
+  const _PromptInput({required this.controller, required this.isBusy, required this.onSend});
 
   @override
   Widget build(BuildContext context) {
@@ -209,14 +134,14 @@ class _PromptInput extends StatelessWidget {
   }
 }
 
-class _FindingPage extends StatefulWidget {
-  const _FindingPage();
+class _FindingDialog extends StatefulWidget {
+  const _FindingDialog();
 
   @override
-  State<_FindingPage> createState() => _FindingPageState();
+  State<_FindingDialog> createState() => _FindingDialogState();
 }
 
-class _FindingPageState extends State<_FindingPage> {
+class _FindingDialogState extends State<_FindingDialog> {
   static const _messages = [
     'Hold on while I look…',
     'Scanning nearby favorites…',
@@ -243,22 +168,31 @@ class _FindingPageState extends State<_FindingPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xEE0A120F),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.55), width: 1),
+        ),
+        child: Row(
           children: [
-            const Icon(Icons.radar_rounded, size: 56, color: Color(0xFF56B36A)),
-            const SizedBox(height: 16),
-            const SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 2.6)),
-            const SizedBox(height: 16),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: Text(
-                _messages[_index],
-                key: ValueKey(_messages[_index]),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.3),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Text(
+                  _messages[_index],
+                  key: ValueKey(_messages[_index]),
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
               ),
             ),
           ],
