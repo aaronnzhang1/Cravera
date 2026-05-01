@@ -24,7 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 118),
         children: [
-          Text('Profile', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+          Text('Profile', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.5)),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -47,12 +47,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          Row(children: const [
-            Expanded(child: _StatCard(value: '12', label: 'Saved')),
-            SizedBox(width: 10),
-            Expanded(child: _StatCard(value: '4', label: 'Friends')),
-            SizedBox(width: 10),
-            Expanded(child: _StatCard(value: '28', label: 'Visited')),
+          Row(children: [
+            Expanded(child: _StatCard(value: '12', label: 'Bookmarks',
+                onTap: () => context.go(AppRoutes.appBookmarks))),
+            const SizedBox(width: 10),
+            Expanded(child: _StatCard(value: '4', label: 'Friends',
+                onTap: () => context.go(AppRoutes.appFriends))),
           ]),
           const SizedBox(height: 14),
           _Segment(
@@ -95,7 +95,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.surface.withValues(alpha: 0.58),
@@ -106,6 +106,16 @@ class _StatCard extends StatelessWidget {
         Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: const Color(0xFF56B36A), fontWeight: FontWeight.w800)),
         Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
       ]),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: card,
+      ),
     );
   }
 }
