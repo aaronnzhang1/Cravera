@@ -5,6 +5,7 @@ import '../core/app_colors.dart';
 import '../core/routes.dart';
 import '../core/session.dart';
 import '../widgets/cravio_background.dart';
+import '../widgets/cravio_pulse_logo.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -37,7 +38,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
                 children: [
                   const SizedBox(height: 10),
-                  _HeaderMark(),
+                  const CravioPulseLogo(size: 92, duration: Duration(milliseconds: 2600)),
                   const SizedBox(height: 16),
                   Text(
                     'cravio.',
@@ -113,32 +114,3 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 }
-
-class _HeaderMark extends StatelessWidget {
-  const _HeaderMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 92,
-        height: 92,
-        decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.9),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.accent.withValues(alpha: 0.25),
-              blurRadius: 24,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: const Center(
-          child: Icon(Icons.auto_awesome_rounded, size: 40, color: AppColors.textSecondary),
-        ),
-      ),
-    );
-  }
-}
-
