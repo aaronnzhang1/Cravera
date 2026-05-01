@@ -6,6 +6,7 @@ import '../models/restaurant.dart';
 class AppSession extends ChangeNotifier {
   String? _displayName;
   final List<Restaurant> _bookmarks = [];
+  final Map<String, int> _bookmarkRatings = {};
 
   final List<Restaurant> _suggested = const [
     Restaurant(
@@ -51,6 +52,7 @@ class AppSession extends ChangeNotifier {
 
   List<Restaurant> get bookmarks => List.unmodifiable(_bookmarks);
   List<Restaurant> get suggestedRestaurants => List.unmodifiable(_suggested);
+  int bookmarkRating(String placeId) => _bookmarkRatings[placeId] ?? 0;
 
   void signIn({required String displayName}) {
     _displayName = displayName.trim().isEmpty ? 'there' : displayName.trim();
@@ -68,9 +70,16 @@ class AppSession extends ChangeNotifier {
     final existingIndex = _bookmarks.indexWhere((r) => r.placeId == restaurant.placeId);
     if (existingIndex >= 0) {
       _bookmarks.removeAt(existingIndex);
+      _bookmarkRatings.remove(restaurant.placeId);
     } else {
       _bookmarks.add(restaurant);
     }
+    notifyListeners();
+  }
+
+  void rateBookmark(String placeId, int rating) {
+    if (!isBookmarked(placeId)) return;
+    _bookmarkRatings[placeId] = rating.clamp(0, 5).toInt();
     notifyListeners();
   }
 
@@ -95,4 +104,3 @@ class AppSessionScope extends InheritedNotifier<AppSession> {
     return scope!.notifier!;
   }
 }
-
