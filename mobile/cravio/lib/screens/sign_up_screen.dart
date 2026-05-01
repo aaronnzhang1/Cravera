@@ -45,7 +45,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const CravioPulseLogo(size: 92, duration: Duration(milliseconds: 2600)),
                   const SizedBox(height: 16),
                   Text(
-                    'cravio.',
+                    'cravio',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.displaySmall?.copyWith(
                           fontWeight: FontWeight.w800,

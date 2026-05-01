@@ -48,7 +48,7 @@ class BookmarksScreen extends StatelessWidget {
                   child: ListView.separated(
                     padding: const EdgeInsets.only(bottom: 118),
                     itemCount: bookmarks.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final r = bookmarks[index];
                       return _BookmarkCard(

@@ -56,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const CravioPulseLogo(),
                 const SizedBox(height: 18),
                 Text(
-                  'cravio.',
+                  'cravio',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.displaySmall,
                 ),
