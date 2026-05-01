@@ -45,7 +45,8 @@ class _ResultsSheetBody extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
-      child: Align(
+      child: FractionallySizedBox(
+        heightFactor: 0.9,
         alignment: Alignment.bottomCenter,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(28),
@@ -61,15 +62,10 @@ class _ResultsSheetBody extends StatelessWidget {
                 ),
               ],
             ),
-            child: DraggableScrollableSheet(
-              initialChildSize: 0.62,
-              minChildSize: 0.45,
-              maxChildSize: 0.92,
-              builder: (context, scrollController) {
-                return ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  children: [
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                children: [
                     Center(
                       child: Container(
                         width: 40,
@@ -104,9 +100,12 @@ class _ResultsSheetBody extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                     ],
-                    _PhotoHeader(photoUrl: restaurant.photoUrl),
-                    const SizedBox(height: 14),
-                    Row(
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          _PhotoHeader(photoUrl: restaurant.photoUrl),
+                          const SizedBox(height: 14),
+                          Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
@@ -133,8 +132,8 @@ class _ResultsSheetBody extends StatelessWidget {
                       const SizedBox(height: 12),
                       Wrap(spacing: 8, runSpacing: 8, children: chips),
                     ],
-                    const SizedBox(height: 18),
-                    Row(
+                          const SizedBox(height: 18),
+                          Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
@@ -151,11 +150,12 @@ class _ResultsSheetBody extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                  ],
-                );
-              },
-            ),
+                          const SizedBox(height: 10),
+                        ],
+                      ),
+                    ),
+                ),
+              ),
           ),
         ),
       ),

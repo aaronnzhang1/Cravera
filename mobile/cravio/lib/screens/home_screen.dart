@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/session.dart';
 import '../widgets/results_sheet.dart';
+import '../widgets/cravio_pulse_logo.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -32,7 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 12),
-                const _LogoMark(),
+                const CravioPulseLogo(),
                 const SizedBox(height: 18),
                 Text(
                   'cravio.',
@@ -132,38 +133,6 @@ class _SquareAction extends StatelessWidget {
       child: IconButton(
         onPressed: onPressed,
         icon: Icon(icon, color: const Color(0xFFE8F2EC)),
-      ),
-    );
-  }
-}
-
-class _LogoMark extends StatelessWidget {
-  const _LogoMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 104,
-        height: 104,
-        decoration: BoxDecoration(
-          color: const Color(0xFF2E5D45),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF2E5D45).withValues(alpha: 0.25),
-              blurRadius: 24,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: const Center(
-          child: Icon(
-            Icons.auto_awesome_rounded,
-            size: 44,
-            color: Color(0xFFBBD6C8),
-          ),
-        ),
       ),
     );
   }

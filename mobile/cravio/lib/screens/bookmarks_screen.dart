@@ -11,7 +11,8 @@ class BookmarksScreen extends StatelessWidget {
     final session = AppSessionScope.of(context);
     final bookmarks = session.bookmarks;
 
-    return SafeArea(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: bookmarks.isEmpty
           ? Center(
               child: Padding(
@@ -22,7 +23,7 @@ class BookmarksScreen extends StatelessWidget {
                     const Icon(Icons.bookmark_outline_rounded, size: 42, color: AppColors.textSecondary),
                     const SizedBox(height: 12),
                     Text(
-                      'No saved restaurants yet.\nWhen you save one, it’ll show up here.',
+                      'No saved restaurants yet.\nWhen you save one, it will show up here.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
                     ),
@@ -35,8 +36,15 @@ class BookmarksScreen extends StatelessWidget {
                 ),
               ),
             )
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Saved', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text('${bookmarks.length} restaurants', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
+                const SizedBox(height: 16),
+                Expanded(child: ListView.separated(
+              padding: EdgeInsets.zero,
               itemCount: bookmarks.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
@@ -52,6 +60,8 @@ class BookmarksScreen extends StatelessWidget {
                   onRemove: () => session.toggleBookmark(r),
                 );
               },
+            )),
+              ],
             ),
     );
   }
@@ -82,7 +92,7 @@ class _BookmarkCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final metaChips = <Widget>[];
 
-    if (rating != null) metaChips.add(_MetaChip(icon: Icons.star_rounded, label: rating!.toStringAsFixed(1)));
+    if (rating != null) metaChips.add(_MetaChip(icon: Icons.star_rounded, label: '${rating!.toStringAsFixed(1)}/5'));
     if ((cuisine ?? '').trim().isNotEmpty) metaChips.add(_MetaChip(icon: Icons.local_dining_rounded, label: cuisine!.trim()));
     if (priceLevel != null) metaChips.add(_MetaChip(icon: Icons.attach_money_rounded, label: '\$' * priceLevel!.clamp(1, 4)));
     if (distanceMeters != null) {
@@ -91,18 +101,18 @@ class _BookmarkCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(16),
               child: Container(
-                width: 74,
-                height: 74,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
                   color: AppColors.accent.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
                 ),
                 child: photoUrl == null
@@ -110,13 +120,13 @@ class _BookmarkCard extends StatelessWidget {
                     : Image.network(photoUrl!, fit: BoxFit.cover),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(restaurantName, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   if (metaChips.isNotEmpty)
                     Wrap(
                       spacing: 8,
@@ -124,7 +134,7 @@ class _BookmarkCard extends StatelessWidget {
                       children: metaChips,
                     ),
                   if ((address ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     Text(
                       address!,
                       maxLines: 1,
@@ -156,11 +166,11 @@ class _RoundIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 44,
-      height: 44,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         color: AppColors.surface2.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
       ),
       child: IconButton(

@@ -6,51 +6,25 @@ class ExpandingBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const ExpandingBottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const ExpandingBottomNav({super.key, required this.currentIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + bottomPadding * 0.15),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.surface2.withValues(alpha: 0.42),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _NavItem(
-                selected: currentIndex == 0,
-                label: 'Home',
-                icon: Icons.home_rounded,
-                onTap: () => onTap(0),
-              ),
-              _NavItem(
-                selected: currentIndex == 1,
-                label: 'Bookmarks',
-                icon: Icons.bookmark_rounded,
-                onTap: () => onTap(1),
-              ),
-              _NavItem(
-                selected: currentIndex == 2,
-                label: 'Profile',
-                icon: Icons.person_rounded,
-                onTap: () => onTap(2),
-              ),
-            ],
-          ),
-        ),
+    return Container(
+      padding: EdgeInsets.fromLTRB(18, 10, 18, 12 + bottomPadding),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.92),
+        border: Border(top: BorderSide(color: AppColors.border.withValues(alpha: 0.50))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _NavItem(selected: currentIndex == 0, label: 'Home', icon: Icons.home_outlined, onTap: () => onTap(0)),
+          _NavItem(selected: currentIndex == 1, label: 'Saved', icon: Icons.bookmark_border_rounded, onTap: () => onTap(1)),
+          _NavItem(selected: currentIndex == 2, label: 'Profile', icon: Icons.person_outline_rounded, onTap: () => onTap(2)),
+        ],
       ),
     );
   }
@@ -62,12 +36,7 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _NavItem({
-    required this.selected,
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
+  const _NavItem({required this.selected, required this.label, required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -75,42 +44,23 @@ class _NavItem extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppColors.accent2.withValues(alpha: 0.80) : Colors.transparent,
+          color: selected ? const Color(0xFFE8EAED) : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 20,
-              color: selected ? AppColors.textPrimary : AppColors.textSecondary,
-            ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.centerLeft,
-              child: selected
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
+            Icon(icon, color: selected ? const Color(0xFF56B36A) : AppColors.textMuted),
+            if (selected) ...[
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(color: Color(0xFF56B36A), fontWeight: FontWeight.w700)),
+            ],
           ],
         ),
       ),
     );
   }
 }
-
