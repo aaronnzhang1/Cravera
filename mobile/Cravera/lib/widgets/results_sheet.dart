@@ -150,7 +150,7 @@ class _ResultsSheetBody extends StatelessWidget {
                           Text(
                             [
                               restaurant.address!.trim(),
-                              if (distanceLabel != null) distanceLabel,
+                              ?distanceLabel,
                             ].join('  •  '),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
