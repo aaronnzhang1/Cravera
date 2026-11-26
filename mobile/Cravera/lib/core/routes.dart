@@ -30,7 +30,7 @@ class AppRoutes {
       initialLocation: signIn,
       refreshListenable: session,
       redirect: (context, state) {
-        final signedIn = session.isSignedIn;
+        final signedIn = session.canEnterApp;
         final goingToAuth = state.uri.path == signIn || state.uri.path == signUp;
         final goingToApp = state.uri.path.startsWith('/app');
 

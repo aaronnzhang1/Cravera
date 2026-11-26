@@ -46,7 +46,15 @@ class AppSession extends ChangeNotifier {
     ),
   ];
 
+  bool _isGuest = false;
+
   bool get isSignedIn => _displayName != null && _displayName!.trim().isNotEmpty;
+
+  /// True when the user chose "Continue as guest": they can use the app but have no account.
+  bool get isGuest => _isGuest && !isSignedIn;
+
+  /// Whether the user may enter the app screens (signed in or browsing as a guest).
+  bool get canEnterApp => isSignedIn || isGuest;
   String get displayName => (_displayName ?? '').trim().isEmpty ? 'there' : _displayName!.trim();
 
   List<Restaurant> get bookmarks => List.unmodifiable(_bookmarks);
@@ -55,11 +63,18 @@ class AppSession extends ChangeNotifier {
 
   void signIn({required String displayName}) {
     _displayName = displayName.trim().isEmpty ? 'there' : displayName.trim();
+    _isGuest = false;
+    notifyListeners();
+  }
+
+  void continueAsGuest() {
+    _isGuest = true;
     notifyListeners();
   }
 
   void signOut() {
     _displayName = null;
+    _isGuest = false;
     notifyListeners();
   }
 

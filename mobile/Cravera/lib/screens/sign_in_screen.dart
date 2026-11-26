@@ -105,6 +105,14 @@ class _SignInScreenState extends State<SignInScreen> {
                     style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
                     child: const Text('Don’t have an account? Sign up'),
                   ),
+                  const SizedBox(height: 4),
+                  OutlinedButton(
+                    onPressed: () {
+                      AppSessionScope.of(context).continueAsGuest();
+                      context.go(AppRoutes.appHome);
+                    },
+                    child: const Text('Continue as guest'),
+                  ),
                 ],
               ),
             ),
