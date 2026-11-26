@@ -1,6 +1,6 @@
 # 0003 · API key handling
 
-- **Status:** Proposed (needs the maintainer's acceptance)
+- **Status:** Accepted (maintainer, 2026-11-26)
 - **Date:** 2026-11-26
 
 ## Context
