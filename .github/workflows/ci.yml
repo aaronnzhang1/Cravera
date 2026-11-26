@@ -1,5 +1,7 @@
-# Runs on every PR and on main. Job names (`secrets`, `checks`) are what the ruleset requires:
-# rename a job and you must update the ruleset in the same PR.
+# Runs on every PR and on main. Job names (`secrets`, `checks`) are what the ruleset requires.
+# Never rename one in a single step: add the new job, require it in the ruleset, then remove the old one.
+# This workflow can be edited by the PR it checks, so GitHub's own secret scanning with push protection
+# (a repo setting, outside any PR) is the independent backstop. Read workflow diffs closely in review.
 # Actions are pinned to commit SHAs and gitleaks to an exact version with its checksum.
 # Update them deliberately, not automatically.
 name: CI

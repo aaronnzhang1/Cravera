@@ -6,7 +6,8 @@
 - **Last change.** Audited the project after a six-month break, synced with GitHub, fixed the smoke test (it expected the old `cravio.` wordmark), adopted the agent workflow kit, and merged the three roadmap sources and new ideas into PRODUCT.md. Checks on Windows: `flutter analyze` no issues; `flutter test` 1 passed.
 - **Open problems.**
   - ADR 0003 (keys behind Supabase Edge Functions) is Proposed; TASK-001 is blocked until it's accepted.
-  - `.env.example` key names are a proposal; reconcile them with the real `.env` on the Mac. The Windows `.env` has placeholders only.
+  - `.env.example` holds only public Supabase config (Codex review finding). The Mac's `.env` holds real private keys (including Gemini): move them to Supabase Edge Function secrets during TASK-001 and remove them from `.env`. The Windows `.env` has placeholders only.
+  - The `secrets` CI job is defined in a workflow a PR can edit; GitHub secret scanning with push protection is the independent control (repo setting).
   - Unverified: the Android maps launch (the manifest has no `<queries>` entry for https links); Supabase CLI access; a Google Cloud project with the Places API (New) enabled.
   - `mobile/Cravera/cursorrules` repeats rules now in AGENTS.md and PRODUCT.md; delete it if Cursor is no longer used. `C:\Developer\Cravera Docs\Cravio-Project-Status.md` is superseded by this file.
   - The app is still called Cravio in code (PRODUCT.md open decision 2).
