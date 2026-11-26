@@ -26,6 +26,7 @@ function place(overrides: Record<string, unknown> = {}) {
     priceLevel: "PRICE_LEVEL_MODERATE",
     rating: 4.4,
     primaryTypeDisplayName: { text: "Ramen Restaurant" },
+    types: ["ramen_restaurant", "restaurant", "food", "point_of_interest"],
     photos: [{ name: "places/fake-place-1/photos/abc" }],
     currentOpeningHours: { openNow: true },
     ...overrides,
@@ -117,6 +118,7 @@ test("always asks Places for open-now restaurants inside a box around the user",
   const body = buildRequestBody(input);
   assert.equal(body.openNow, true);
   assert.equal(body.includedType, "restaurant");
+  assert.equal(body.strictTypeFiltering, true);
   assert.equal(body.textQuery, "ramen");
   const { low, high } = body.locationRestriction.rectangle;
   assert.ok(low.latitude < 37 && high.latitude > 37);
@@ -155,6 +157,17 @@ test("drops closed places and places with unknown open status", () => {
     ],
   }, input);
   assert.deepEqual(results.map((r) => r.placeId), ["open"]);
+});
+
+test("drops open, in-radius places that are not restaurants", () => {
+  const results = mapPlaces({
+    places: [
+      place({ id: "gas", types: ["gas_station", "point_of_interest"] }),
+      place({ id: "no-types", types: undefined }),
+      place({ id: "sushi", types: ["sushi_restaurant", "food"] }),
+    ],
+  }, input);
+  assert.deepEqual(results.map((r) => r.placeId), ["sushi"]);
 });
 
 test("drops places outside the search circle (box corners)", () => {

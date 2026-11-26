@@ -16,6 +16,7 @@ export const FIELD_MASK = [
   "places.priceLevel",
   "places.rating",
   "places.primaryTypeDisplayName",
+  "places.types",
   "places.photos",
   "places.currentOpeningHours.openNow",
 ].join(",");
@@ -92,6 +93,8 @@ export function buildRequestBody(input: SearchInput) {
   return {
     textQuery: input.query,
     includedType: "restaurant",
+    // Without this, Google may skip the type filter (e.g. for an address query).
+    strictTypeFiltering: true,
     openNow: true,
     pageSize: 20,
     locationRestriction: {
@@ -128,9 +131,16 @@ const PRICE_LEVELS: Record<string, number> = {
   PRICE_LEVEL_VERY_EXPENSIVE: 4,
 };
 
+/** Restaurant types in Places are "restaurant" or "<kind>_restaurant". */
+export function isRestaurant(types: unknown): boolean {
+  return Array.isArray(types) &&
+    types.some((t) => t === "restaurant" || (typeof t === "string" && t.endsWith("_restaurant")));
+}
+
 /**
  * Maps the Places response to card data. Deny by default: a place is kept
- * only if Places says it is open now and it is inside the search circle.
+ * only if Places says it is open now, it is a restaurant, and it is inside
+ * the search circle.
  * A missing optional field becomes null, never a made-up value.
  */
 export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[] {
@@ -144,6 +154,7 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
     const lng = p?.location?.longitude;
     if (!id || !name || typeof lat !== "number" || typeof lng !== "number") continue;
     if (p?.currentOpeningHours?.openNow !== true) continue;
+    if (!isRestaurant(p?.types)) continue;
     const distance = distanceMeters(input.latitude, input.longitude, lat, lng);
     if (distance > input.radiusMeters) continue;
     results.push({
