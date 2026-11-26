@@ -19,4 +19,25 @@ void main() {
 
     expect(find.textContaining('Hi taylor'), findsOneWidget);
   });
+
+  testWidgets('Continue as guest opens home without an account', (WidgetTester tester) async {
+    final session = AppSession();
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+
+    await tester.tap(find.text('Continue as guest'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('what are you craving today?'), findsOneWidget);
+    expect(session.isGuest, isTrue);
+    expect(session.isSignedIn, isFalse);
+
+    session.signOut();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(session.canEnterApp, isFalse);
+    expect(find.text('Continue as guest'), findsOneWidget);
+  });
 }

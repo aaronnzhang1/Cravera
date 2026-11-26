@@ -1,0 +1,244 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:cravio/core/session.dart';
+import 'package:cravio/main.dart';
+import 'package:cravio/services/location_service.dart';
+
+/// Stands in for GPS and the geocoder. Places it knows are fictional.
+class FakeLocationService extends LocationService {
+  FakeLocationService(this.deviceResult);
+
+  LocationResult deviceResult;
+  int deviceCalls = 0;
+
+  @override
+  Future<LocationResult> current() async {
+    deviceCalls++;
+    return deviceResult;
+  }
+
+  @override
+  Future<SearchLocation?> lookUp(String place) async {
+    if (place.trim() == 'Nowhere Lane') return null;
+    return SearchLocation(latitude: 1, longitude: 2, label: place.trim());
+  }
+}
+
+const _nearby = SearchLocation(latitude: 10, longitude: 20, label: 'Near you');
+
+Future<void> _enterAsGuest(WidgetTester tester, AppSession session) async {
+  await tester.pumpWidget(MyApp(session: session));
+  await tester.pump();
+  await tester.tap(find.text('Continue as guest'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// The logo animates forever, so pumpAndSettle never finishes. Step time instead.
+Future<void> _settle(WidgetTester tester) async {
+  for (var i = 0; i < 5; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+void main() {
+  testWidgets('home asks for device location and shows it', (tester) async {
+    final fake = FakeLocationService(const LocationResult.found(_nearby));
+    final session = AppSession(locationService: fake);
+
+    await _enterAsGuest(tester, session);
+    await tester.pump();
+
+    expect(fake.deviceCalls, 1);
+    expect(session.searchLocation?.label, 'Near you');
+    expect(find.text('Searching: Near you'), findsOneWidget);
+  });
+
+  testWidgets('denied location falls back to a typed place', (tester) async {
+    final fake = FakeLocationService(const LocationResult.failed(LocationProblem.denied));
+    final session = AppSession(locationService: fake);
+
+    await _enterAsGuest(tester, session);
+    await tester.pump();
+
+    expect(session.searchLocation, isNull);
+    expect(find.textContaining('Location permission was denied.'), findsOneWidget);
+
+    await tester.tap(find.text('Change'));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField).last, '1 Example Street');
+    await tester.tap(find.text('Search here'));
+    await _settle(tester);
+
+    expect(session.searchLocation?.label, '1 Example Street');
+    expect(find.text('Searching: 1 Example Street'), findsOneWidget);
+  });
+
+  testWidgets('an unknown typed place keeps no location and says so', (tester) async {
+    final fake = FakeLocationService(const LocationResult.failed(LocationProblem.failed));
+    final session = AppSession(locationService: fake);
+
+    await _enterAsGuest(tester, session);
+    await tester.pump();
+
+    await tester.tap(find.text('Change'));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField).last, 'Nowhere Lane');
+    await tester.tap(find.text('Search here'));
+    await _settle(tester);
+
+    expect(session.searchLocation, isNull);
+    expect(find.textContaining("Couldn't find that place"), findsOneWidget);
+    expect(find.textContaining('Nowhere Lane'), findsNothing, reason: 'messages must not echo a typed address');
+  });
+
+  testWidgets('searching with no location asks for a place first', (tester) async {
+    final fake = FakeLocationService(const LocationResult.failed(LocationProblem.denied));
+    final session = AppSession(locationService: fake);
+
+    await _enterAsGuest(tester, session);
+    await tester.pump();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Type your craving…'), 'ramen');
+    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+    await _settle(tester);
+
+    expect(find.text('Where should I search?'), findsOneWidget);
+  });
+
+  testWidgets('a failed "Use my location" says so and keeps the typed place', (tester) async {
+    final fake = FakeLocationService(const LocationResult.failed(LocationProblem.denied));
+    final session = AppSession(locationService: fake);
+
+    await _enterAsGuest(tester, session);
+    await tester.pump();
+    await session.useTypedPlace('1 Example Street');
+    await _settle(tester);
+
+    fake.deviceResult = const LocationResult.failed(LocationProblem.failed);
+    await tester.tap(find.text('Change'));
+    await _settle(tester);
+    await tester.tap(find.text('Use my location'));
+    await _settle(tester);
+
+    expect(session.searchLocation?.label, '1 Example Street');
+    expect(find.textContaining('Still searching the place you set'), findsOneWidget);
+    expect(find.textContaining('1 Example Street'), findsOneWidget, reason: 'only in the location bar');
+  });
+
+  test('a device lookup that finishes after sign out is dropped', () async {
+    final pending = Completer<LocationResult>();
+    final session = AppSession(locationService: _PendingLocationService(device: pending.future));
+    session.continueAsGuest();
+
+    final lookup = session.useDeviceLocation();
+    expect(session.isLocating, isTrue);
+    session.signOut();
+    pending.complete(const LocationResult.found(_nearby));
+    await lookup;
+
+    expect(session.searchLocation, isNull);
+    expect(session.isLocating, isFalse, reason: 'a later lookup must not be blocked');
+  });
+
+  test('a typed-place lookup that finishes after sign out is dropped', () async {
+    final pending = Completer<SearchLocation?>();
+    final session = AppSession(locationService: _PendingLocationService(typed: pending.future));
+    session.continueAsGuest();
+
+    final lookup = session.useTypedPlace('1 Example Street');
+    session.signOut();
+    pending.complete(const SearchLocation(latitude: 1, longitude: 2, label: '1 Example Street'));
+
+    expect(await lookup, isFalse);
+    expect(session.searchLocation, isNull);
+  });
+
+  test('a device lookup that finishes after a typed place keeps the typed place', () async {
+    final gps = Completer<LocationResult>();
+    final session = AppSession(
+      locationService: _PendingLocationService(
+        device: gps.future,
+        typed: Future.value(const SearchLocation(latitude: 1, longitude: 2, label: '1 Example Street')),
+      ),
+    );
+    session.continueAsGuest();
+
+    final deviceLookup = session.useDeviceLocation();
+    final typed = session.useTypedPlace('1 Example Street');
+    expect(session.isLocating, isFalse);
+    expect(await typed, isTrue);
+    gps.complete(const LocationResult.found(_nearby));
+    await deviceLookup;
+
+    expect(session.searchLocation?.label, '1 Example Street');
+  });
+
+  test('two typed places finishing in reverse order keep the newer one', () async {
+    final first = Completer<SearchLocation?>();
+    final second = Completer<SearchLocation?>();
+    final calls = [first, second];
+    final session = AppSession(locationService: _PendingLocationService(typedQueue: calls));
+    session.continueAsGuest();
+
+    final older = session.useTypedPlace('1 Example Street');
+    final newer = session.useTypedPlace('2 Sample Road');
+    second.complete(const SearchLocation(latitude: 3, longitude: 4, label: '2 Sample Road'));
+    first.complete(const SearchLocation(latitude: 1, longitude: 2, label: '1 Example Street'));
+
+    expect(await newer, isTrue);
+    expect(await older, isFalse);
+    expect(session.searchLocation?.label, '2 Sample Road');
+  });
+
+  test('a stale or vague last-known fix is not used as "Near you"', () {
+    final now = DateTime(2026, 1, 1, 12);
+    bool usable(Duration age, double accuracy) =>
+        LocationService.cachedFixIsUsable(takenAt: now.subtract(age), accuracyMeters: accuracy, now: now);
+
+    expect(usable(const Duration(minutes: 2), 50), isTrue);
+    expect(usable(const Duration(hours: 3), 50), isFalse);
+    expect(usable(const Duration(minutes: 2), 5000), isFalse);
+  });
+
+  test('sign out forgets the location', () async {
+    final session = AppSession(
+      locationService: FakeLocationService(const LocationResult.found(_nearby)),
+    );
+    session.continueAsGuest();
+    await session.useDeviceLocation();
+    expect(session.searchLocation, isNotNull);
+
+    session.signOut();
+    expect(session.searchLocation, isNull);
+    expect(session.locationProblem, isNull);
+  });
+}
+
+/// Lookups that finish only when the test says so.
+class _PendingLocationService extends LocationService {
+  _PendingLocationService({
+    Future<LocationResult>? device,
+    Future<SearchLocation?>? typed,
+    List<Completer<SearchLocation?>>? typedQueue,
+  }) : _device = device,
+       _typed = typed,
+       _typedQueue = typedQueue;
+
+  final Future<LocationResult>? _device;
+  final Future<SearchLocation?>? _typed;
+  final List<Completer<SearchLocation?>>? _typedQueue;
+
+  @override
+  Future<LocationResult> current() => _device ?? Future.value(const LocationResult.failed(LocationProblem.failed));
+
+  @override
+  Future<SearchLocation?> lookUp(String place) {
+    final queue = _typedQueue;
+    if (queue != null && queue.isNotEmpty) return queue.removeAt(0).future;
+    return _typed ?? Future.value(null);
+  }
+}
