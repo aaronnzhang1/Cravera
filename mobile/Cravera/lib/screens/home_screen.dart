@@ -59,40 +59,49 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildIdle(BuildContext context, AppSession session) {
+    final text = Theme.of(context).textTheme;
     return SafeArea(
+      bottom: false,
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
+          constraints: const BoxConstraints(maxWidth: 520),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 18),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    const CravioPulseLogo(size: 36),
+                    const SizedBox(width: 10),
+                    Text('cravio', style: text.titleLarge?.copyWith(letterSpacing: -0.6)),
+                  ],
+                ),
+                const Spacer(flex: 2),
+                Text(
+                  'Hi ${session.displayName},',
+                  style: text.titleMedium?.copyWith(color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 4),
+                Text('What are you\ncraving today?', style: text.displaySmall?.copyWith(height: 1.05)),
+                const SizedBox(height: 10),
+                Text(
+                  "Describe it in your own words. I'll find one place that's open now.",
+                  style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
+                ),
+                const Spacer(flex: 3),
+                _QuickPicks(
+                  onPick: (craving) {
+                    _promptController.text = craving;
+                    _startSearch(craving);
+                  },
+                ),
                 const SizedBox(height: 12),
-                const CravioPulseLogo(),
-                const SizedBox(height: 18),
-                Text(
-                  'cravio',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.displaySmall,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'your AI food concierge',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Hi ${session.displayName},\nwhat are you craving today?',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const Spacer(),
                 _LocationBar(
                   session: session,
                   onChange: () => _askForPlace(session),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 _PromptInput(
                   controller: _promptController,
                   isBusy: false,
@@ -117,9 +126,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildResult(BuildContext context, AppSession session) {
     return SafeArea(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+        constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Column(
             children: [
               Expanded(
@@ -329,124 +338,130 @@ class _InlineRestaurantCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final saved = session.isBookmarked(restaurant.placeId);
 
-    final primaryMeta = [
-      if (restaurant.rating != null) '${restaurant.rating!.toStringAsFixed(1)}/5',
-      if ((restaurant.cuisine ?? '').trim().isNotEmpty) restaurant.cuisine!.trim(),
-      if (restaurant.priceLevel != null) '\$' * restaurant.priceLevel!.clamp(1, 4),
-    ].join('  •  ');
 
     final distanceLabel = restaurant.distanceMeters == null
         ? null
-        : '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km away';
+        : '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km';
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.surface2,
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.55), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 30,
-              offset: const Offset(0, 18),
+    final text = Theme.of(context).textTheme;
+    final hasAddress = (restaurant.address ?? '').trim().isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text("Here's your pick", style: text.titleMedium?.copyWith(color: AppColors.textMuted)),
+            ),
+            IconButton(
+              onPressed: onNo,
+              icon: const Icon(Icons.close_rounded),
+              color: AppColors.textSecondary,
+              tooltip: 'Back to search',
             ),
           ],
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        if (prompt.trim().isNotEmpty) ...[
+          _Pill(icon: Icons.auto_awesome_rounded, label: prompt.trim(), color: AppColors.accent),
+          const SizedBox(height: 14),
+        ],
+        Card(
+          clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header row
-              Row(
+              Stack(
                 children: [
-                  Expanded(
-                    child: Text(
-                      'Result',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textMuted),
+                  _PhotoHeader(photoUrl: restaurant.photoUrl),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: _RoundIcon(
+                      icon: saved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                      color: saved ? AppColors.accent : AppColors.textPrimary,
+                      tooltip: saved ? 'Remove bookmark' : 'Bookmark',
+                      onPressed: () => session.toggleBookmark(restaurant),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: onNo,
-                    icon: const Icon(Icons.close_rounded),
-                    color: AppColors.textSecondary,
-                    tooltip: 'Back to search',
                   ),
                 ],
               ),
-              if (prompt.trim().isNotEmpty) ...[
-                Text(
-                  'For: ${prompt.trim()}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 10),
-              ],
-              _PhotoHeader(photoUrl: restaurant.photoUrl),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       restaurant.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                      style: text.headlineMedium,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _RoundIcon(
-                    icon: saved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
-                    onPressed: () => session.toggleBookmark(restaurant),
-                  ),
-                ],
-              ),
-              if (primaryMeta.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  primaryMeta,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (restaurant.rating != null)
+                          _Pill(
+                            icon: Icons.star_rounded,
+                            label: restaurant.rating!.toStringAsFixed(1),
+                            color: AppColors.gold,
+                          ),
+                        if ((restaurant.cuisine ?? '').trim().isNotEmpty)
+                          _Pill(icon: Icons.restaurant_rounded, label: restaurant.cuisine!.trim()),
+                        if (restaurant.priceLevel != null)
+                          _Pill(label: '\$' * restaurant.priceLevel!.clamp(1, 4)),
+                        if (distanceLabel != null)
+                          _Pill(icon: Icons.near_me_rounded, label: distanceLabel, color: AppColors.sage),
+                      ],
+                    ),
+                    if (hasAddress) ...[
+                      const SizedBox(height: 14),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.place_outlined, size: 18, color: AppColors.textMuted),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              restaurant.address!.trim(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onNo,
+                            icon: const Icon(Icons.close_rounded),
+                            label: const Text('No'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton.icon(
+                            onPressed: onYes,
+                            icon: const Icon(Icons.check_rounded),
+                            label: const Text('Yes'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-              if ((restaurant.address ?? '').trim().isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  [
-                    restaurant.address!.trim(),
-                    ?distanceLabel,
-                  ].join('  •  '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-                ),
-              ],
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onNo,
-                      child: const Text('No'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: onYes,
-                      child: const Text('Yes'),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -604,7 +619,8 @@ class _RepromptBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _SquareAction(
+              _IconAction(
+                tooltip: 'Search again',
                 icon: Icons.arrow_upward_rounded,
                 onPressed: () => onSubmit(controller.text),
                 filled: true,
@@ -777,7 +793,7 @@ Future<void> _openNavigation(BuildContext context, Restaurant restaurant) async 
 }
 
 // ---------------------------------------------------------------------------
-// Prompt input bar
+// Prompt input bar: one rounded composer with filter, mic and send
 // ---------------------------------------------------------------------------
 
 class _PromptInput extends StatelessWidget {
@@ -789,35 +805,48 @@ class _PromptInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.border),
+      ),
       child: Row(
         children: [
+          _IconAction(
+            icon: Icons.tune_rounded,
+            tooltip: 'Filters',
+            onPressed: onManualFilter ?? () {},
+          ),
           Expanded(
             child: TextField(
               controller: controller,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => onSend(),
               decoration: const InputDecoration(
                 hintText: 'Type your craving…',
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 14),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          _SquareAction(
-            icon: Icons.tune_rounded,
-            onPressed: onManualFilter ?? () {},
-          ),
-          const SizedBox(width: 10),
-          _SquareAction(
-            icon: Icons.mic_rounded,
+          _IconAction(
+            icon: Icons.mic_none_rounded,
+            tooltip: 'Voice (coming soon)',
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Voice input coming soon')),
               );
             },
           ),
-          const SizedBox(width: 10),
-          _SquareAction(
+          const SizedBox(width: 4),
+          _IconAction(
             icon: Icons.arrow_upward_rounded,
+            tooltip: 'Search',
             onPressed: onSend,
             filled: true,
             disabled: isBusy,
@@ -828,19 +857,55 @@ class _PromptInput extends StatelessWidget {
   }
 }
 
+/// One-tap example cravings, for when you don't know what to type.
+class _QuickPicks extends StatelessWidget {
+  final ValueChanged<String> onPick;
+  const _QuickPicks({required this.onPick});
+
+  static const _picks = [
+    ('🍜', 'Ramen'),
+    ('🌮', 'Tacos'),
+    ('🍕', 'Pizza'),
+    ('🍣', 'Sushi'),
+    ('🍔', 'Burgers'),
+    ('🥗', 'Something healthy'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _picks.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final (emoji, label) = _picks[i];
+          return ActionChip(
+            avatar: Text(emoji, style: const TextStyle(fontSize: 16)),
+            label: Text(label),
+            onPressed: () => onPick(label),
+          );
+        },
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Shared small widgets
 // ---------------------------------------------------------------------------
 
-class _SquareAction extends StatelessWidget {
+class _IconAction extends StatelessWidget {
   final IconData icon;
+  final String tooltip;
   final VoidCallback onPressed;
   final bool filled;
   final bool disabled;
 
-  @override
-  const _SquareAction({
+  const _IconAction({
     required this.icon,
+    required this.tooltip,
     required this.onPressed,
     this.filled = false,
     this.disabled = false,
@@ -848,21 +913,54 @@ class _SquareAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = disabled
-        ? const Color(0xFF1A2A23)
-        : (filled ? const Color(0xFF234A37) : const Color(0xFF0E1C16));
-
-    return Container(
-      width: 52,
-      height: 52,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF1D3329).withValues(alpha: 0.50), width: 1),
-      ),
+    return SizedBox(
+      width: 48,
+      height: 48,
       child: IconButton(
+        tooltip: tooltip,
         onPressed: disabled ? null : onPressed,
-        icon: Icon(icon, color: const Color(0xFFE8F2EC)),
+        style: IconButton.styleFrom(
+          backgroundColor: filled ? AppColors.accent : Colors.transparent,
+          foregroundColor: filled ? AppColors.onAccent : AppColors.textSecondary,
+          disabledBackgroundColor: AppColors.surface3,
+        ),
+        icon: Icon(icon),
+      ),
+    );
+  }
+}
+
+/// A small rounded label with an optional icon, used for restaurant facts.
+class _Pill extends StatelessWidget {
+  final IconData? icon;
+  final String label;
+  final Color color;
+  const _Pill({this.icon, required this.label, this.color = AppColors.textSecondary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -874,47 +972,45 @@ class _PhotoHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        height: 150,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
-        ),
-        child: photoUrl == null || photoUrl!.trim().isEmpty
-            ? const Center(
-                child: Icon(Icons.restaurant_rounded, color: AppColors.textSecondary, size: 44),
-              )
-            : Image.network(photoUrl!, fit: BoxFit.cover),
-      ),
+    final hasPhoto = photoUrl != null && photoUrl!.trim().isNotEmpty;
+    return SizedBox(
+      height: 210,
+      width: double.infinity,
+      child: hasPhoto
+          ? Image.network(photoUrl!, fit: BoxFit.cover)
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.accentSoft, AppColors.surface2],
+                ),
+              ),
+              child: const Center(
+                child: Icon(Icons.ramen_dining_rounded, color: AppColors.textMuted, size: 56),
+              ),
+            ),
     );
   }
 }
 
 class _RoundIcon extends StatelessWidget {
   final IconData icon;
+  final Color color;
+  final String tooltip;
   final VoidCallback onPressed;
-  const _RoundIcon({required this.icon, required this.onPressed});
+  const _RoundIcon({required this.icon, required this.color, required this.tooltip, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.40),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.45), width: 1),
+    return IconButton.filled(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor: AppColors.background.withValues(alpha: 0.7),
+        foregroundColor: color,
       ),
-      child: IconButton(
-        onPressed: onPressed,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        icon: Icon(icon, color: AppColors.textPrimary),
-      ),
+      icon: Icon(icon),
     );
   }
 }

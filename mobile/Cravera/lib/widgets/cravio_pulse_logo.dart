@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../core/app_colors.dart';
+
 class CravioPulseLogo extends StatefulWidget {
   final double size;
   final Duration duration;
@@ -50,11 +52,15 @@ class _CravioPulseLogoState extends State<CravioPulseLogo> with SingleTickerProv
             width: widget.size,
             height: widget.size,
             decoration: BoxDecoration(
-              color: const Color(0xFF2E5D45),
               shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFF2895F), AppColors.accent, AppColors.accentPressed],
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF56B36A).withValues(alpha: alpha),
+                  color: AppColors.accent.withValues(alpha: alpha),
                   blurRadius: blur,
                   spreadRadius: spread,
                 ),
@@ -64,7 +70,7 @@ class _CravioPulseLogoState extends State<CravioPulseLogo> with SingleTickerProv
               child: Icon(
                 widget.icon,
                 size: widget.size * 0.42,
-                color: const Color(0xFFE8F2EC),
+                color: AppColors.onAccent,
               ),
             ),
           ),
