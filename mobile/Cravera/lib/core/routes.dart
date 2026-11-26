@@ -8,7 +8,6 @@ import '../screens/home_screen.dart';
 import '../screens/navigate_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/recs_inbox_screen.dart';
-import '../screens/results_screen.dart';
 import 'session.dart';
 import '../widgets/app_shell_scaffold.dart';
 
@@ -20,7 +19,6 @@ class AppRoutes {
   static const appBookmarks = '/app/bookmarks';
   static const appProfile = '/app/profile';
 
-  static const appResults = '/app/results';
   static const appFriends = '/app/friends';
   static const appRecs = '/app/recs';
   static const appNavigate = '/app/navigate';
@@ -62,10 +60,6 @@ class AppRoutes {
             GoRoute(
               path: appProfile,
               builder: (context, state) => const ProfileScreen(),
-            ),
-            GoRoute(
-              path: appResults,
-              builder: (context, state) => const ResultsScreen(),
             ),
             GoRoute(
               path: appFriends,

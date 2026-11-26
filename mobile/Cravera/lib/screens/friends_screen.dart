@@ -11,30 +11,20 @@ class FriendsScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Friends (demo)', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 6),
-                  Text(
-                    'This is placeholder UI. Next step: connect to real user accounts and friend requests.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-                  ),
-                ],
-              ),
-            ),
+          Text('Friends', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Demo only: real friends and recommendations come with accounts.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           for (final name in const ['Maya', 'Jordan', 'Sam'])
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Card(
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: AppColors.accent.withValues(alpha: 0.25),
+                    backgroundColor: AppColors.accentSoft,
                     child: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
                   ),
                   title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),

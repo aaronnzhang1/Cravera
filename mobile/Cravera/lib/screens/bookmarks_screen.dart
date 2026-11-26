@@ -40,7 +40,7 @@ class BookmarksScreen extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Bookmarks', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                Text('Bookmarks', style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: 4),
                 Text('${bookmarks.length} restaurants', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
                 const SizedBox(height: 12),
@@ -98,7 +98,7 @@ class _BookmarkCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppColors.accent.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
+                    border: Border.all(color: AppColors.border, width: 1),
                   ),
                   child: restaurant.photoUrl == null || restaurant.photoUrl!.trim().isEmpty
                       ? const Icon(Icons.restaurant_rounded, color: AppColors.textSecondary, size: 24)
@@ -155,8 +155,8 @@ Future<void> _showBookmarkDetails(BuildContext context, Restaurant restaurant) {
             borderRadius: BorderRadius.circular(24),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: AppColors.surface2.withValues(alpha: 0.94),
-                border: Border.all(color: AppColors.border.withValues(alpha: 0.55), width: 1),
+                color: AppColors.surface2,
+                border: Border.all(color: AppColors.border, width: 1),
               ),
               child: ListView(
                 shrinkWrap: true,
@@ -167,7 +167,7 @@ Future<void> _showBookmarkDetails(BuildContext context, Restaurant restaurant) {
                       width: 40,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: AppColors.border.withValues(alpha: 0.55),
+                        color: AppColors.border,
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
@@ -180,7 +180,7 @@ Future<void> _showBookmarkDetails(BuildContext context, Restaurant restaurant) {
                           restaurant.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
                       ),
                       IconButton(
@@ -233,7 +233,7 @@ class _RatingControl extends StatelessWidget {
       color: AppColors.surface2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.border.withValues(alpha: 0.55)),
+        side: BorderSide(color: AppColors.border),
       ),
       itemBuilder: (context) {
         return [
@@ -248,9 +248,9 @@ class _RatingControl extends StatelessWidget {
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: normalizedValue == 0 ? AppColors.surface2.withValues(alpha: 0.35) : AppColors.accent.withValues(alpha: 0.75),
+          color: normalizedValue == 0 ? AppColors.surface2 : AppColors.accent.withValues(alpha: 0.75),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.45), width: 1),
+          border: Border.all(color: AppColors.border, width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -290,7 +290,7 @@ class _RestaurantPhoto extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.16),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
+          border: Border.all(color: AppColors.border, width: 1),
         ),
         child: photoUrl == null || photoUrl!.trim().isEmpty
             ? const Center(
@@ -336,9 +336,9 @@ class _DetailGrid extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: 0.48),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.42), width: 1),
+            border: Border.all(color: AppColors.border, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,9 +383,9 @@ class _AddressRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.48),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.42), width: 1),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: Row(
         children: [
@@ -415,9 +415,9 @@ class _RoundIconButton extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: AppColors.surface2.withValues(alpha: 0.35),
+        color: AppColors.surface2,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: IconButton(
         onPressed: onPressed,

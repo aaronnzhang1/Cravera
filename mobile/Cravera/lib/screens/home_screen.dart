@@ -74,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const CravioPulseLogo(size: 36),
                     const SizedBox(width: 10),
-                    Text('cravio', style: text.titleLarge?.copyWith(letterSpacing: -0.6)),
+                    Text('cravio', style: text.headlineSmall),
                   ],
                 ),
                 const Spacer(flex: 2),

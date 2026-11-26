@@ -57,7 +57,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: 26),
                   Text(
                     'Sign in',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                    style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
@@ -102,8 +102,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: () => context.go(AppRoutes.signUp),
-                    style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
-                    child: const Text('Don’t have an account? Sign up'),
+                                        child: const Text('Don’t have an account? Sign up'),
                   ),
                   const SizedBox(height: 4),
                   OutlinedButton(

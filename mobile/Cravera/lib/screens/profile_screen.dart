@@ -24,17 +24,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 118),
         children: [
-          Text('Profile', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+          Text('Profile', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 14),
           Row(
             children: [
               Container(
                 width: 72,
                 height: 72,
-                decoration: BoxDecoration(color: const Color(0xFF56B36A), borderRadius: BorderRadius.circular(24)),
+                decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(24)),
                 child: Center(
                   child: Text((session.displayName.isNotEmpty ? session.displayName[0] : "A").toUpperCase(),
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: AppColors.onAccent)),
                 ),
               ),
               const SizedBox(width: 14),
@@ -71,7 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _SettingsRow(title: 'Help & Support', onTap: () {}),
             _SettingsRow(
               title: 'Sign Out',
-              titleColor: const Color(0xFFFF6B6B),
+              titleColor: AppColors.danger,
               onTap: () {
                 session.signOut();
                 context.go(AppRoutes.signIn);
@@ -98,12 +98,12 @@ class _StatCard extends StatelessWidget {
     final card = Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.58),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.45)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(children: [
-        Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: const Color(0xFF56B36A), fontWeight: FontWeight.w800)),
+        Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppColors.accent, fontWeight: FontWeight.w800)),
         Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
       ]),
     );
@@ -135,7 +135,7 @@ class _Segment extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.48)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [
         Expanded(child: _SegButton(label: left, active: leftActive, onTap: onLeft)),
@@ -157,8 +157,8 @@ class _SegButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(color: active ? const Color(0xFF56B36A) : Colors.transparent, borderRadius: BorderRadius.circular(999)),
-        child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: active ? Colors.white : AppColors.textMuted, fontWeight: FontWeight.w700)),
+        decoration: BoxDecoration(color: active ? AppColors.accent : Colors.transparent, borderRadius: BorderRadius.circular(999)),
+        child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: active ? AppColors.onAccent : AppColors.textMuted, fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -179,9 +179,9 @@ class _SettingsRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
           decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: 0.65),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.48)),
+            border: Border.all(color: AppColors.border),
           ),
           child: Row(
             children: [
@@ -215,12 +215,12 @@ class _FriendRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.65),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.48)),
+          border: Border.all(color: AppColors.border),
         ),
         child: Row(children: [
-          Text((name.isNotEmpty ? name[0] : "?"), style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: const Color(0xFF56B36A), fontWeight: FontWeight.w800)),
+          Text((name.isNotEmpty ? name[0] : "?"), style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppColors.accent, fontWeight: FontWeight.w800)),
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -61,7 +61,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 26),
                   Text(
                     'Create your account',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                    style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
@@ -125,8 +125,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: () => context.go(AppRoutes.signIn),
-                    style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
-                    child: const Text('Already have an account? Sign in'),
+                                        child: const Text('Already have an account? Sign in'),
                   ),
                 ],
               ),
