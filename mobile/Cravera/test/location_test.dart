@@ -91,7 +91,8 @@ void main() {
     await _settle(tester);
 
     expect(session.searchLocation, isNull);
-    expect(find.textContaining("Couldn't find 'Nowhere Lane'"), findsOneWidget);
+    expect(find.textContaining("Couldn't find that place"), findsOneWidget);
+    expect(find.textContaining('Nowhere Lane'), findsNothing, reason: 'messages must not echo a typed address');
   });
 
   testWidgets('searching with no location asks for a place first', (tester) async {
@@ -124,7 +125,8 @@ void main() {
     await _settle(tester);
 
     expect(session.searchLocation?.label, '1 Example Street');
-    expect(find.textContaining('Still searching: 1 Example Street'), findsOneWidget);
+    expect(find.textContaining('Still searching the place you set'), findsOneWidget);
+    expect(find.textContaining('1 Example Street'), findsOneWidget, reason: 'only in the location bar');
   });
 
   test('a device lookup that finishes after sign out is dropped', () async {

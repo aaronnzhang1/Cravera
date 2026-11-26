@@ -73,6 +73,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: 'Sign Out',
               titleColor: const Color(0xFFFF6B6B),
               onTap: () {
+                // Clear any message that might mention the old user's place.
+                ScaffoldMessenger.of(context).clearSnackBars();
                 session.signOut();
                 context.go(AppRoutes.signIn);
               },

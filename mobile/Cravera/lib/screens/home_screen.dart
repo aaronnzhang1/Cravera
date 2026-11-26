@@ -225,7 +225,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final problem = session.locationProblem;
       if (problem != null && mounted) {
         // Say so, because the bar may still show an earlier typed place.
-        final keeping = before != null ? ' Still searching: ${before.label}.' : '';
+        // Never echo the place: messages can outlive the screen (even sign out).
+        final keeping = before != null ? ' Still searching the place you set.' : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${_LocationBar.problemText(problem)}$keeping')),
         );
@@ -237,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final found = await session.useTypedPlace(place);
     if (!found && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Couldn't find '$place'. Try a fuller address or a city name.")),
+        const SnackBar(content: Text("Couldn't find that place. Try a fuller address or a city name.")),
       );
     }
     return found;
