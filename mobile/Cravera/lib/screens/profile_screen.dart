@@ -92,10 +92,8 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 FilledButton(
-                  onPressed: () {
-                    session.signOut();
-                    context.go(AppRoutes.signUp);
-                  },
+                  // Keep the guest session (and its location) until sign-up completes.
+                  onPressed: () => context.go(AppRoutes.signUp),
                   child: const Text('Create account'),
                 ),
               ],
