@@ -6,53 +6,10 @@
           {
             "type": "command",
             "timeout": 5,
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null && git rev-parse --git-dir >/dev/null 2>&1 || { echo 'Session-start Git check: git unavailable. Follow AGENTS.md step 2 by hand.'; exit 0; }; n=$(set -o pipefail; git status --porcelain -z 2>/dev/null | tr -cd '\\000' | wc -c | tr -d ' ') || n='unknown (git status failed: run it)'; h=$(git rev-parse --short HEAD 2>/dev/null); ab=$(git rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null | awk '{print \"behind \" $1 \", ahead \" $2}'); echo \"Session-start Git check: HEAD ${h:-none}, ${n:-?} uncommitted path(s), upstream ${ab:-not set}. Follow AGENTS.md step 2 (git status, git log, gh checks) before editing.\"; exit 0"
-          },
-          {
-            "type": "command",
-            "timeout": 5,
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/handover.mjs\" context session-start"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "timeout": 5,
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/handover.mjs\" context"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "timeout": 5,
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/handover.mjs\" post-tool"
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "matcher": "rate_limit",
-        "hooks": [
-          {
-            "type": "command",
-            "timeout": 60,
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/handover.mjs\" stop-failure"
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null && git rev-parse --git-dir >/dev/null 2>&1 || { echo 'Session-start Git check: git unavailable. Follow .claude/skills/resume/SKILL.md by hand.'; exit 0; }; n=$(set -o pipefail; git status --porcelain -z 2>/dev/null | tr -cd '\\000' | wc -c | tr -d ' ') || n='unknown (git status failed: run it)'; h=$(git rev-parse --short HEAD 2>/dev/null); ab=$(git rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null | awk '{print \"behind \" $1 \", ahead \" $2}'); echo \"Session-start Git check: HEAD ${h:-none}, ${n:-?} uncommitted path(s), upstream ${ab:-not set}. Before other work, follow .claude/skills/resume/SKILL.md (verify CURRENT.md against Git, PRs and CI; run the checks), then report and continue.\"; exit 0"
           }
         ]
       }
     ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/handover.mjs\" statusline"
   }
 }

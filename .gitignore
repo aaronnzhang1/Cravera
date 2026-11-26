@@ -111,6 +111,3 @@ app.*.symbols
 
 # Apps commit their lockfile so every machine and CI get the same package versions
 !**/pubspec.lock
-
-# Claude/Codex usage-limit handover state (ADR 0005)
-.claude/state/
