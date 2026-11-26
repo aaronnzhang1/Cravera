@@ -160,6 +160,8 @@ const commands = {
       writeJson(doneFile, { ...record, at: new Date().toISOString() });
       releaseLock(token);
     };
+    let createdWorktree = false;
+    let createdSnapshot = false;
     try {
       const branch = git('branch', '--show-current');
       if (!branch || branch === 'main') return finish({ skipped: 'not on a feature branch' });
@@ -183,9 +185,11 @@ const commands = {
         snapshot = git('commit-tree', tree, '-p', head, '-m', 'Snapshot of uncommitted work before Codex handover');
         rmSync(tempIndex, { force: true });
         git('update-ref', 'refs/handover/snapshot', snapshot);
+        createdSnapshot = true;
       }
       const base = snapshot.slice(0, 7);
       git('worktree', 'add', '-q', '--detach', worktree, snapshot);
+      createdWorktree = true;
       const out = openSync(logFile, 'w');
       const worker = spawn(process.execPath, [fileURLToPath(import.meta.url), 'run', token, base], {
         cwd: repo,
@@ -197,6 +201,11 @@ const commands = {
       writeJson(lockFile, { token, pid: worker.pid, startedAt: new Date().toISOString() });
       worker.unref();
     } catch (error) {
+      // Undo what this setup created, so a half-made handover can't block the next one.
+      try {
+        if (createdWorktree) git('worktree', 'remove', '--force', worktree);
+        if (createdSnapshot) git('update-ref', '-d', 'refs/handover/snapshot');
+      } catch {}
       finish({ skipped: 'setup failed; see the hook error output' });
       throw error;
     }
@@ -240,6 +249,12 @@ const commands = {
       lines.push(
         'Codex is working in the handover worktree (../<repo>-codex-handover) because Claude hit its usage limit. ' +
           'It does not touch this checkout. Its diff needs review once it finishes.',
+      );
+    } else if (!existsSync(doneFile) && existsSync(worktree)) {
+      lines.push(
+        'A handover worktree (../<repo>-codex-handover) exists with no handover record, which blocks new handovers. ' +
+          'Inspect it ("git -C <path> status --porcelain --untracked-files=all"), keep anything needed, then remove it ' +
+          '("git worktree remove --force <path>") and "git update-ref -d refs/handover/snapshot".',
       );
     } else if (existsSync(doneFile)) {
       const done = readJson(doneFile) || {};
