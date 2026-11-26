@@ -37,7 +37,7 @@ class ProfileScreen extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFFF2895F), AppColors.accentPressed],
+                    colors: [AppColors.accentLight, AppColors.accentPressed],
                   ),
                 ),
                 alignment: Alignment.center,

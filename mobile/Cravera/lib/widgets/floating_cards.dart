@@ -24,28 +24,30 @@ class FloatingCards extends StatefulWidget {
 class _Spec {
   final String emoji;
   final String cuisine;
-  final double x; // 0..1 across the screen
-  final double startY; // 0..1 down the screen at time 0
   final double depth; // 0 = far, 1 = near
-  final double sway; // phase of the side-to-side drift
-  const _Spec(this.emoji, this.cuisine, this.x, this.startY, this.depth, this.sway);
+  const _Spec(this.emoji, this.cuisine, this.depth);
 }
 
 class _FloatingCardsState extends State<FloatingCards> with SingleTickerProviderStateMixin {
+  // Cards alternate between a left and a right lane at the screen edges, so
+  // the headline in the middle stays clear. They start evenly spaced down the
+  // screen and all move at one speed, so the gaps never change and no two
+  // cards overlap.
   static const _cards = [
-    _Spec('🍜', 'Ramen', 0.05, 0.05, 0.9, 0.0),
-    _Spec('🌮', 'Tacos', 0.62, 0.18, 0.5, 1.3),
-    _Spec('🍣', 'Sushi', 0.30, 0.42, 0.2, 2.6),
-    _Spec('🍕', 'Pizza', 0.72, 0.60, 0.85, 3.9),
-    _Spec('🥗', 'Salad', 0.02, 0.72, 0.35, 5.2),
-    _Spec('🍔', 'Burgers', 0.45, 0.88, 0.6, 0.7),
-    _Spec('🥟', 'Dumplings', 0.80, 0.95, 0.25, 2.0),
+    _Spec('🍜', 'Ramen', 0.9),
+    _Spec('🌮', 'Tacos', 0.4),
+    _Spec('🍣', 'Sushi', 0.7),
+    _Spec('🍕', 'Pizza', 0.3),
+    _Spec('🥗', 'Salad', 0.8),
+    _Spec('🍔', 'Burgers', 0.5),
   ];
+  static const _cardWidth = 118.0; // a near card's width; far cards are smaller
 
-  late final AnimationController _time = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 60),
-  );
+  /// The loop length as a share of screen height. A card leaves at the top
+  /// and comes back in at the bottom, with room to be fully off screen.
+  static const _loop = 1.4;
+
+  late final AnimationController _time = AnimationController(vsync: this, duration: const Duration(seconds: 60));
 
   @override
   void didChangeDependencies() {
@@ -71,16 +73,14 @@ class _FloatingCardsState extends State<FloatingCards> with SingleTickerProvider
           child: LayoutBuilder(
             builder: (context, box) {
               // Children are built once; only their positions change per frame.
-              final cards = [for (final s in _cards) _MiniCard(spec: s)];
+              final cards = [for (final spec in _cards) _MiniCard(spec: spec)];
               return AnimatedBuilder(
                 animation: _time,
                 builder: (context, _) {
                   final t = _time.value;
                   return Stack(
                     clipBehavior: Clip.hardEdge,
-                    children: [
-                      for (var i = 0; i < _cards.length; i++) _place(_cards[i], cards[i], t, box.biggest),
-                    ],
+                    children: [for (var i = 0; i < _cards.length; i++) _place(i, cards[i], t, box.biggest)],
                   );
                 },
               );
@@ -91,15 +91,18 @@ class _FloatingCardsState extends State<FloatingCards> with SingleTickerProvider
     );
   }
 
-  Widget _place(_Spec s, Widget card, double t, Size area) {
-    // Near cards rise faster than far ones, which gives a sense of depth.
-    final speed = 0.6 + 0.8 * s.depth;
-    final y = ((s.startY - t * speed) % 1.3) - 0.2; // wraps from top back to bottom
-    final angle = t * 2 * math.pi * 3 + s.sway;
+  Widget _place(int i, Widget card, double t, Size area) {
+    final spec = _cards[i];
+    final width = _cardWidth * _MiniCard.scaleFor(spec.depth);
+    // Lane centers sit near the edges, so each card peeks in from the side.
+    final centerX = i.isEven ? area.width * 0.13 : area.width * 0.87;
+    final startY = i * _loop / _cards.length;
+    final y = ((startY - t * 2) % _loop) - 0.25; // wraps from top back to bottom
+    final sway = math.sin(t * 2 * math.pi * 3 + i);
     return Positioned(
-      left: area.width * s.x + 14 * math.sin(angle),
+      left: centerX - width / 2 + 8 * sway,
       top: area.height * y,
-      child: Transform.rotate(angle: 0.08 * math.sin(angle * 0.7), child: card),
+      child: Transform.rotate(angle: 0.05 * sway, child: card),
     );
   }
 }
@@ -108,11 +111,14 @@ class _MiniCard extends StatelessWidget {
   final _Spec spec;
   const _MiniCard({required this.spec});
 
+  /// Far cards are drawn smaller, which reads as distance.
+  static double scaleFor(double depth) => 0.65 + 0.35 * depth;
+
   @override
   Widget build(BuildContext context) {
-    final scale = 0.65 + 0.35 * spec.depth;
+    final scale = scaleFor(spec.depth);
     final card = Opacity(
-      opacity: 0.18 + 0.30 * spec.depth,
+      opacity: 0.14 + 0.24 * spec.depth,
       child: Container(
         width: 118 * scale,
         padding: EdgeInsets.all(12 * scale),
@@ -165,9 +171,6 @@ class _MiniCard extends StatelessWidget {
     );
     // Far cards are slightly out of focus.
     if (spec.depth >= 0.5) return card;
-    return ImageFiltered(
-      imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
-      child: card,
-    );
+    return ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5), child: card);
   }
 }

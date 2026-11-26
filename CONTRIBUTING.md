@@ -7,7 +7,7 @@ Applies to people and agents alike. Apply each step in proportion to the change.
 1. **Understand.** Read the relevant code, docs and decision records. Read official docs before using an unfamiliar tool. Verify; don't infer.
 2. **Define.** State the objective, out-of-scope items and acceptance criteria. Pick the [review level](#review-levels). For L3, add a threat model.
 3. **Plan.** Choose the simplest maintainable solution, using native features over custom scripts. A plan that needs review goes in `docs/plans/<task>-<topic>.md` and is deleted after merge, once its lasting decisions move to an ADR.
-4. **Implement.** One owner, one branch (`<type>/<short-name>`), bounded scope. No speculative features or unrelated refactoring. Ask before adding dependencies, tooling, architecture changes or scope.
+4. **Implement.** One owner, one branch (`<type>/<short-name>`), bounded scope. No speculative features or unrelated refactoring. Ask before adding dependencies, tooling, architecture changes or scope. After the first working commit, push and open a draft PR (`gh pr create --draft`; base it on the branch it builds on, if not `main`), so work never sits on a pushed branch without a PR.
 5. **Self-verify.** Read your diff for secrets, personal data and widened permissions. Run the checks, and try user-facing changes in the running app, because unit tests alone miss broken features. Back every claim with evidence.
 6. **Review** at a checkpoint (below).
 7. **Finalize.** Update CURRENT.md to describe `main` after the merge. The maintainer merges.

@@ -39,6 +39,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 460),
               child: ListView(
+                shrinkWrap: true,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
                 children: [
                   const SizedBox(height: 10),

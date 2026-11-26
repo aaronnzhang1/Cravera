@@ -68,14 +68,18 @@ class _HomeScreenState extends State<HomeScreen> {
         const FloatingCards(),
         // Fade the drifting cards out toward the bottom, so the suggestions
         // and the composer always sit on a calm background.
-        const IgnorePointer(
+        IgnorePointer(
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0x0015110F), Color(0x9915110F), AppColors.background],
-                stops: [0.0, 0.55, 0.8],
+                colors: [
+                  AppColors.background.withValues(alpha: 0),
+                  AppColors.background.withValues(alpha: 0.6),
+                  AppColors.background,
+                ],
+                stops: const [0.0, 0.55, 0.8],
               ),
             ),
           ),
@@ -99,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             _LocationChip(session: session, onTap: () => _askForPlace(session)),
                           ],
                         ),
-                        const Spacer(flex: 3),
+                        const Spacer(),
                         CraveraLogo(size: compact ? 56 : 88),
                         SizedBox(height: compact ? 14 : 22),
                         Text(
@@ -116,12 +120,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (!compact) ...[
                           const SizedBox(height: 10),
                           Text(
-                            "Tell me in your own words. I'll pick one place that's open now.",
+                            "Say it your way. I'll find one spot that's open now.",
                             textAlign: TextAlign.center,
                             style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
                           ),
                         ],
-                        const Spacer(flex: 4),
+                        const Spacer(),
                         _LocationProblemBanner(session: session, onFix: () => _askForPlace(session)),
                         _QuickPicks(
                           onPick: (craving) {
@@ -930,6 +934,8 @@ class _QuickPicks extends StatelessWidget {
     return SizedBox(
       height: 44,
       child: ListView.separated(
+        // Chips scroll out to the screen edge instead of being cut at the margin.
+        clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
         itemCount: _picks.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),

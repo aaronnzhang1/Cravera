@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
 
-/// The app background: warm charcoal with three soft color glows (ember,
-/// gold, sage) that drift slowly. The glows give the glass panels something
+/// The app background: cool near-black with three soft color glows (violet,
+/// sage, light violet) that drift slowly. The glows give the glass panels something
 /// to show through, which is what makes glass read as glass.
 ///
 /// Everything is drawn by one painter in one layer, which keeps it cheap.
@@ -64,8 +64,8 @@ class _GlowPainter extends CustomPainter {
   // (color, strength, start x, start y, radius as a share of width, phase)
   static const _glows = [
     (AppColors.accent, 0.20, 0.15, 0.05, 0.95, 0.0),
-    (AppColors.gold, 0.08, 0.95, 0.35, 0.75, 2.1),
-    (AppColors.sage, 0.08, 0.10, 0.85, 0.85, 4.2),
+    (AppColors.sage, 0.09, 0.95, 0.35, 0.75, 2.1),
+    (AppColors.accentLight, 0.07, 0.10, 0.85, 0.85, 4.2),
   ];
 
   @override

@@ -60,7 +60,12 @@ class _CraveraLogoState extends State<CraveraLogo> with SingleTickerProviderStat
         builder: (context, _) {
           final t = _controller.value;
           final breath = (math.sin(t * 2 * math.pi) + 1) / 2;
-          return SizedBox.square(
+          // Align keeps the orb round when a parent (such as a ListView)
+          // forces its children to full width.
+          return Align(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: SizedBox.square(
             dimension: size,
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -87,9 +92,9 @@ class _CraveraLogoState extends State<CraveraLogo> with SingleTickerProviderStat
                           gradient: SweepGradient(
                             colors: [
                               AppColors.accent,
-                              AppColors.gold,
-                              Color(0xFFF2895F),
+                              AppColors.accentLight,
                               AppColors.sage,
+                              AppColors.accentLight,
                               AppColors.accent,
                             ],
                           ),
@@ -121,6 +126,7 @@ class _CraveraLogoState extends State<CraveraLogo> with SingleTickerProviderStat
                   ],
                 ),
               ),
+            ),
             ),
           );
         },
