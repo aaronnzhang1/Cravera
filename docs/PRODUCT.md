@@ -62,5 +62,5 @@ Ideas captured in the planning docs that no phase owns yet. Promote one by givin
 
 | # | Decision | Needed by |
 |---|---|---|
-| 3 | Guest search abuse protection (rate limiting on the Edge Functions) | Before Phase 4 |
+| 3 | Guest search abuse protection: per-device and daily limits in the Edge Functions (429, no upstream call), on top of the Google Cloud quota cap used for testing. Every function with `verify_jwt: false` needs it | Before any build leaves the maintainer (testers, TestFlight, Play, public) |
 | 4 | Data source for the Trending Spots Hub | If it's scheduled |
