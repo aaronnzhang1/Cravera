@@ -38,18 +38,6 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "timeout": 5,
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/handover.mjs\" pre-edit"
-          }
-        ]
-      }
-    ],
     "StopFailure": [
       {
         "matcher": "rate_limit",

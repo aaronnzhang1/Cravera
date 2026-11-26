@@ -10,7 +10,7 @@
 
 Either model can take either role when assigned. The reviewer never reviews its own change.
 
-During a usage-limit handover ([ADR 0005](adr/0005-usage-limit-handover.md)) Codex builds on the current branch without committing, and Claude reviews its diff before committing it.
+During a usage-limit handover ([ADR 0005](adr/0005-usage-limit-handover.md)) Codex builds in a separate worktree without committing, and Claude reviews its diff before applying and committing it.
 
 ## Tools
 

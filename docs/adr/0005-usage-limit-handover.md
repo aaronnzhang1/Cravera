@@ -11,12 +11,12 @@ The maintainer is on a usage-limited Claude plan and wants work to continue, wit
 
 `.claude/hooks/handover.mjs`, wired in `.claude/settings.json`:
 - **Status line** shows 5-hour usage and saves it. At 85%, a `PostToolUse` hook tells Claude once per window to commit, push and update CURRENT.md.
-- **On a usage limit** (`StopFailure`, `rate_limit`), on a feature branch only: commit and push Claude's work in progress as a `WIP:` checkpoint, then start Codex in the background on the same branch with the resume steps and strict limits (no branch switch, CURRENT.md, `.env`, dependencies, CI or settings changes). Codex leaves its changes uncommitted and writes `.claude/state/codex-handover.md`.
-- **While Codex runs**, Claude's file edits are blocked (`PreToolUse`), so there is one writer.
-- **Every session start and prompt** reports a running or finished handover; session start also tells Claude to run the `/resume` steps. Claude reviews Codex's diff before committing it, so the reviewer never reviews its own change.
+- **On a usage limit** (`StopFailure`, `rate_limit`), on a feature branch only: take an exclusive lock, make a local `WIP:` checkpoint commit of Claude's work (never pushed), create a sibling worktree `../<repo>-codex-handover` at that commit, and start Codex there in the background with the resume steps and strict limits. Codex leaves its changes uncommitted and writes notes in that worktree.
+- **Claude's checkout is never shared** with Codex, so no edit blocking is needed. A finished but unreviewed handover blocks a new one.
+- **Every session start and prompt** reports a running or finished handover; session start also tells Claude to run the `/resume` steps. Claude reviews Codex's diff before applying it, so the reviewer never reviews its own change.
 
 ## Consequences
 
-- Hook output is fixed text plus numbers and paths, never Codex's words (ADR 0001).
-- Not covered: limits hit on `main` (skipped and reported), API-key sessions without `rate_limits`, and Codex being unable to run Flutter checks in its sandbox (Claude runs them on review). Codex stops after one step or 60 minutes.
-- This is the first custom automation in the repo. If it misfires, remove the entries from `.claude/settings.json`; nothing else depends on it.
+- The first version shared Claude's checkout, pushed automatically, took its lock late and ran Codex through a shell; the PR's adversarial review blocked all four, and printed branch names into context against ADR 0001. This version fixes each: separate worktree, no push, lock before any Git change and released only by its owner, no shell, and hook output limited to fixed text, commit hashes, numbers and fixed paths.
+- Not covered: limits hit on `main` (recorded and skipped), API-key sessions without `rate_limits`, and Codex being unable to run Flutter checks in its sandbox (Claude runs them on review). Codex stops after one step or 60 minutes (the whole process tree is stopped).
+- This is the first custom automation in the repo. If it misfires, remove its entries from `.claude/settings.json`; nothing else depends on it.
