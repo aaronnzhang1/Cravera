@@ -9,3 +9,4 @@ To add one, copy the shape of 0001 (title, Status, Date, Context, Decision, Cons
 | [0001](0001-agent-workflow.md) | Agent workflow | Accepted | Claude builds, Codex reviews; the repo is the memory; the reason behind each rule |
 | [0002](0002-stack.md) | Stack | Accepted | Flutter, Supabase, Gemini for parsing only, Google Places for data |
 | [0003](0003-api-key-handling.md) | API key handling | Accepted | Google and Gemini keys live in Supabase Edge Functions, never in the app bundle |
+| [0004](0004-resume-and-releases.md) | Resume, approval and releases | Accepted | `/resume` is the entry point; `Approved:` line on tasks; releases are tagged PRODUCT.md rows |

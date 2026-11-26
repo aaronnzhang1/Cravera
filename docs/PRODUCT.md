@@ -34,6 +34,15 @@ Status as of 2026-11-26 (audit evidence in docs/CURRENT.md). "UI only" means scr
 | 4 · Beta | Friends-and-family testing, a website to collect feedback | Not started |
 | Final | App Store / Play Store release | Not started |
 
+## Releases
+
+A release ships when its tasks are merged, its exit criteria are checked on `main`, and the maintainer tags it (see [CONTRIBUTING.md](../CONTRIBUTING.md#releases)). Task IDs match NEXT-TASK.md, branch names (`feat/task-NNN-…`) and PR titles (`TASK-NNN: …`).
+
+| Release | Tasks | Exit criteria | Status |
+|---|---|---|---|
+| v0.1.0 · Guest MVP (Phase 1) | TASK-001 guest search on Places; TASK-UI-1 UI rehaul and Cravera rename; TASK-002 Gemini craving parsing | On an Android emulator and an iPhone: a guest types a craving and gets a real open place nearby; No/refine work; Yes opens directions to that exact place; no Google or Gemini key in the app bundle | In progress |
+| v0.2.0 · Accounts (Phase 1.5) | not yet specified | Supabase sign-up/sign-in; RLS denial-path tests | Not started |
+
 ## Idea backlog (unscheduled)
 
 Ideas captured in the planning docs that no phase owns yet. Promote one by giving it a phase here.

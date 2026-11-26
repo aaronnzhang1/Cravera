@@ -8,9 +8,15 @@ Applies to people and agents alike. Apply each step in proportion to the change.
 2. **Define.** State the objective, out-of-scope items and acceptance criteria. Pick the [review level](#review-levels). For L3, add a threat model.
 3. **Plan.** Choose the simplest maintainable solution, using native features over custom scripts. A plan that needs review goes in `docs/plans/<task>-<topic>.md` and is deleted after merge, once its lasting decisions move to an ADR.
 4. **Implement.** One owner, one branch (`<type>/<short-name>`), bounded scope. No speculative features or unrelated refactoring. Ask before adding dependencies, tooling, architecture changes or scope. After the first working commit, push and open a draft PR (`gh pr create --draft`; base it on the branch it builds on, if not `main`), so work never sits on a pushed branch without a PR.
-5. **Self-verify.** Read your diff for secrets, personal data and widened permissions. Run the checks, and try user-facing changes in the running app, because unit tests alone miss broken features. Back every claim with evidence.
-6. **Review** at a checkpoint (below).
-7. **Finalize.** Update CURRENT.md to describe `main` after the merge. The maintainer merges.
+5. **Check as you go.** Run focused checks as each part becomes testable. Diagnose and fix failures your change caused, then rerun. Report failures you didn't cause with their output; don't fix them without asking.
+6. **Self-verify.** Read your diff for secrets, personal data and widened permissions. Run the checks, and try user-facing changes in the running app, because unit tests alone miss broken features. Back every claim with evidence.
+7. **Review** at a checkpoint (below). Once a PR is open, the maintainer can type `/steward` (built into Claude Code) so CI failures and review comments are handled without reminders; it never merges.
+8. **Merge brief.** When the PR is ready, post on it and in chat: the user-visible result; evidence (CI run, reviewed SHA = head SHA, what was tried in the app); decisions or manual tests that remain; the exact merge command.
+9. **Finalize.** Update CURRENT.md to describe `main` after the merge. The maintainer merges.
+
+## Releases
+
+A release is a row in PRODUCT.md (`vX.Y.Z`, its tasks, its exit criteria). When every task in it is merged and its exit criteria are checked on `main`, the maintainer approves, then tags it: `git tag vX.Y.Z <sha>`, `git push origin vX.Y.Z`, `gh release create vX.Y.Z --notes "<PRs>"`. If docs and GitHub disagree about what shipped, tags and merged PRs win.
 
 ## Review levels
 

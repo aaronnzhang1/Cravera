@@ -4,6 +4,8 @@ A Flutter app where a guest describes a craving in plain language and gets one n
 
 ## Start or resume a session
 
+The maintainer says "resume Cravera" or types `/resume`; [the resume skill](.claude/skills/resume/SKILL.md) runs these steps in order and picks the next item.
+
 1. Read [CURRENT.md](docs/CURRENT.md).
 2. Check it against `git status`, `git log --oneline -5`, `gh pr view <n>` for each PR it names, and `gh pr list --state open`. If they disagree, trust Git and GitHub, say so, and fix CURRENT.md in your change.
 3. From `mobile/Cravera`, run `flutter analyze` and `flutter test`. If they fail, fix that before starting new work.

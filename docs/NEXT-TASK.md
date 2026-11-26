@@ -2,6 +2,8 @@
 
 **Goal.** Without an account, a user shares or types a location, types a craving, and sees one real restaurant from Google Places that is open now. Yes takes them to that exact place in maps; No shows another real one.
 
+**Release:** v0.1.0 · Guest MVP ([PRODUCT.md](PRODUCT.md#releases)).
+**Approved:** 2026-11-26 (maintainer). Claude may work any criterion below without asking again; anything outside this file's scope still needs approval.
 **Review level:** L3. It adds a sensitive integration (API keys, Edge Functions) and the first backend code.
 
 **Needs before starting:** a Google Cloud project with the Places API (New) enabled and a key; Supabase CLI access to deploy Edge Functions. Keys follow [ADR 0003](adr/0003-api-key-handling.md).
