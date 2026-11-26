@@ -271,7 +271,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final problem = session.locationProblem;
       if (problem != null && mounted) {
         // Say so, because the bar may still show an earlier typed place.
-        final keeping = before != null ? ' Still searching: ${before.label}.' : '';
+        // Never echo the place: messages can outlive the screen (even sign out).
+        final keeping = before != null ? ' Still searching the place you set.' : '';
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${locationProblemText(problem)}$keeping')));
       }
       return session.searchLocation != null;
@@ -280,9 +281,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (place.isEmpty) return false;
     final found = await session.useTypedPlace(place);
     if (!found && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Couldn't find '$place'. Try a fuller address or a city name.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't find that place. Try a fuller address or a city name.")),
+      );
     }
     return found;
   }
@@ -634,11 +635,23 @@ class _PlaceDialogState extends State<_PlaceDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Where should I search?'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: 'An address, neighborhood or city'),
-        onSubmitted: (_) => _submit(),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'A city, neighborhood or address'),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 12),
+          // Say where the text goes before it is sent (Android's geocoder may use the network).
+          Text(
+            "A city or neighborhood works fine. Your phone's map service looks up what you type.",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
       actions: [
         if (widget.offerDeviceLocation)

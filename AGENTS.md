@@ -42,4 +42,5 @@ For Codex reviews. Review adversarially: look for reasons the change should not 
 
 - P1: access-control gaps (client-supplied IDs, missing scoping, not default-deny, missing RLS); data-integrity risks (irreversible migrations, partial failure, non-idempotent retries, stale writes); secrets or personal data in code, tests, logs or the bundled `.env`; LLM output used as restaurant data; a search that can return closed restaurants; a security change without a denial-path test; a CI job rename that breaks required checks; a review level that is missing or understated ([levels](CONTRIBUTING.md#review-levels)).
 - For a committed secret, cite the file and line only, never the value.
+- Review the PR's stated scope. A gap that a later unchecked criterion in NEXT-TASK.md, or an open problem in CURRENT.md, already covers is not a finding; one the PR makes worse is.
 - Every finding names the file, line, failure scenario and a concrete fix.
