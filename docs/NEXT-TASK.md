@@ -10,7 +10,7 @@
 
 Tick a box only after checking it in the running app. Never delete or reword a criterion. Propose any change to the maintainer instead.
 
-- [ ] The sign-in screen offers "Continue as guest", which opens the home screen without an account.
+- [x] The sign-in screen offers "Continue as guest", which opens the home screen without an account.
 - [ ] The app asks for location permission and searches around the device location. If permission is denied or location fails, the user can type a place or address and search around that.
 - [ ] A typed craving returns one real restaurant from Google Places that is open now and within the search radius. The craving text is the Places text query (Gemini parsing is TASK-002).
 - [ ] The card shows name, photo, cuisine, price, distance and address from Places. A missing field is hidden, never filled with demo data.
