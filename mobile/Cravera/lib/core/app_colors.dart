@@ -26,6 +26,10 @@ class AppColors {
   static const textSecondary = Color(0xFFD6C8BC);
   static const textMuted = Color(0xFFA39488);
 
+  // Glass: a dark see-through base with a faint light edge (see widgets/glass.dart).
+  static const glassBase = Color(0x8C1E1916); // surface at 55% opacity
+  static const glassEdge = Color(0x1FFFFFFF); // white at 12%
+
   /// Ember at low strength, for tinted backgrounds behind accent content.
   static Color get accentSoft => accent.withValues(alpha: 0.16);
 }

@@ -38,10 +38,10 @@ class _SignInScreenState extends State<SignInScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
                 children: [
                   const SizedBox(height: 10),
-                  const CraveraLogo(size: 92, duration: Duration(milliseconds: 2600)),
+                  const CraveraLogo(size: 92),
                   const SizedBox(height: 16),
                   Text(
-                    'cravera',
+                    'Cravera',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.displaySmall?.copyWith(
                           fontWeight: FontWeight.w800,

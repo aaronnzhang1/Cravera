@@ -52,7 +52,7 @@ void main() {
 
     expect(fake.deviceCalls, 1);
     expect(session.searchLocation?.label, 'Near you');
-    expect(find.text('Searching: Near you'), findsOneWidget);
+    expect(find.text('Near you'), findsOneWidget);
   });
 
   testWidgets('denied location falls back to a typed place', (tester) async {
@@ -65,14 +65,14 @@ void main() {
     expect(session.searchLocation, isNull);
     expect(find.textContaining('Location permission was denied.'), findsOneWidget);
 
-    await tester.tap(find.text('Change'));
+    await tester.tap(find.byTooltip('Change location'));
     await _settle(tester);
     await tester.enterText(find.byType(TextField).last, '1 Example Street');
     await tester.tap(find.text('Search here'));
     await _settle(tester);
 
     expect(session.searchLocation?.label, '1 Example Street');
-    expect(find.text('Searching: 1 Example Street'), findsOneWidget);
+    expect(find.text('1 Example Street'), findsOneWidget);
   });
 
   testWidgets('an unknown typed place keeps no location and says so', (tester) async {
@@ -82,7 +82,7 @@ void main() {
     await _enterAsGuest(tester, session);
     await tester.pump();
 
-    await tester.tap(find.text('Change'));
+    await tester.tap(find.byTooltip('Change location'));
     await _settle(tester);
     await tester.enterText(find.byType(TextField).last, 'Nowhere Lane');
     await tester.tap(find.text('Search here'));
@@ -99,7 +99,7 @@ void main() {
     await _enterAsGuest(tester, session);
     await tester.pump();
 
-    await tester.enterText(find.widgetWithText(TextField, 'Type your craving…'), 'ramen');
+    await tester.enterText(find.widgetWithText(TextField, 'Ask Cravera…'), 'ramen');
     await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
     await _settle(tester);
 
@@ -116,7 +116,7 @@ void main() {
     await _settle(tester);
 
     fake.deviceResult = const LocationResult.failed(LocationProblem.failed);
-    await tester.tap(find.text('Change'));
+    await tester.tap(find.byTooltip('Change location'));
     await _settle(tester);
     await tester.tap(find.text('Use my location'));
     await _settle(tester);

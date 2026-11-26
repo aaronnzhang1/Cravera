@@ -59,14 +59,15 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
+      // Cards and inputs are see-through like glass, so the background glows show.
       cardTheme: CardThemeData(
-        color: AppColors.surface,
+        color: AppColors.glassBase,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.large),
-          side: const BorderSide(color: AppColors.border),
+          side: const BorderSide(color: AppColors.glassEdge),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -80,7 +81,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: AppColors.glassBase,
         hintStyle: const TextStyle(color: AppColors.textMuted),
         prefixIconColor: AppColors.textMuted,
         suffixIconColor: AppColors.textMuted,

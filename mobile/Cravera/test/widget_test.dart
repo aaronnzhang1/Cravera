@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(MyApp(session: AppSession()));
     await tester.pump();
 
-    expect(find.text('cravera'), findsOneWidget);
+    expect(find.text('Cravera'), findsOneWidget);
     expect(find.text('Sign in'), findsWidgets);
 
     await tester.enterText(find.byType(TextField).first, 'taylor@example.com');
@@ -17,7 +17,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.textContaining('Hi taylor'), findsOneWidget);
+    expect(find.textContaining(', taylor'), findsOneWidget);
   });
 
   testWidgets('Continue as guest opens home without an account', (WidgetTester tester) async {

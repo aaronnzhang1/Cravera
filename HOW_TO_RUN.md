@@ -95,6 +95,16 @@ flutter run
 If Flutter asks which device to use, type the number next to the **iPhone**.
 The first iOS build can take a few minutes; later ones are much faster.
 
+### On a Mac (your own iPhone)
+
+A free Apple ID is enough; the app then works on your phone for 7 days before you run it again.
+
+1. Plug the iPhone into the Mac with a cable and tap **Trust** on the phone.
+2. On the iPhone: **Settings → Privacy & Security → Developer Mode → On** (it restarts).
+3. On the Mac: `open ios/Runner.xcworkspace` (from `mobile/Cravera`). In Xcode, click **Runner** in the left list → **Signing & Capabilities** → **Team** → add your Apple ID and pick it. If Xcode says the bundle ID `com.cravera.app` is taken, change it to something unique such as `com.<yourname>.cravera`.
+4. Back in Terminal: `flutter run`, and pick your iPhone from the list.
+5. The first time, the iPhone blocks the app: **Settings → General → VPN & Device Management → your Apple ID → Trust**, then run `flutter run` again.
+
 **Mac with the Android emulator instead:** replace step 5 with
 ```bash
 flutter emulators                      # lists your virtual phones
