@@ -25,18 +25,25 @@ Classify by risk, not size. Take the highest level present, and go higher when u
 | Level | Typical changes | Required before merge |
 |---|---|---|
 | **L1** | Docs, styling, low-risk fixes | Checks, CI and cloud Codex |
-| **L2** | Features, business logic, API endpoints, refactoring | L1 + tests + `/codex:review --wait --base main` on the final head |
-| **L3** | Auth and access control, data isolation, migrations, personal or payment data, sensitive integrations, security or infrastructure, architecture or policy | L2 + threat model, denial-path tests, `/codex:adversarial-review --wait --base main <focus>` instead of the standard review, and residual risks stated in the PR |
+| **L2** | Features, business logic, API endpoints, refactoring | L1 + tests + an independent standard review on the final head ([review loop](#review-loop)) |
+| **L3** | Auth and access control, data isolation, migrations, personal or payment data, sensitive integrations, security or infrastructure, architecture or policy | L2 + threat model, denial-path tests, an independent adversarial review instead of the standard one, and residual risks stated in the PR |
 
 Commit and push before a local review, because it only sees committed work. Post the result on the PR, naming the reviewed commit and each finding's triage. Keep secret- or exploit-revealing findings off the PR. A failed run counts as no review. Codex on GitHub (if enabled) reports only P0/P1 findings, so it doesn't replace a local review. Comment `@codex review` to rerun it.
 
 ## Review loop
 
-The lead runs this itself; the maintainer never has to ask. The reviewer is always the model that did not build the change: Codex when Claude Code built it, Claude Code (`/code-review`) when Codex built it.
+The lead runs this itself; the maintainer never has to ask. The reviewer is always the model that did not build the change. A review by the builder never counts.
 
-1. **Local review, at each checkpoint of an L2 or L3 change.** Commit and push, then run the review the level needs through the plugin script that `/codex:review` uses (`node <plugin>/scripts/codex-companion.mjs review` or `adversarial-review --wait --base <base> [focus]`). Read and triage every finding, fix the blocking ones, push, and rerun on the new head until no blocking findings remain or the [escalation](#escalation) limit is reached. A blocking finding the builder calls invalid stays open until the reviewer drops it on a rerun or the maintainer agrees on the PR.
-2. **Cloud Codex, on every PR, before it is marked ready.** If no `chatgpt-codex-connector` summary names the head SHA, comment `@codex review` and wait up to 30 minutes; if nothing names the head SHA, ask once more and wait another 30. Still nothing: leave the PR in draft and tell the maintainer, who decides on the PR whether to wait or merge without it. Treat its findings like local ones. A fix makes a new head, so step 1 (for L2/L3) and step 2 run again.
-3. **Post each round on the PR:** reviewed SHA, verdict, and each finding with its triage.
+| Builder | L2 standard review | L3 adversarial review |
+|---|---|---|
+| Claude Code | Codex: `/codex:review --wait --base <base>` | Codex: `/codex:adversarial-review --wait --base <base> <focus>` |
+| Codex | Claude Code: `/code-review high` | Claude Code: `/code-review high` + `/security-review`, focused on the threat model |
+
+The lead may run the Codex commands through the plugin script they use (`node <plugin>/scripts/codex-companion.mjs review|adversarial-review ...`).
+
+1. **Local review, at each checkpoint of an L2 or L3 change.** Commit and push, then run the review the table gives for the builder and level. Read and triage every finding, fix the blocking ones, push, and rerun on the new head until no blocking findings remain or the [escalation](#escalation) limit is reached. A blocking finding the builder calls invalid stays open until the reviewer drops it on a rerun or the maintainer agrees on the PR.
+2. **Cloud Codex, on every PR, before it is marked ready.** If no `chatgpt-codex-connector` summary names the head SHA, comment `@codex review` and wait up to 30 minutes; if nothing names the head SHA, ask once more and wait another 30. Still nothing: leave the PR in draft and tell the maintainer. The gate stays blocking; the only substitute is an independent review on the exact final SHA that the maintainer approves as a replacement on the PR. Treat its findings like local ones. A fix makes a new head, so step 1 (for L2/L3) and step 2 run again.
+3. **Post each round on the PR:** builder → reviewer, reviewed SHA, verdict, and each finding with its triage.
 
 ## Review checkpoints
 
@@ -61,7 +68,7 @@ After **three review rounds** with unresolved findings, stop and hand the decisi
 
 ## Merging
 
-"Reviewed the final head", "no blocking findings", "thread resolved" and "GitHub allows merge" are four different facts, and none implies another. Merge only when every required review, cloud Codex included, covers the exact final commit, blocking findings are fixed and CI is green:
+"Reviewed the final head", "no blocking findings", "thread resolved" and "GitHub allows merge" are four different facts, and none implies another. Merge only when every required review covers the exact final commit (cloud Codex included, or its maintainer-approved replacement from the [review loop](#review-loop)), blocking findings are fixed and CI is green:
 
 ```sh
 gh pr merge <n> --merge --match-head-commit <verified-sha>
