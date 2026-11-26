@@ -26,6 +26,7 @@ The maintainer says "resume Cravera" or types `/resume`; [the resume skill](.cla
 - Stack: Flutter (Dart), Supabase, Gemini, Google Places ([ADR 0002](docs/adr/0002-stack.md)).
 - **The LLM never produces restaurant data.** Gemini only turns a craving into structured search filters (JSON). Every name, photo, address, price, hour and distance shown comes from Google Places. Always search with open-now.
 - Keep secrets and business rules server-side. `.env` is bundled into the app, so nothing secret may rely on it ([ADR 0003](docs/adr/0003-api-key-handling.md)). Deny by default. Client-supplied IDs grant nothing. Enforce permissions in code (Supabase RLS), never in prompts.
+- Run the [review loop](CONTRIBUTING.md#review-loop) yourself: local Codex at each L2/L3 checkpoint, then fix; cloud Codex on every PR before it is ready.
 - API and business logic go in `lib/services/`, not in screen widgets. Navigation uses go_router.
 - Use only fictional data in code, tests, logs and fixtures.
 - Start the app with `flutter run` from `mobile/Cravera` (needs a `.env`; copy `.env.example`). Before review, run the checks, and try user-facing changes in the running app the way a user would. Report actual results.
