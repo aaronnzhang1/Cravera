@@ -32,13 +32,15 @@ Commit and push before a local review, because it only sees committed work. Post
 
 ## Review loop
 
-The lead runs this itself; the maintainer never has to ask. It is written for the usual setup: Claude Code builds, Codex reviews. If Codex builds a change, the maintainer names its reviewer on the PR before review starts. A review by the builder never counts.
+The lead runs this itself; the maintainer never has to ask. It is written for the usual setup: Claude Code builds, Codex reviews. If Codex builds a change, the maintainer names its reviewer on the PR before review starts; that reviewer's review at the PR's level, posted as in step 3, replaces steps 1 and 2. A review by the builder never counts.
+
+`<base>` is the PR's base branch. Retargeting a PR voids its reviews; review again against the new base.
 
 1. **Local Codex, at each checkpoint of an L2 or L3 change.** Commit and push, then run `/codex:review --wait --base <base>` (L2) or `/codex:adversarial-review --wait --base <base> <focus>` (L3); the lead may run them through the plugin script they use (`node <plugin>/scripts/codex-companion.mjs review|adversarial-review ...`). Triage every finding, fix the blocking ones, push, and rerun on the new head until no blocking findings remain or the [escalation](#escalation) limit is reached. A blocking finding the builder calls invalid stays open until the reviewer drops it on a rerun or the maintainer agrees on the PR.
 2. **Cloud Codex, on every PR, before it is marked ready.** If no `chatgpt-codex-connector` summary names the head SHA, comment `@codex review`. Treat its findings like local ones. A fix makes a new head, so step 1 (for L2/L3) and step 2 run again.
-3. **Post each round on the PR:** builder → reviewer, reviewed SHA, verdict, and each finding with its triage.
+3. **Post each round on the PR:** builder → reviewer, reviewed SHA and base, verdict, and each finding with its triage.
 
-**When a review can't run** (local or cloud: it fails, hangs or is out of quota, or no cloud summary names the head SHA 30 minutes after asking): retry once. If it still can't run, leave the PR in draft and tell the maintainer. The gate stays closed; only the maintainer can approve, on the PR, a replacement independent review of the same level on the exact final SHA.
+**When a review can't run** (it fails or is out of quota, a local run hasn't finished after 30 minutes, or no cloud summary names the head SHA 30 minutes after asking): retry once. If it still can't run, leave the PR in draft and tell the maintainer. The gate stays closed; only the maintainer can approve, on the PR, a replacement independent review of the same level on the exact final SHA.
 
 ## Review checkpoints
 
