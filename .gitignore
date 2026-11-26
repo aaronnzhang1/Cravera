@@ -129,3 +129,6 @@ app.*.symbols
 
 # macOS folder metadata
 .DS_Store
+
+# Apps commit their lockfile so every machine and CI get the same package versions
+!**/pubspec.lock
