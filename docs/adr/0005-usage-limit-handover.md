@@ -10,7 +10,7 @@ The maintainer is on a usage-limited Claude plan and wants work to continue, wit
 ## Decision
 
 `.claude/hooks/handover.mjs`, wired in `.claude/settings.json`:
-- **Status line** shows 5-hour usage and saves it. At 85%, a `PostToolUse` hook tells Claude once per window to commit, push and update CURRENT.md.
+- **Status line** shows 5-hour usage and saves it. At 85%, a `PostToolUse` hook tells Claude once per window to update CURRENT.md and commit locally (pushing stays the normal rule: finished, checked work only).
 - **On a usage limit** (`StopFailure`, `rate_limit`), on a feature branch only: take an exclusive lock, make a local `WIP:` checkpoint commit of Claude's work (never pushed), create a sibling worktree `../<repo>-codex-handover` at that commit, and start Codex there in the background with the resume steps and strict limits. Codex leaves its changes uncommitted and writes notes in that worktree.
 - **Claude's checkout is never shared** with Codex, so no edit blocking is needed. A finished but unreviewed handover blocks a new one.
 - **Every session start and prompt** reports a running or finished handover; session start also tells Claude to run the `/resume` steps. Claude reviews Codex's diff before applying it, so the reviewer never reviews its own change.

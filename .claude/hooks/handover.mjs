@@ -63,13 +63,20 @@ const alive = (pid) => {
   }
 };
 
-/** The running handover's lock, or null. A dead or abandoned lock is cleared. */
+/** The running handover's lock, or null. Read-only: never deletes anything. */
 const runningHandover = () => {
   const lock = readJson(lockFile);
   if (!lock) return null;
-  if (lock.pid ? alive(lock.pid) : Date.now() - statSync(lockFile).mtimeMs < SETUP_GRACE_MS) return lock;
-  rmSync(lockFile, { force: true });
+  try {
+    if (lock.pid ? alive(lock.pid) : Date.now() - statSync(lockFile).mtimeMs < SETUP_GRACE_MS) return lock;
+  } catch {
+    return null;
+  }
   return null;
+};
+/** Removes the lock only if it still holds this token. */
+const releaseLock = (token) => {
+  if (readJson(lockFile)?.token === token) rmSync(lockFile, { force: true });
 };
 
 /** How to start Codex without a shell: [executable, leading args], or null. */
@@ -127,33 +134,30 @@ const commands = {
     writeJson(usageFile, { ...usage, warnedFor: usage.resetsAt });
     const context =
       `Usage is at ${Math.round(usage.pct)}% of the 5-hour limit. Checkpoint now: finish or pause the current step, ` +
-      `commit work in progress on the feature branch (prefix "WIP:" if unfinished), push it, and rewrite docs/CURRENT.md ` +
-      `(Active, Last verified, Next action) so Codex or the next session can continue. Then carry on.`;
+      `rewrite docs/CURRENT.md (Active, Last verified, Next action), and commit locally on the feature branch ` +
+      `(prefix "WIP:" if unfinished) so Codex or the next session can continue. Push only finished, checked work, as usual. Then carry on.`;
     process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context } }));
   },
 
   'stop-failure'() {
     readStdin();
     mkdirSync(stateDir, { recursive: true });
-    // An earlier handover still waiting for review: keep it, start nothing.
-    if (existsSync(doneFile) || existsSync(worktree)) return;
+    // Any lock file, even a stale one, means "don't start": a stale lock is
+    // reported by the context hook and removed by hand, never raced over.
     let fd;
     try {
       fd = openSync(lockFile, 'wx'); // exclusive: a second caller fails here
     } catch {
-      if (runningHandover()) return;
-      try {
-        fd = openSync(lockFile, 'wx'); // the old lock was stale and is now cleared
-      } catch {
-        return;
-      }
+      return;
     }
     const token = randomUUID();
     writeFileSync(fd, JSON.stringify({ token, startedAt: new Date().toISOString() }));
     closeSync(fd);
+    // Checked after taking the lock: an earlier handover still waiting for review wins.
+    if (existsSync(doneFile) || existsSync(worktree)) return releaseLock(token);
     const finish = (record) => {
       writeJson(doneFile, { ...record, at: new Date().toISOString() });
-      rmSync(lockFile, { force: true });
+      releaseLock(token);
     };
     try {
       const branch = git('branch', '--show-current');
@@ -165,7 +169,7 @@ const commands = {
       if (git('status', '--porcelain')) {
         git('add', '-A');
         git('commit', '-q', '-m', 'WIP: checkpoint before Codex handover (usage limit)');
-        checkpoint = git('rev-parse', '--short', 'HEAD');
+        checkpoint = git('rev-parse', 'HEAD'); // full hash, compared before suggesting an undo
       }
       const base = git('rev-parse', '--short', 'HEAD');
       git('worktree', 'add', '-q', '--detach', worktree, 'HEAD');
@@ -192,7 +196,7 @@ const commands = {
     const record = (extra) => {
       if (!ownsLock()) return; // someone else's handover now; leave its state alone
       writeJson(doneFile, { base, checkpoint: checkpoint === '-' ? null : checkpoint, ...extra, endedAt: new Date().toISOString() });
-      rmSync(lockFile, { force: true });
+      releaseLock(token);
     };
     if (!exe) return record({ exitCode: null, error: 'codex not found' });
     const child = spawn(exe, [...lead, 'exec', '-C', worktree, '-s', 'workspace-write', '-'], {
@@ -216,7 +220,10 @@ const commands = {
   context() {
     readStdin();
     const lines = [];
-    if (runningHandover()) {
+    const lock = readJson(lockFile);
+    if (lock && !runningHandover()) {
+      lines.push('A usage-limit handover lock was left behind (.claude/state/codex-running.json) and no worker is running. Check, then delete it by hand.');
+    } else if (lock) {
       lines.push(
         'Codex is working in the handover worktree (../<repo>-codex-handover) because Claude hit its usage limit. ' +
           'It does not touch this checkout. Its diff needs review once it finishes.',
@@ -227,9 +234,17 @@ const commands = {
         lines.push('A usage-limit handover did not start (see .claude/state/codex-done.json). Delete that file once read.');
       } else {
         const base = isHash(done.base) ? done.base : 'unknown';
-        const checkpoint = isHash(done.checkpoint)
-          ? ` This checkout has a local, unpushed checkpoint commit ${done.checkpoint}; undo it with "git reset --soft HEAD~1" if it should not stay.`
-          : '';
+        // Suggest undoing the checkpoint only while it is still exactly the current commit.
+        let head = '';
+        try {
+          head = git('rev-parse', 'HEAD');
+        } catch {}
+        const checkpoint =
+          isHash(done.checkpoint) && head === done.checkpoint
+            ? ` The current commit ${done.checkpoint.slice(0, 7)} is the local, unpushed checkpoint; undo it with "git reset --soft HEAD~1" if it should not stay.`
+            : isHash(done.checkpoint)
+              ? ` A local checkpoint commit ${done.checkpoint.slice(0, 7)} was made before the handover; it is no longer the current commit, so check it by hand.`
+              : '';
         lines.push(
           `Codex worked during a usage-limit pause (exit code ${Number.isInteger(done.exitCode) ? done.exitCode : 'unknown'}${done.timedOut ? ', timed out' : ''}) ` +
             `in the worktree ../<repo>-codex-handover, starting from ${base}.${checkpoint} ` +
