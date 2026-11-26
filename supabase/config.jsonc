@@ -449,6 +449,14 @@
     }
   },
 
+  "functions": {
+    // The gateway's JWT check rejects publishable keys (sb_publishable_…), so
+    // the function checks the apikey header itself and fails closed.
+    "places-search": {
+      "verify_jwt": false
+    }
+  },
+
   "edge_runtime": {
     "enabled": true,
     // Supported request policies: `oneshot`, `per_worker`.
