@@ -1,3 +1,5 @@
+import 'dart:async' show TimeoutException;
+
 import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:geolocator/geolocator.dart';
 
@@ -69,10 +71,11 @@ class LocationService {
             timeLimit: Duration(seconds: 15),
           ),
         );
-      } catch (_) {
+      } on TimeoutException {
         // No fresh fix in time (for example indoors): use the last one the
         // phone knows, but only if it is recent and precise. Otherwise the
-        // user is asked to type a place.
+        // user is asked to type a place. Any other error (permission revoked,
+        // location turned off) skips the cache and falls through to `failed`.
         final cached = await Geolocator.getLastKnownPosition();
         if (cached != null &&
             cachedFixIsUsable(takenAt: cached.timestamp, accuracyMeters: cached.accuracy, now: DateTime.now())) {

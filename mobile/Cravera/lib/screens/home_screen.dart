@@ -541,11 +541,23 @@ class _PlaceDialogState extends State<_PlaceDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Where should I search?'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: 'An address, neighborhood or city'),
-        onSubmitted: (_) => _submit(),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'A city, neighborhood or address'),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 12),
+          // Say where the text goes before it is sent (Android's geocoder may use the network).
+          Text(
+            "A city or neighborhood works fine. Your phone's map service looks up what you type.",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
       actions: [
         if (widget.offerDeviceLocation)
