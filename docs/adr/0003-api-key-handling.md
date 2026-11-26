@@ -9,7 +9,7 @@
 
 ## Decision
 
-The app never holds Google or Gemini keys. It calls Supabase Edge Functions (for example `search-restaurants`, later `parse-craving`), which hold the keys as Supabase secrets and call Places and Gemini server-side. The app holds only the Supabase URL and anon key, which are public by design: what they can reach is limited by RLS and by what the functions allow. Photos are fetched through the function too, or by a URL that doesn't contain the key.
+The app never holds Google or Gemini keys. It calls Supabase Edge Functions (for example `search-restaurants`, later `parse-craving`), which hold the keys as Supabase secrets and call Places and Gemini server-side. The app holds only the Supabase URL and anon key (Supabase now calls it the publishable key, `sb_publishable_…`), which are public by design: what they can reach is limited by RLS and by what the functions allow. Photos are fetched through the function too, or by a URL that doesn't contain the key.
 
 ## Alternatives
 
