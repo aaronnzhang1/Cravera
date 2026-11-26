@@ -131,6 +131,8 @@ class ProfileScreen extends StatelessWidget {
             title: 'Sign Out',
             color: AppColors.danger,
             onTap: () {
+              // Clear any message that might mention the old user's place.
+              ScaffoldMessenger.of(context).clearSnackBars();
               session.signOut();
               context.go(AppRoutes.signIn);
             },
