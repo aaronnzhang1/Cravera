@@ -373,9 +373,12 @@ class _LoadingViewState extends State<_LoadingView> {
                           : const Icon(Icons.circle_outlined, size: 20, color: AppColors.textMuted),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      _steps[i],
-                      style: text.bodyLarge?.copyWith(color: i <= _done ? AppColors.textSecondary : AppColors.textMuted),
+                    // Flexible lets a long step wrap on narrow phones with large text.
+                    Flexible(
+                      child: Text(
+                        _steps[i],
+                        style: text.bodyLarge?.copyWith(color: i <= _done ? AppColors.textSecondary : AppColors.textMuted),
+                      ),
                     ),
                   ],
                 ),

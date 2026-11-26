@@ -42,7 +42,7 @@ void main() {
     expect(find.text('What are you\ncraving today?'), findsNothing, reason: 'the hero steps aside while typing');
   });
 
-  testWidgets('a guest who opens sign-up keeps their session and place', (tester) async {
+  testWidgets('a guest who opens sign-up or sign-in keeps their session and place', (tester) async {
     final session = AppSession(locationService: _FixedLocation());
     await _enterAsGuest(tester, session);
     await session.useTypedPlace('1 Example Street');
@@ -59,6 +59,15 @@ void main() {
     }
 
     expect(find.text('Create your account'), findsOneWidget);
+    expect(session.isGuest, isTrue);
+    expect(session.searchLocation?.label, '1 Example Street');
+
+    // And on to sign-in, still as the same guest.
+    await tester.tap(find.text('Already have an account? Sign in'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Continue as guest'), findsOneWidget, reason: 'the sign-in screen opened');
     expect(session.isGuest, isTrue);
     expect(session.searchLocation?.label, '1 Example Street');
   });

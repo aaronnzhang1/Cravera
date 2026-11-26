@@ -33,10 +33,9 @@ class AppRoutes {
         final goingToApp = state.uri.path.startsWith('/app');
 
         if (!signedIn && goingToApp) return signIn;
-        // Guests may open sign-up (to create an account) without losing their
-        // session; anyone already in the app skips the sign-in screen.
-        final guestToSignUp = session.isGuest && state.uri.path == signUp;
-        if (signedIn && goingToAuth && !guestToSignUp) return appHome;
+        // Guests may open sign-up or sign-in (to get an account) without losing
+        // their session; signed-in users skip both screens.
+        if (session.isSignedIn && goingToAuth) return appHome;
         if (state.uri.path == '/') return signedIn ? appHome : signIn;
         return null;
       },
