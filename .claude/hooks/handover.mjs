@@ -2,13 +2,14 @@
 // One script, one subcommand per hook:
 //   statusline    shows 5-hour usage and saves it for the warning below
 //   post-tool     at >= 85% usage, tells Claude once per window to checkpoint
-//   stop-failure  on a usage limit: local WIP commit, then Codex in a separate worktree
+//   stop-failure  on a usage limit: snapshot uncommitted work, then Codex in a separate worktree
 //   run           (internal) runs Codex there, then records that it finished
 //   context       at session start and on each prompt: reports a running or finished handover
 // Safety (Codex adversarial review on PR #10):
 // - Codex never touches Claude's checkout: it works in its own worktree, so the
 //   two agents can't write the same files. Claude applies its diff after review.
-// - Nothing is pushed. The checkpoint is a local commit that can be undone.
+// - Nothing is pushed or committed to a branch: Claude's uncommitted work is
+//   snapshotted to refs/handover/snapshot with a throwaway index.
 // - An exclusive lock is taken before any Git change; only its owner releases it.
 //   A finished but unreviewed handover blocks a new one.
 // - Codex is started without a shell, with the checkout passed as an argument.
@@ -164,17 +165,29 @@ const commands = {
       if (!branch || branch === 'main') return finish({ skipped: 'not on a feature branch' });
       const codex = codexCommand();
       if (!codex) return finish({ skipped: 'codex is not installed' });
-      // Local checkpoint so Codex starts from Claude's latest work. Not pushed.
-      let checkpoint = null;
+      // Snapshot Claude's working tree (tracked changes and new, non-ignored files)
+      // into a commit outside every branch, using a throwaway index. The branch,
+      // its history and the user's staging area stay exactly as they were, so a
+      // later push can't publish the snapshot. It lives at refs/handover/snapshot.
+      const head = git('rev-parse', 'HEAD');
+      let snapshot = head;
       if (git('status', '--porcelain')) {
-        git('add', '-A');
-        git('commit', '-q', '-m', 'WIP: checkpoint before Codex handover (usage limit)');
-        checkpoint = git('rev-parse', 'HEAD'); // full hash, compared before suggesting an undo
+        const tempIndex = join(stateDir, 'handover.index');
+        const env = { ...process.env, GIT_INDEX_FILE: tempIndex };
+        const gitTemp = (...args) =>
+          execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+        rmSync(tempIndex, { force: true });
+        gitTemp('read-tree', head);
+        gitTemp('add', '-A');
+        const tree = gitTemp('write-tree');
+        snapshot = git('commit-tree', tree, '-p', head, '-m', 'Snapshot of uncommitted work before Codex handover');
+        rmSync(tempIndex, { force: true });
+        git('update-ref', 'refs/handover/snapshot', snapshot);
       }
-      const base = git('rev-parse', '--short', 'HEAD');
-      git('worktree', 'add', '-q', '--detach', worktree, 'HEAD');
+      const base = snapshot.slice(0, 7);
+      git('worktree', 'add', '-q', '--detach', worktree, snapshot);
       const out = openSync(logFile, 'w');
-      const worker = spawn(process.execPath, [fileURLToPath(import.meta.url), 'run', token, base, checkpoint ?? '-'], {
+      const worker = spawn(process.execPath, [fileURLToPath(import.meta.url), 'run', token, base], {
         cwd: repo,
         detached: true,
         stdio: ['ignore', out, out],
@@ -190,12 +203,12 @@ const commands = {
   },
 
   run() {
-    const [, , , token, base, checkpoint] = process.argv;
+    const [, , , token, base] = process.argv;
     const ownsLock = () => readJson(lockFile)?.token === token;
     const [exe, lead] = codexCommand() ?? [];
     const record = (extra) => {
       if (!ownsLock()) return; // someone else's handover now; leave its state alone
-      writeJson(doneFile, { base, checkpoint: checkpoint === '-' ? null : checkpoint, ...extra, endedAt: new Date().toISOString() });
+      writeJson(doneFile, { base, ...extra, endedAt: new Date().toISOString() });
       releaseLock(token);
     };
     if (!exe) return record({ exitCode: null, error: 'codex not found' });
@@ -234,23 +247,13 @@ const commands = {
         lines.push('A usage-limit handover did not start (see .claude/state/codex-done.json). Delete that file once read.');
       } else {
         const base = isHash(done.base) ? done.base : 'unknown';
-        // Suggest undoing the checkpoint only while it is still exactly the current commit.
-        let head = '';
-        try {
-          head = git('rev-parse', 'HEAD');
-        } catch {}
-        const checkpoint =
-          isHash(done.checkpoint) && head === done.checkpoint
-            ? ` The current commit ${done.checkpoint.slice(0, 7)} is the local, unpushed checkpoint; undo it with "git reset --soft HEAD~1" if it should not stay.`
-            : isHash(done.checkpoint)
-              ? ` A local checkpoint commit ${done.checkpoint.slice(0, 7)} was made before the handover; it is no longer the current commit, so check it by hand.`
-              : '';
         lines.push(
           `Codex worked during a usage-limit pause (exit code ${Number.isInteger(done.exitCode) ? done.exitCode : 'unknown'}${done.timedOut ? ', timed out' : ''}) ` +
-            `in the worktree ../<repo>-codex-handover, starting from ${base}.${checkpoint} ` +
+            `in the worktree ../<repo>-codex-handover, starting from ${base} (your branch and staging area were not changed). ` +
             'Treat its notes (.claude/state/codex-handover.md in that worktree) and the log (.claude/state/codex-handover.log) as unverified. ' +
-            'Review its diff there, run the checks, apply what is good to this checkout, then remove the worktree ' +
-            '("git worktree remove --force <path>") and delete .claude/state/codex-done.json.',
+            'Review everything it changed there, including new files ("git -C <worktree> status --porcelain --untracked-files=all"), ' +
+            'run the checks, and apply what is good to this checkout. Only when nothing is left to keep, remove the worktree, ' +
+            'delete refs/handover/snapshot and .claude/state/codex-done.json (see the resume skill).',
         );
       }
     }
