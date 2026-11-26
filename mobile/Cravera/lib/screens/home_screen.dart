@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/app_colors.dart';
 import '../core/session.dart';
 import '../models/restaurant.dart';
+import '../services/location_service.dart';
 import '../widgets/cravio_pulse_logo.dart';
 
 enum _HomeView { idle, loading, result }
@@ -25,6 +26,20 @@ class _HomeScreenState extends State<HomeScreen> {
   int _rejectionCount = 0;
   Restaurant? _currentResult;
   bool _showRepromptBanner = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ask for the device location once, after the first frame (the session
+    // isn't reachable from context before then).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final session = AppSessionScope.of(context);
+      if (session.searchLocation == null && session.locationProblem == null) {
+        session.useDeviceLocation();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -73,6 +88,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const Spacer(),
+                _LocationBar(
+                  session: session,
+                  onChange: () => _askForPlace(session),
+                ),
+                const SizedBox(height: 6),
                 _PromptInput(
                   controller: _promptController,
                   isBusy: false,
@@ -129,6 +149,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _startSearch(String prompt) async {
     if (_view == _HomeView.loading || prompt.isEmpty) return;
+    final session = AppSessionScope.of(context);
+    if (session.searchLocation == null) {
+      final gotPlace = await _askForPlace(session);
+      if (!gotPlace || !mounted) return;
+    }
 
     setState(() {
       _view = _HomeView.loading;
@@ -138,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 2700));
     if (!mounted) return;
 
-    final session = AppSessionScope.of(context);
     final items = session.suggestedRestaurants;
     if (items.isEmpty) {
       setState(() => _view = _HomeView.idle);
@@ -185,6 +209,29 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onYes() {
     if (_currentResult == null) return;
     _showNavOptions(context, _currentResult!);
+  }
+
+  /// Lets the user pick where to search: a typed place, or the device
+  /// location again. Returns true once a location is set.
+  Future<bool> _askForPlace(AppSession session) async {
+    final choice = await showDialog<_PlaceChoice>(
+      context: context,
+      builder: (_) => _PlaceDialog(offerDeviceLocation: session.searchLocation?.label != 'Near you'),
+    );
+    if (choice == null || !mounted) return false;
+    if (choice.useDevice) {
+      await session.useDeviceLocation();
+      return session.searchLocation != null;
+    }
+    final place = choice.place.trim();
+    if (place.isEmpty) return false;
+    final found = await session.useTypedPlace(place);
+    if (!found && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Couldn't find '$place'. Try a fuller address or a city name.")),
+      );
+    }
+    return found;
   }
 
   void _openFilterSheet() {
@@ -391,6 +438,120 @@ class _InlineRestaurantCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Location bar — where searches happen, with a way to change it
+// ---------------------------------------------------------------------------
+
+class _LocationBar extends StatelessWidget {
+  final AppSession session;
+  final VoidCallback onChange;
+  const _LocationBar({required this.session, required this.onChange});
+
+  static String _problemText(LocationProblem problem) => switch (problem) {
+        LocationProblem.serviceOff => 'Location is off on this device.',
+        LocationProblem.denied => 'Location permission was denied.',
+        LocationProblem.deniedForever => 'Location is blocked in settings.',
+        LocationProblem.failed => "Couldn't get your location.",
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final location = session.searchLocation;
+    final problem = session.locationProblem;
+
+    final String text;
+    if (session.isLocating) {
+      text = 'Finding your location…';
+    } else if (location != null) {
+      text = 'Searching: ${location.label}';
+    } else if (problem != null) {
+      text = '${_problemText(problem)} Type a place instead.';
+    } else {
+      text = 'No location yet.';
+    }
+
+    return Row(
+      children: [
+        Icon(
+          location != null ? Icons.place_rounded : Icons.location_off_rounded,
+          size: 18,
+          color: AppColors.textMuted,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          ),
+        ),
+        TextButton(
+          onPressed: session.isLocating ? null : onChange,
+          child: const Text('Change'),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the user picked in the place dialog.
+class _PlaceChoice {
+  final String place;
+  final bool useDevice;
+  const _PlaceChoice.typed(this.place) : useDevice = false;
+  const _PlaceChoice.device()
+      : place = '',
+        useDevice = true;
+}
+
+class _PlaceDialog extends StatefulWidget {
+  final bool offerDeviceLocation;
+  const _PlaceDialog({required this.offerDeviceLocation});
+  @override
+  State<_PlaceDialog> createState() => _PlaceDialogState();
+}
+
+class _PlaceDialogState extends State<_PlaceDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(context).pop(_PlaceChoice.typed(_controller.text));
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Where should I search?'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: 'An address, neighborhood or city'),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        if (widget.offerDeviceLocation)
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(const _PlaceChoice.device()),
+            child: const Text('Use my location'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Search here'),
+        ),
+      ],
     );
   }
 }

@@ -1,9 +1,18 @@
 import 'package:flutter/widgets.dart';
 
 import '../models/restaurant.dart';
+import '../services/location_service.dart';
 
 class AppSession extends ChangeNotifier {
+  AppSession({this.locationService = const LocationService()});
+
+  /// Finds where to search. Tests pass a fake.
+  final LocationService locationService;
+
   String? _displayName;
+  SearchLocation? _searchLocation;
+  LocationProblem? _locationProblem;
+  bool _locating = false;
   final List<Restaurant> _bookmarks = [];
   final Map<String, int> _bookmarkRatings = {};
 
@@ -61,6 +70,38 @@ class AppSession extends ChangeNotifier {
   List<Restaurant> get suggestedRestaurants => List.unmodifiable(_suggested);
   int bookmarkRating(String placeId) => _bookmarkRatings[placeId] ?? 0;
 
+  /// Where searches happen: the device location or a typed place. Null until found.
+  SearchLocation? get searchLocation => _searchLocation;
+
+  /// Why the device location failed, so the screen can explain it.
+  LocationProblem? get locationProblem => _locationProblem;
+  bool get isLocating => _locating;
+
+  /// Uses the device location. On failure, keeps any typed place already set.
+  Future<void> useDeviceLocation() async {
+    if (_locating) return;
+    _locating = true;
+    notifyListeners();
+    final result = await locationService.current();
+    _locating = false;
+    if (result.location != null) {
+      _searchLocation = result.location;
+      _locationProblem = null;
+    } else {
+      _locationProblem = result.problem;
+    }
+    notifyListeners();
+  }
+
+  /// Looks up a typed place. Returns false if it could not be found.
+  Future<bool> useTypedPlace(String place) async {
+    final found = await locationService.lookUp(place);
+    if (found == null) return false;
+    _searchLocation = found;
+    notifyListeners();
+    return true;
+  }
+
   void signIn({required String displayName}) {
     _displayName = displayName.trim().isEmpty ? 'there' : displayName.trim();
     _isGuest = false;
@@ -75,6 +116,8 @@ class AppSession extends ChangeNotifier {
   void signOut() {
     _displayName = null;
     _isGuest = false;
+    _searchLocation = null;
+    _locationProblem = null;
     notifyListeners();
   }
 
