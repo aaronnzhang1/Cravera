@@ -13,6 +13,11 @@ class AppSession extends ChangeNotifier {
   SearchLocation? _searchLocation;
   LocationProblem? _locationProblem;
   bool _locating = false;
+
+  /// Bumped on sign out. A location lookup that started before then finishes
+  /// into a session that no longer exists, so its result is dropped instead
+  /// of handing the old user's location to the next one.
+  int _locationGeneration = 0;
   final List<Restaurant> _bookmarks = [];
   final Map<String, int> _bookmarkRatings = {};
 
@@ -82,7 +87,9 @@ class AppSession extends ChangeNotifier {
     if (_locating) return;
     _locating = true;
     notifyListeners();
+    final generation = _locationGeneration;
     final result = await locationService.current();
+    if (generation != _locationGeneration) return; // signed out meanwhile
     _locating = false;
     if (result.location != null) {
       _searchLocation = result.location;
@@ -95,7 +102,9 @@ class AppSession extends ChangeNotifier {
 
   /// Looks up a typed place. Returns false if it could not be found.
   Future<bool> useTypedPlace(String place) async {
+    final generation = _locationGeneration;
     final found = await locationService.lookUp(place);
+    if (generation != _locationGeneration) return false; // signed out meanwhile
     if (found == null) return false;
     _searchLocation = found;
     notifyListeners();
@@ -118,6 +127,8 @@ class AppSession extends ChangeNotifier {
     _isGuest = false;
     _searchLocation = null;
     _locationProblem = null;
+    _locating = false;
+    _locationGeneration++;
     notifyListeners();
   }
 

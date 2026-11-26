@@ -33,6 +33,15 @@ class LocationResult {
 class LocationService {
   const LocationService();
 
+  /// The oldest and least accurate last-known fix we still call "Near you".
+  /// Older or vaguer fixes could be from somewhere the user has left.
+  static const maxCachedAge = Duration(minutes: 10);
+  static const maxCachedAccuracyMeters = 1000.0;
+
+  /// Whether a last-known fix is recent and precise enough to search around.
+  static bool cachedFixIsUsable({required DateTime takenAt, required double accuracyMeters, required DateTime now}) =>
+      now.difference(takenAt) <= maxCachedAge && accuracyMeters <= maxCachedAccuracyMeters;
+
   /// Asks for permission if needed, then reads the device location.
   Future<LocationResult> current() async {
     try {
@@ -62,8 +71,13 @@ class LocationService {
         );
       } catch (_) {
         // No fresh fix in time (for example indoors): use the last one the
-        // phone knows, if any.
-        position = await Geolocator.getLastKnownPosition();
+        // phone knows, but only if it is recent and precise. Otherwise the
+        // user is asked to type a place.
+        final cached = await Geolocator.getLastKnownPosition();
+        if (cached != null &&
+            cachedFixIsUsable(takenAt: cached.timestamp, accuracyMeters: cached.accuracy, now: DateTime.now())) {
+          position = cached;
+        }
       }
       if (position == null) {
         return const LocationResult.failed(LocationProblem.failed);

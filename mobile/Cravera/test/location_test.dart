@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -125,6 +127,44 @@ void main() {
     expect(find.textContaining('Still searching: 1 Example Street'), findsOneWidget);
   });
 
+  test('a device lookup that finishes after sign out is dropped', () async {
+    final pending = Completer<LocationResult>();
+    final session = AppSession(locationService: _PendingLocationService(device: pending.future));
+    session.continueAsGuest();
+
+    final lookup = session.useDeviceLocation();
+    expect(session.isLocating, isTrue);
+    session.signOut();
+    pending.complete(const LocationResult.found(_nearby));
+    await lookup;
+
+    expect(session.searchLocation, isNull);
+    expect(session.isLocating, isFalse, reason: 'a later lookup must not be blocked');
+  });
+
+  test('a typed-place lookup that finishes after sign out is dropped', () async {
+    final pending = Completer<SearchLocation?>();
+    final session = AppSession(locationService: _PendingLocationService(typed: pending.future));
+    session.continueAsGuest();
+
+    final lookup = session.useTypedPlace('1 Example Street');
+    session.signOut();
+    pending.complete(const SearchLocation(latitude: 1, longitude: 2, label: '1 Example Street'));
+
+    expect(await lookup, isFalse);
+    expect(session.searchLocation, isNull);
+  });
+
+  test('a stale or vague last-known fix is not used as "Near you"', () {
+    final now = DateTime(2026, 1, 1, 12);
+    bool usable(Duration age, double accuracy) =>
+        LocationService.cachedFixIsUsable(takenAt: now.subtract(age), accuracyMeters: accuracy, now: now);
+
+    expect(usable(const Duration(minutes: 2), 50), isTrue);
+    expect(usable(const Duration(hours: 3), 50), isFalse);
+    expect(usable(const Duration(minutes: 2), 5000), isFalse);
+  });
+
   test('sign out forgets the location', () async {
     final session = AppSession(
       locationService: FakeLocationService(const LocationResult.found(_nearby)),
@@ -137,4 +177,20 @@ void main() {
     expect(session.searchLocation, isNull);
     expect(session.locationProblem, isNull);
   });
+}
+
+/// Lookups that finish only when the test says so.
+class _PendingLocationService extends LocationService {
+  _PendingLocationService({Future<LocationResult>? device, Future<SearchLocation?>? typed})
+    : _device = device,
+      _typed = typed;
+
+  final Future<LocationResult>? _device;
+  final Future<SearchLocation?>? _typed;
+
+  @override
+  Future<LocationResult> current() => _device ?? Future.value(const LocationResult.failed(LocationProblem.failed));
+
+  @override
+  Future<SearchLocation?> lookUp(String place) => _typed ?? Future.value(null);
 }
