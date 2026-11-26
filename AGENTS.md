@@ -1,6 +1,6 @@
 # Cravera
 
-A Flutter app where a guest describes a craving in plain language and gets one nearby restaurant that is open now. Supabase/Postgres is the backend. Code lives in `mobile/Cravera/` (Dart package name is still `cravio`).
+A Flutter app where a guest describes a craving in plain language and gets one nearby restaurant that is open now. Supabase/Postgres is the backend. Code lives in `mobile/Cravera/` (Dart package `cravera`, app ID `com.cravera.app`).
 
 ## Start or resume a session
 

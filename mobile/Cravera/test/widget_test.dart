@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:cravio/core/session.dart';
-import 'package:cravio/main.dart';
+import 'package:cravera/core/session.dart';
+import 'package:cravera/main.dart';
 
 void main() {
-  testWidgets('Cravio starts on sign in and can enter the app', (WidgetTester tester) async {
+  testWidgets('Cravera starts on sign in and can enter the app', (WidgetTester tester) async {
     await tester.pumpWidget(MyApp(session: AppSession()));
     await tester.pump();
 
-    expect(find.text('cravio'), findsOneWidget);
+    expect(find.text('Cravera'), findsOneWidget);
     expect(find.text('Sign in'), findsWidgets);
 
     await tester.enterText(find.byType(TextField).first, 'taylor@example.com');
@@ -17,7 +17,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.textContaining('Hi taylor'), findsOneWidget);
+    expect(find.textContaining(', taylor'), findsOneWidget);
   });
 
   testWidgets('Continue as guest opens home without an account', (WidgetTester tester) async {
@@ -29,7 +29,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.textContaining('what are you craving today?'), findsOneWidget);
+    expect(find.textContaining('craving today?'), findsOneWidget);
     expect(session.isGuest, isTrue);
     expect(session.isSignedIn, isFalse);
 

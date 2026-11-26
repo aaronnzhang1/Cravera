@@ -37,7 +37,7 @@ class RecsInboxScreen extends StatelessWidget {
               child: Card(
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: AppColors.accent.withValues(alpha: 0.25),
+                    backgroundColor: AppColors.accentSoft,
                     child: const Icon(Icons.inbox_rounded, color: AppColors.textSecondary),
                   ),
                   title: Text(rec.$1, style: const TextStyle(fontWeight: FontWeight.w800)),

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/routes.dart';
-import 'cravio_background.dart';
-import 'expanding_bottom_nav.dart';
+import 'cravera_background.dart';
+import 'glass_nav.dart';
 
 class AppShellScaffold extends StatelessWidget {
   final Widget child;
@@ -14,12 +14,12 @@ class AppShellScaffold extends StatelessWidget {
     final location = GoRouterState.of(context).uri.path;
     final index = _tabIndexFor(location);
 
-    return CravioBackground(
+    return CraveraBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBody: true,
-        body: SafeArea(child: child),
-        bottomNavigationBar: ExpandingBottomNav(
+        body: SafeArea(bottom: false, child: child),
+        bottomNavigationBar: GlassNav(
           currentIndex: index,
           onTap: (i) {
             if (i == 0) context.go(AppRoutes.appHome);

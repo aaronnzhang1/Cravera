@@ -25,8 +25,8 @@ Status as of 2026-11-26 (audit evidence in docs/CURRENT.md). "UI only" means scr
 
 | Phase | Delivers | Status |
 |---|---|---|
-| Prephase | Wireframes, design system (dark theme, terracotta/sage palette) | Done |
-| **1 · Guest MVP** | Guest mode, location (current + manual), craving → Gemini filters → Places (open now), result card, Yes → maps, No → next/refine | UI only: 4 hardcoded demo restaurants, all services are stubs |
+| Prephase | Wireframes, design system: cool near-black theme, violet accent, sage secondary, soft white text; Fraunces headings, Outfit text. Colors live only in `lib/core/app_colors.dart` | Done (rehauled 2026-11-26; orange replaced by violet + sage at the maintainer's request) |
+| **1 · Guest MVP** | Guest mode, location (current + manual), craving (typed or a quick-pick chip) → Gemini filters → Places (open now), result card, Yes → maps, No → next/refine | UI only: 4 hardcoded demo restaurants, all services are stubs |
 | 1.5 · Accounts | Supabase sign up/sign in, profiles, security hardening | UI only: sign-in accepts anything, nothing persisted |
 | 2 · Bookmarks & preferences | Bookmarks saved to the DB, 1–5 ratings, preference memory feeding the AI, working manual filters | UI only: bookmarks/ratings in memory; filter sheet discards its values |
 | 2.5 · Hardening | UI rehaul, test cases, RLS, API key handling, input validation, bug fixes, privacy and data-storage review | Not started |
@@ -45,7 +45,7 @@ Ideas captured in the planning docs that no phase owns yet. Promote one by givin
 | See how friends ranked places they went to | PDF p.4 | Extends Phase 3 shared bookmarks with ratings |
 | Dietary preferences screen | HTML prototype | Could feed Phase 2 preference memory |
 | Notification settings and location settings screens | HTML prototype, Profile screen | Location settings row exists with no action |
-| Quick-pick craving chips on the home screen | cursorrules | |
+| Home background cards show real, well-reviewed places near the user, not just any place with a 5-star rating | Maintainer, 2026-11-26 | Needs TASK-001's Places search. Take them from Places only (open now, near the search location) and filter for quality: proposed rating ≥ 4.5 **and** at least ~200 reviews, so a 5.0 from three reviews never shows. Until then the cards show cuisines only |
 | Voice input | PDF, home screen mic button ("coming soon") | |
 | Call the restaurant / share from the navigate screen | navigate_screen.dart ("coming soon") | |
 
@@ -53,6 +53,5 @@ Ideas captured in the planning docs that no phase owns yet. Promote one by givin
 
 | # | Decision | Needed by |
 |---|---|---|
-| 2 | Finish the Cravio → Cravera rename in code (package `cravio`, `com.cravio.cravio`, titles, wordmark). Changing the app ID later breaks installs and store listings | Before Phase 4 |
 | 3 | Guest search abuse protection (rate limiting on the Edge Functions) | Before Phase 4 |
 | 4 | Data source for the Trending Spots Hub | If it's scheduled |

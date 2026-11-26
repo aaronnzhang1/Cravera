@@ -3,86 +3,133 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 
+/// Shared shapes, so every card, input and sheet rounds the same way.
+class AppRadius {
+  static const small = 12.0; // chips, small buttons
+  static const medium = 18.0; // inputs, list rows
+  static const large = 28.0; // cards, sheets
+}
+
 class AppTheme {
   static ThemeData dark() {
     final base = ThemeData.dark(useMaterial3: true);
 
+    // Fraunces (a soft serif) for big headings gives a warm, editorial feel
+    // that suits food; Outfit stays for everything else because it reads well small.
+    final body = GoogleFonts.outfitTextTheme(base.textTheme);
+    TextStyle display(TextStyle? s, double spacing) =>
+        GoogleFonts.fraunces(textStyle: s, fontWeight: FontWeight.w700, letterSpacing: spacing);
+
+    final textTheme = body
+        .copyWith(
+          displaySmall: display(body.displaySmall, -1.0),
+          headlineMedium: display(body.headlineMedium, -0.6),
+          headlineSmall: display(body.headlineSmall, -0.4),
+          titleLarge: GoogleFonts.outfit(textStyle: body.titleLarge, fontWeight: FontWeight.w700, letterSpacing: -0.2),
+          titleMedium: GoogleFonts.outfit(textStyle: body.titleMedium, fontWeight: FontWeight.w600),
+          bodyLarge: GoogleFonts.outfit(textStyle: body.bodyLarge, fontWeight: FontWeight.w400, height: 1.35),
+          bodyMedium: GoogleFonts.outfit(textStyle: body.bodyMedium, fontWeight: FontWeight.w400, height: 1.35),
+          labelLarge: GoogleFonts.outfit(textStyle: body.labelLarge, fontWeight: FontWeight.w600),
+        )
+        .apply(bodyColor: AppColors.textPrimary, displayColor: AppColors.textPrimary);
+
+    OutlineInputBorder inputBorder(Color color, [double width = 1]) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+          borderSide: BorderSide(color: color, width: width),
+        );
+
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: base.colorScheme.copyWith(
+      colorScheme: const ColorScheme.dark(
         surface: AppColors.surface,
+        surfaceContainerHighest: AppColors.surface3,
         primary: AppColors.accent,
-        secondary: AppColors.accent,
+        onPrimary: AppColors.onAccent,
+        secondary: AppColors.sage,
+        onSecondary: AppColors.background,
+        error: AppColors.danger,
         onSurface: AppColors.textPrimary,
-        onPrimary: AppColors.textPrimary,
+        onSurfaceVariant: AppColors.textMuted,
+        outline: AppColors.border,
       ),
+      textTheme: textTheme,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         foregroundColor: AppColors.textPrimary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
+      // Cards and inputs are see-through like glass, so the background glows show.
       cardTheme: CardThemeData(
-        // Let the radiant background bleed through.
-        color: AppColors.surface2.withValues(alpha: 0.55),
+        color: AppColors.glassBase,
         surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: AppColors.border.withValues(alpha: 0.45), width: 1),
+          borderRadius: BorderRadius.circular(AppRadius.large),
+          side: const BorderSide(color: AppColors.glassEdge),
         ),
       ),
-      textTheme: GoogleFonts.outfitTextTheme(base.textTheme).copyWith(
-        // Structured hierarchy: clearer titles vs body.
-        displaySmall: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: -0.8),
-        headlineSmall: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: -0.4),
-        titleLarge: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: -0.2),
-        titleMedium: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        bodyLarge: GoogleFonts.outfit(fontWeight: FontWeight.w500, height: 1.25),
-        bodyMedium: GoogleFonts.outfit(fontWeight: FontWeight.w500, height: 1.25),
-        labelLarge: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-      ).apply(
-        bodyColor: AppColors.textPrimary,
-        displayColor: AppColors.textPrimary,
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surface2,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.large)),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.surface2,
+        surfaceTintColor: Colors.transparent,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface2.withValues(alpha: 0.50),
+        fillColor: AppColors.glassBase,
         hintStyle: const TextStyle(color: AppColors.textMuted),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide(color: AppColors.border.withValues(alpha: 0.45), width: 1),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide(color: AppColors.border.withValues(alpha: 0.45), width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: AppColors.accent, width: 2),
-        ),
+        prefixIconColor: AppColors.textMuted,
+        suffixIconColor: AppColors.textMuted,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        border: inputBorder(AppColors.border),
+        enabledBorder: inputBorder(AppColors.border),
+        focusedBorder: inputBorder(AppColors.accent, 1.5),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.accent,
-          foregroundColor: AppColors.textPrimary,
+          foregroundColor: AppColors.onAccent,
+          disabledBackgroundColor: AppColors.surface3,
+          disabledForegroundColor: AppColors.textMuted,
           shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.2),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
-          side: BorderSide(color: AppColors.border.withValues(alpha: 0.45), width: 1),
+          side: const BorderSide(color: AppColors.border),
           shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ),
-      snackBarTheme: const SnackBarThemeData(
-        backgroundColor: AppColors.surface2,
-        contentTextStyle: TextStyle(color: AppColors.textPrimary),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.accent,
+          textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+        ),
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.surface2,
+        side: const BorderSide(color: AppColors.border),
+        shape: const StadiumBorder(),
+        labelStyle: GoogleFonts.outfit(color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.surface3,
+        contentTextStyle: GoogleFonts.outfit(color: AppColors.textPrimary),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.medium)),
+      ),
+      dividerTheme: const DividerThemeData(color: AppColors.border, thickness: 1),
     );
   }
 }

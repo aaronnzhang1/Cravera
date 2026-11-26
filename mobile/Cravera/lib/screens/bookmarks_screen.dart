@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/session.dart';
 import '../models/restaurant.dart';
+import '../widgets/glass.dart';
 
 class BookmarksScreen extends StatelessWidget {
   const BookmarksScreen({super.key});
@@ -12,56 +13,56 @@ class BookmarksScreen extends StatelessWidget {
     final session = AppSessionScope.of(context);
     final bookmarks = session.bookmarks;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      child: bookmarks.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.bookmark_outline_rounded, size: 42, color: AppColors.textSecondary),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No saved restaurants yet.\nWhen you save one, it will show up here.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: session.addDemoBookmarks,
-                      child: const Text('Add demo bookmarks'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final text = Theme.of(context).textTheme;
+    return ListView(
+      // Bottom padding clears the floating nav bar.
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
+      children: [
+        PageHeader(
+          title: 'Saved',
+          subtitle: bookmarks.isEmpty
+              ? 'Places you save show up here.'
+              : '${bookmarks.length} ${bookmarks.length == 1 ? 'place' : 'places'}, rate them to tune your picks',
+        ),
+        if (bookmarks.isEmpty)
+          Glass(
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+            child: Column(
               children: [
-                Text('Bookmarks', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-                const SizedBox(height: 4),
-                Text('${bookmarks.length} restaurants', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 118),
-                    itemCount: bookmarks.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final r = bookmarks[index];
-                      return _BookmarkCard(
-                        restaurant: r,
-                        userRating: session.bookmarkRating(r.placeId),
-                        onRate: (rating) => session.rateBookmark(r.placeId, rating),
-                        onRemove: () => session.toggleBookmark(r),
-                      );
-                    },
-                  ),
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.accentSoft),
+                  child: const Icon(Icons.bookmark_add_outlined, color: AppColors.accent, size: 30),
+                ),
+                const SizedBox(height: 16),
+                Text('Nothing saved yet', style: text.titleLarge),
+                const SizedBox(height: 6),
+                Text(
+                  'Tap the bookmark on a pick you like. Ratings here help Cravera learn your taste.',
+                  textAlign: TextAlign.center,
+                  style: text.bodyMedium?.copyWith(color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 18),
+                OutlinedButton(
+                  onPressed: session.addDemoBookmarks,
+                  child: const Text('Add demo bookmarks'),
                 ),
               ],
             ),
+          )
+        else
+          for (final r in bookmarks)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _BookmarkCard(
+                restaurant: r,
+                userRating: session.bookmarkRating(r.placeId),
+                onRate: (rating) => session.rateBookmark(r.placeId, rating),
+                onRemove: () => session.toggleBookmark(r),
+              ),
+            ),
+      ],
     );
   }
 }
@@ -81,10 +82,9 @@ class _BookmarkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Glass(
       child: InkWell(
         onTap: () => _showBookmarkDetails(context, restaurant),
-        borderRadius: BorderRadius.circular(24),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
           child: Row(
@@ -98,7 +98,7 @@ class _BookmarkCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppColors.accent.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
+                    border: Border.all(color: AppColors.border, width: 1),
                   ),
                   child: restaurant.photoUrl == null || restaurant.photoUrl!.trim().isEmpty
                       ? const Icon(Icons.restaurant_rounded, color: AppColors.textSecondary, size: 24)
@@ -125,8 +125,9 @@ class _BookmarkCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              _RoundIconButton(
+              GlassIconButton(
                 icon: Icons.bookmark_remove_rounded,
+                tooltip: 'Remove',
                 onPressed: onRemove,
               ),
             ],
@@ -155,8 +156,8 @@ Future<void> _showBookmarkDetails(BuildContext context, Restaurant restaurant) {
             borderRadius: BorderRadius.circular(24),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: AppColors.surface2.withValues(alpha: 0.94),
-                border: Border.all(color: AppColors.border.withValues(alpha: 0.55), width: 1),
+                color: AppColors.surface2,
+                border: Border.all(color: AppColors.border, width: 1),
               ),
               child: ListView(
                 shrinkWrap: true,
@@ -167,7 +168,7 @@ Future<void> _showBookmarkDetails(BuildContext context, Restaurant restaurant) {
                       width: 40,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: AppColors.border.withValues(alpha: 0.55),
+                        color: AppColors.border,
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
@@ -180,7 +181,7 @@ Future<void> _showBookmarkDetails(BuildContext context, Restaurant restaurant) {
                           restaurant.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
                       ),
                       IconButton(
@@ -233,7 +234,7 @@ class _RatingControl extends StatelessWidget {
       color: AppColors.surface2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.border.withValues(alpha: 0.55)),
+        side: BorderSide(color: AppColors.border),
       ),
       itemBuilder: (context) {
         return [
@@ -248,9 +249,9 @@ class _RatingControl extends StatelessWidget {
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: normalizedValue == 0 ? AppColors.surface2.withValues(alpha: 0.35) : AppColors.accent.withValues(alpha: 0.75),
+          color: normalizedValue == 0 ? AppColors.surface2 : AppColors.accent.withValues(alpha: 0.75),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.45), width: 1),
+          border: Border.all(color: AppColors.border, width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -290,7 +291,7 @@ class _RestaurantPhoto extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.16),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
+          border: Border.all(color: AppColors.border, width: 1),
         ),
         child: photoUrl == null || photoUrl!.trim().isEmpty
             ? const Center(
@@ -336,9 +337,9 @@ class _DetailGrid extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: 0.48),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.42), width: 1),
+            border: Border.all(color: AppColors.border, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,9 +384,9 @@ class _AddressRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.48),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.42), width: 1),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: Row(
         children: [
@@ -398,32 +399,6 @@ class _AddressRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _RoundIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  const _RoundIconButton({required this.icon, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: AppColors.surface2.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.40), width: 1),
-      ),
-      child: IconButton(
-        onPressed: onPressed,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        icon: Icon(icon, color: AppColors.textSecondary),
       ),
     );
   }

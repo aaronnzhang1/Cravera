@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../core/app_colors.dart';
 import '../core/routes.dart';
 import '../core/session.dart';
-import '../widgets/cravio_background.dart';
-import '../widgets/cravio_pulse_logo.dart';
+import '../widgets/cravera_background.dart';
+import '../widgets/cravera_logo.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -29,19 +29,20 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CravioBackground(
+      body: CraveraBackground(
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 460),
               child: ListView(
+                shrinkWrap: true,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
                 children: [
                   const SizedBox(height: 10),
-                  const CravioPulseLogo(size: 92, duration: Duration(milliseconds: 2600)),
+                  const CraveraLogo(size: 92),
                   const SizedBox(height: 16),
                   Text(
-                    'cravio',
+                    'Cravera',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.displaySmall?.copyWith(
                           fontWeight: FontWeight.w800,
@@ -57,7 +58,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: 26),
                   Text(
                     'Sign in',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                    style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
@@ -102,8 +103,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: () => context.go(AppRoutes.signUp),
-                    style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
-                    child: const Text('Don’t have an account? Sign up'),
+                                        child: const Text('Don’t have an account? Sign up'),
                   ),
                   const SizedBox(height: 4),
                   OutlinedButton(
