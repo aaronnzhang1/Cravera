@@ -1,0 +1,88 @@
+# Runs on every PR and on main. Job names (`secrets`, `checks`) are what the ruleset requires:
+# rename a job and you must update the ruleset in the same PR.
+# Actions are pinned to commit SHAs and gitleaks to an exact version with its checksum.
+# Update them deliberately, not automatically.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # Official release binary, checked against the SHA-256 in the release's checksums file.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history, so the scan covers every commit, not only the PR head.
+          fetch-depth: 0
+      # The rules are defined here, not by files in the checkout, so a PR can't weaken its own scan:
+      # scanning `.git` rather than `.` keeps gitleaks from loading a .gitleaks.toml from the working
+      # tree, and --ignore-gitleaks-allow stops inline comments from hiding lines. History scans see
+      # only added lines, so every file in the commit under test is scanned too. gitleaks 8.30.1 logs
+      # Git failures but still exits 0, so any ERR line fails the step.
+      - name: Secret scan (full history and current files)
+        run: |
+          set -o pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+          printf '[extend]\nuseDefault = true\n' > "$RUNNER_TEMP/rules.toml"
+          scan() {
+            local status=0
+            echo "gitleaks $*"
+            "$RUNNER_TEMP/gitleaks" "$@" --redact --no-banner --no-color \
+              --config "$RUNNER_TEMP/rules.toml" \
+              --gitleaks-ignore-path "$RUNNER_TEMP/no-gitleaksignore" \
+              --ignore-gitleaks-allow > "$RUNNER_TEMP/gitleaks.log" 2>&1 || status=$?
+            cat "$RUNNER_TEMP/gitleaks.log"
+            if grep -qE '(^|[^A-Z])ERR([^A-Z]|$)' "$RUNNER_TEMP/gitleaks.log"; then
+              echo "::error::gitleaks reported an error, so the scan is incomplete."
+              return 1
+            fi
+            return "$status"
+          }
+          # History: lines added in every commit reachable from the commit under test.
+          scan git .git --log-opts="--full-history --diff-merges=first-parent --no-renames --text --no-textconv --no-ext-diff"
+          # Files: a copy of the checkout without .git and without any ignore file.
+          mkdir "$RUNNER_TEMP/tree"
+          tar -c --exclude=./.git . | tar -x -C "$RUNNER_TEMP/tree"
+          rm -f "$RUNNER_TEMP/tree/.gitleaksignore"
+          scan dir "$RUNNER_TEMP/tree"
+
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Same commands as a local check run (AGENTS.md). Flutter is pinned to the version in docs/adr/0002.
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.41.9
+      - name: Analyze and test
+        working-directory: mobile/Cravera
+        run: |
+          # pubspec.yaml bundles .env as an asset, so the build needs the file; CI uses the placeholder template.
+          cp .env.example .env
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test

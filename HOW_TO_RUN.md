@@ -55,7 +55,7 @@ The app lives in **`mobile/Cravera`**. Ignore the old `mobile/cravio` folder; it
    ```
 7. **Get the code** (first time only):
    ```powershell
-   git clone https://github.com/aaronnzhang1/Cravio.git Cravera
+   git clone https://github.com/aaronnzhang1/Cravera.git Cravera
    ```
 
 > ⚠️ **The `.env` file is not in git.** It holds the API keys and the app will not build without it.
