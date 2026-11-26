@@ -106,6 +106,25 @@ void main() {
     expect(find.text('Where should I search?'), findsOneWidget);
   });
 
+  testWidgets('a failed "Use my location" says so and keeps the typed place', (tester) async {
+    final fake = FakeLocationService(const LocationResult.failed(LocationProblem.denied));
+    final session = AppSession(locationService: fake);
+
+    await _enterAsGuest(tester, session);
+    await tester.pump();
+    await session.useTypedPlace('1 Example Street');
+    await _settle(tester);
+
+    fake.deviceResult = const LocationResult.failed(LocationProblem.failed);
+    await tester.tap(find.text('Change'));
+    await _settle(tester);
+    await tester.tap(find.text('Use my location'));
+    await _settle(tester);
+
+    expect(session.searchLocation?.label, '1 Example Street');
+    expect(find.textContaining('Still searching: 1 Example Street'), findsOneWidget);
+  });
+
   test('sign out forgets the location', () async {
     final session = AppSession(
       locationService: FakeLocationService(const LocationResult.found(_nearby)),

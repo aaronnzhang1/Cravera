@@ -50,12 +50,24 @@ class LocationService {
           permission == LocationPermission.unableToDetermine) {
         return const LocationResult.failed(LocationProblem.denied);
       }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 15),
-        ),
-      );
+      // A single high-accuracy request uses GPS, which works even where there
+      // is no network-based location (such as the Android emulator).
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      } catch (_) {
+        // No fresh fix in time (for example indoors): use the last one the
+        // phone knows, if any.
+        position = await Geolocator.getLastKnownPosition();
+      }
+      if (position == null) {
+        return const LocationResult.failed(LocationProblem.failed);
+      }
       return LocationResult.found(SearchLocation(
         latitude: position.latitude,
         longitude: position.longitude,

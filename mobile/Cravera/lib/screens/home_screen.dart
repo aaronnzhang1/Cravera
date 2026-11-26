@@ -220,7 +220,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (choice == null || !mounted) return false;
     if (choice.useDevice) {
+      final before = session.searchLocation;
       await session.useDeviceLocation();
+      final problem = session.locationProblem;
+      if (problem != null && mounted) {
+        // Say so, because the bar may still show an earlier typed place.
+        final keeping = before != null ? ' Still searching: ${before.label}.' : '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_LocationBar.problemText(problem)}$keeping')),
+        );
+      }
       return session.searchLocation != null;
     }
     final place = choice.place.trim();
@@ -451,7 +460,7 @@ class _LocationBar extends StatelessWidget {
   final VoidCallback onChange;
   const _LocationBar({required this.session, required this.onChange});
 
-  static String _problemText(LocationProblem problem) => switch (problem) {
+  static String problemText(LocationProblem problem) => switch (problem) {
         LocationProblem.serviceOff => 'Location is off on this device.',
         LocationProblem.denied => 'Location permission was denied.',
         LocationProblem.deniedForever => 'Location is blocked in settings.',
@@ -469,7 +478,7 @@ class _LocationBar extends StatelessWidget {
     } else if (location != null) {
       text = 'Searching: ${location.label}';
     } else if (problem != null) {
-      text = '${_problemText(problem)} Type a place instead.';
+      text = '${problemText(problem)} Type a place instead.';
     } else {
       text = 'No location yet.';
     }
