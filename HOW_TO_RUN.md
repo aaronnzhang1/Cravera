@@ -55,13 +55,14 @@ The app lives in **`mobile/Cravera`**. Ignore the old `mobile/cravio` folder; it
    ```
 7. **Get the code** (first time only):
    ```powershell
-   git clone https://github.com/aaronnzhang1/Cravio.git Cravera
+   git clone https://github.com/aaronnzhang1/Cravera.git Cravera
    ```
 
-> ⚠️ **The `.env` file is not in git.** It holds the API keys and the app will not build without it.
-> On a new computer, copy `mobile/Cravera/.env` over from your Mac (USB stick, AirDrop to phone, password manager, etc.).
-> **Never** commit it or paste it anywhere public.
-> If you don't have it, make one from the template: `copy .env.example .env` (Windows) or `cp .env.example .env` (Mac), then fill in the keys.
+> ⚠️ **The `.env` file is not in git.** The app will not build without it.
+> Make one from the template: `copy .env.example .env` (Windows) or `cp .env.example .env` (Mac), then fill in the values.
+> `.env` is bundled **into the app**, so anyone with a build can read it. Put only public settings in it (the Supabase URL and anon key).
+> Private keys such as Gemini or Google Places go in Supabase Edge Function secrets, never in `.env` (see `docs/adr/0003-api-key-handling.md`).
+> **Never** commit `.env` or paste it anywhere public.
 
 ---
 

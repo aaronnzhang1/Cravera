@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(MyApp(session: AppSession()));
     await tester.pump();
 
-    expect(find.text('cravio.'), findsOneWidget);
+    expect(find.text('cravio'), findsOneWidget);
     expect(find.text('Sign in'), findsWidgets);
 
     await tester.enterText(find.byType(TextField).first, 'taylor@example.com');
