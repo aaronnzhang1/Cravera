@@ -4,7 +4,7 @@
 
 **Review level:** L3. It adds a sensitive integration (API keys, Edge Functions) and the first backend code.
 
-**Blocked by:** accepting [ADR 0003](adr/0003-api-key-handling.md); a Google Cloud project with the Places API (New) enabled and a key; Supabase CLI access to deploy Edge Functions.
+**Needs before starting:** a Google Cloud project with the Places API (New) enabled and a key; Supabase CLI access to deploy Edge Functions. Keys follow [ADR 0003](adr/0003-api-key-handling.md).
 
 ## Acceptance criteria
 
