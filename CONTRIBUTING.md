@@ -32,10 +32,10 @@ Commit and push before a local review, because it only sees committed work. Post
 
 ## Review loop
 
-The lead runs this itself; the maintainer never has to ask.
+The lead runs this itself; the maintainer never has to ask. The reviewer is always the model that did not build the change: Codex when Claude Code built it, Claude Code (`/code-review`) when Codex built it.
 
-1. **Local Codex, at each checkpoint of an L2 or L3 change.** Commit and push, then run the review the level needs through the plugin script that `/codex:review` uses (`node <plugin>/scripts/codex-companion.mjs review` or `adversarial-review --wait --base <base> [focus]`). Read and triage every finding, fix the blocking ones, push, and rerun on the new head until no blocking findings remain or the [escalation](#escalation) limit is reached.
-2. **Cloud Codex, on every PR, before it is marked ready.** If no `chatgpt-codex-connector` summary names the head SHA, comment `@codex review` and wait for it. Treat its findings like local ones. A fix makes a new head, so step 1 (for L2/L3) and step 2 run again.
+1. **Local review, at each checkpoint of an L2 or L3 change.** Commit and push, then run the review the level needs through the plugin script that `/codex:review` uses (`node <plugin>/scripts/codex-companion.mjs review` or `adversarial-review --wait --base <base> [focus]`). Read and triage every finding, fix the blocking ones, push, and rerun on the new head until no blocking findings remain or the [escalation](#escalation) limit is reached. A blocking finding the builder calls invalid stays open until the reviewer drops it on a rerun or the maintainer agrees on the PR.
+2. **Cloud Codex, on every PR, before it is marked ready.** If no `chatgpt-codex-connector` summary names the head SHA, comment `@codex review` and wait up to 30 minutes; if nothing names the head SHA, ask once more and wait another 30. Still nothing: leave the PR in draft and tell the maintainer, who decides on the PR whether to wait or merge without it. Treat its findings like local ones. A fix makes a new head, so step 1 (for L2/L3) and step 2 run again.
 3. **Post each round on the PR:** reviewed SHA, verdict, and each finding with its triage.
 
 ## Review checkpoints
