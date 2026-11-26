@@ -168,14 +168,22 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Color.lerp(AppColors.textMuted, AppColors.textPrimary, glow)!;
+    // One labelled, selected, tappable node for screen readers; InkWell adds
+    // keyboard focus and activation. The sliding lens is the visual feedback,
+    // so the ink splash is hidden.
     return Semantics(
       button: true,
       selected: selected,
       label: label,
+      onTap: onTap,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
         onTap: onTap,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        customBorder: const StadiumBorder(),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -187,6 +195,7 @@ class _NavItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

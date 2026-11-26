@@ -47,7 +47,7 @@ class _FloatingCardsState extends State<FloatingCards> with SingleTickerProvider
   /// and comes back in at the bottom, with room to be fully off screen.
   static const _loop = 1.4;
 
-  late final AnimationController _time = AnimationController(vsync: this, duration: const Duration(seconds: 60));
+  late final AnimationController _time = AnimationController(vsync: this, duration: const Duration(seconds: 42));
 
   @override
   void didChangeDependencies() {
@@ -97,7 +97,9 @@ class _FloatingCardsState extends State<FloatingCards> with SingleTickerProvider
     // Lane centers sit near the edges, so each card peeks in from the side.
     final centerX = i.isEven ? area.width * 0.13 : area.width * 0.87;
     final startY = i * _loop / _cards.length;
-    final y = ((startY - t * 2) % _loop) - 0.25; // wraps from top back to bottom
+    // One controller cycle moves every card exactly one loop, so the last frame
+    // matches the first and nothing jumps when the animation repeats.
+    final y = ((startY - t * _loop) % _loop) - 0.25; // wraps from top back to bottom
     final sway = math.sin(t * 2 * math.pi * 3 + i);
     return Positioned(
       left: centerX - width / 2 + 8 * sway,

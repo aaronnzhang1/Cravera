@@ -85,6 +85,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         SafeArea(
+          // The floating nav sits behind the keyboard while typing, so don't
+          // keep room for it then.
+          bottom: View.of(context).viewInsets.bottom == 0,
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
@@ -94,16 +97,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context, box) {
                     // Short screens (such as iPhone SE) get a smaller orb and no subtitle.
                     final compact = box.maxHeight < 640;
+                    // While typing, drop the orb and greeting so the composer always
+                    // fits above the keyboard, even on short phones.
+                    // Read the keyboard from the view: Scaffold hides it from the body's MediaQuery.
+                    final typing = View.of(context).viewInsets.bottom > 0;
                     return Column(
                       children: [
                         Row(
                           children: [
                             Text('Cravera', style: text.headlineSmall),
-                            const Spacer(),
-                            _LocationChip(session: session, onTap: () => _askForPlace(session)),
+                            const SizedBox(width: 12),
+                            // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
+                              ),
+                            ),
                           ],
                         ),
                         const Spacer(),
+                        if (!typing) ...[
                         CraveraLogo(size: compact ? 56 : 88),
                         SizedBox(height: compact ? 14 : 22),
                         Text(
@@ -124,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             textAlign: TextAlign.center,
                             style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
                           ),
+                        ],
                         ],
                         const Spacer(),
                         _LocationProblemBanner(session: session, onFix: () => _askForPlace(session)),
@@ -340,28 +355,34 @@ class _LoadingViewState extends State<_LoadingView> {
           Text('On it…', style: text.headlineSmall),
           const SizedBox(height: 20),
           for (var i = 0; i < _steps.length; i++)
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: i <= _done ? 1 : 0.35,
-              child: Padding(
+            Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Pending steps use the muted text color, which still meets AA contrast.
                     SizedBox.square(
                       dimension: 20,
                       child: i < _done
                           ? const Icon(Icons.check_circle_rounded, size: 20, color: AppColors.sage)
                           : i == _done
-                          ? const CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent)
+                          // Reduce Motion: a still icon instead of a spinner.
+                          ? (MediaQuery.disableAnimationsOf(context)
+                                ? const Icon(Icons.radio_button_checked_rounded, size: 20, color: AppColors.accent)
+                                : const CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
                           : const Icon(Icons.circle_outlined, size: 20, color: AppColors.textMuted),
                     ),
                     const SizedBox(width: 12),
-                    Text(_steps[i], style: text.bodyLarge?.copyWith(color: AppColors.textSecondary)),
+                    // Flexible lets a long step wrap on narrow phones with large text.
+                    Flexible(
+                      child: Text(
+                        _steps[i],
+                        style: text.bodyLarge?.copyWith(color: i <= _done ? AppColors.textSecondary : AppColors.textMuted),
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
         ],
       ),
     );
@@ -550,8 +571,7 @@ class _LocationChip extends StatelessWidget {
                   color: location != null ? AppColors.sage : AppColors.textMuted,
                 ),
                 const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 150),
+                Flexible(
                   child: Text(
                     label,
                     maxLines: 1,
