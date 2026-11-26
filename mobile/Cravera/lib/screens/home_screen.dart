@@ -7,7 +7,7 @@ import '../core/app_colors.dart';
 import '../core/session.dart';
 import '../models/restaurant.dart';
 import '../services/location_service.dart';
-import '../widgets/cravio_pulse_logo.dart';
+import '../widgets/cravera_logo.dart';
 
 enum _HomeView { idle, loading, result }
 
@@ -72,9 +72,9 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Row(
                   children: [
-                    const CravioPulseLogo(size: 36),
+                    const CraveraLogo(size: 36),
                     const SizedBox(width: 10),
-                    Text('cravio', style: text.headlineSmall),
+                    Text('cravera', style: text.headlineSmall),
                   ],
                 ),
                 const Spacer(flex: 2),
@@ -299,7 +299,7 @@ class _LoadingViewState extends State<_LoadingView> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const CravioPulseLogo(),
+        const CraveraLogo(),
         const SizedBox(height: 32),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 280),

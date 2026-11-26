@@ -6,9 +6,9 @@ import '../core/app_colors.dart';
 ///
 /// One gradient layer only. The old version stacked three see-through
 /// gradients, which rendered with blotches on the Android emulator.
-class CravioBackground extends StatelessWidget {
+class CraveraBackground extends StatelessWidget {
   final Widget child;
-  const CravioBackground({super.key, required this.child});
+  const CraveraBackground({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {

@@ -52,6 +52,5 @@ Ideas captured in the planning docs that no phase owns yet. Promote one by givin
 
 | # | Decision | Needed by |
 |---|---|---|
-| 2 | Finish the Cravio → Cravera rename in code (package `cravio`, `com.cravio.cravio`, titles, wordmark). Changing the app ID later breaks installs and store listings | Before Phase 4 |
 | 3 | Guest search abuse protection (rate limiting on the Edge Functions) | Before Phase 4 |
 | 4 | Data source for the Trending Spots Hub | If it's scheduled |

@@ -1,3 +1,3 @@
 class AppConstants {
-  static const appName = 'Cravio';
+  static const appName = 'Cravera';
 }

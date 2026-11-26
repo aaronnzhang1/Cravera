@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:cravio/core/session.dart';
-import 'package:cravio/main.dart';
-import 'package:cravio/services/location_service.dart';
+import 'package:cravera/core/session.dart';
+import 'package:cravera/main.dart';
+import 'package:cravera/services/location_service.dart';
 
 /// Stands in for GPS and the geocoder. Places it knows are fictional.
 class FakeLocationService extends LocationService {

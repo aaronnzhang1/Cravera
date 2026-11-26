@@ -1,4 +1,4 @@
-package com.cravio.cravio
+package com.cravera.app
 
 import io.flutter.embedding.android.FlutterActivity
 

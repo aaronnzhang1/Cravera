@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
 
-class CravioPulseLogo extends StatefulWidget {
+class CraveraLogo extends StatefulWidget {
   final double size;
   final Duration duration;
   final IconData icon;
 
-  const CravioPulseLogo({
+  const CraveraLogo({
     super.key,
     this.size = 104,
     this.duration = const Duration(milliseconds: 2200),
@@ -17,10 +17,10 @@ class CravioPulseLogo extends StatefulWidget {
   });
 
   @override
-  State<CravioPulseLogo> createState() => _CravioPulseLogoState();
+  State<CraveraLogo> createState() => _CraveraLogoState();
 }
 
-class _CravioPulseLogoState extends State<CravioPulseLogo> with SingleTickerProviderStateMixin {
+class _CraveraLogoState extends State<CraveraLogo> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override

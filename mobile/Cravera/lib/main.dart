@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
     return AppSessionScope(
       session: session,
       child: MaterialApp.router(
-        title: 'Cravio',
+        title: 'Cravera',
         theme: AppTheme.dark(),
         routerConfig: AppRoutes.router(session: session),
       ),

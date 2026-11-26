@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.cravio" "\0"
-            VALUE "FileDescription", "cravio" "\0"
+            VALUE "CompanyName", "com.cravera" "\0"
+            VALUE "FileDescription", "cravera" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "cravio" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.cravio. All rights reserved." "\0"
-            VALUE "OriginalFilename", "cravio.exe" "\0"
-            VALUE "ProductName", "cravio" "\0"
+            VALUE "InternalName", "cravera" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.cravera. All rights reserved." "\0"
+            VALUE "OriginalFilename", "cravera.exe" "\0"
+            VALUE "ProductName", "cravera" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
