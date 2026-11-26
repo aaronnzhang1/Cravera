@@ -114,3 +114,6 @@ app.*.symbols
 
 # Local hook state, never committed
 .claude/state/
+
+# Codex app's local mirror of .claude/skills; the source is .claude/skills and AGENTS.md
+.agents/
