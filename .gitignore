@@ -111,3 +111,6 @@ app.*.symbols
 
 # Apps commit their lockfile so every machine and CI get the same package versions
 !**/pubspec.lock
+
+# Local hook state, never committed
+.claude/state/

@@ -23,11 +23,14 @@ Use the simplest structure that works: work alone first, then subagents. Each ex
 
 The lead overwrites CURRENT.md after meaningful progress and before stopping, including before a usage limit. It describes `main` as it will be after the open PR merges, without naming that PR's number. Leave out anything Git already records.
 
+Keep it under about 25 lines. `/resume` (`.claude/skills/resume/SKILL.md`) reads it first.
+
 ```md
-## <task> · <title>
-- **State:** what's on `main`; what's in progress, with branch.
-- **Last change:** what this session did, exact checks and results, open findings.
-- **Open problems:** blockers, failing checks, unverified assumptions.
+## <TASK-NNN> · <title> (release <vX.Y.Z>)
+- **Active:** task, branch(es), and which acceptance criterion or review is next.
+- **Last verified:** commit SHA; exact checks and results; what was tried in the app.
+- **State:** what's on `main` after the open PRs merge; what's still in progress.
+- **Open problems:** blockers, failing checks, unverified assumptions, decisions waiting on the maintainer.
 - **Next action:** one concrete step.
 ```
 
