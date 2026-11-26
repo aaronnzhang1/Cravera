@@ -99,8 +99,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           children: [
                             Text('Cravera', style: text.headlineSmall),
-                            const Spacer(),
-                            _LocationChip(session: session, onTap: () => _askForPlace(session)),
+                            const SizedBox(width: 12),
+                            // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
+                              ),
+                            ),
                           ],
                         ),
                         const Spacer(),
@@ -340,14 +346,12 @@ class _LoadingViewState extends State<_LoadingView> {
           Text('On it…', style: text.headlineSmall),
           const SizedBox(height: 20),
           for (var i = 0; i < _steps.length; i++)
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: i <= _done ? 1 : 0.35,
-              child: Padding(
+            Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Pending steps use the muted text color, which still meets AA contrast.
                     SizedBox.square(
                       dimension: 20,
                       child: i < _done
@@ -357,11 +361,13 @@ class _LoadingViewState extends State<_LoadingView> {
                           : const Icon(Icons.circle_outlined, size: 20, color: AppColors.textMuted),
                     ),
                     const SizedBox(width: 12),
-                    Text(_steps[i], style: text.bodyLarge?.copyWith(color: AppColors.textSecondary)),
+                    Text(
+                      _steps[i],
+                      style: text.bodyLarge?.copyWith(color: i <= _done ? AppColors.textSecondary : AppColors.textMuted),
+                    ),
                   ],
                 ),
               ),
-            ),
         ],
       ),
     );
@@ -550,8 +556,7 @@ class _LocationChip extends StatelessWidget {
                   color: location != null ? AppColors.sage : AppColors.textMuted,
                 ),
                 const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 150),
+                Flexible(
                   child: Text(
                     label,
                     maxLines: 1,
