@@ -155,6 +155,43 @@ void main() {
     expect(session.searchLocation, isNull);
   });
 
+  test('a device lookup that finishes after a typed place keeps the typed place', () async {
+    final gps = Completer<LocationResult>();
+    final session = AppSession(
+      locationService: _PendingLocationService(
+        device: gps.future,
+        typed: Future.value(const SearchLocation(latitude: 1, longitude: 2, label: '1 Example Street')),
+      ),
+    );
+    session.continueAsGuest();
+
+    final deviceLookup = session.useDeviceLocation();
+    final typed = session.useTypedPlace('1 Example Street');
+    expect(session.isLocating, isFalse);
+    expect(await typed, isTrue);
+    gps.complete(const LocationResult.found(_nearby));
+    await deviceLookup;
+
+    expect(session.searchLocation?.label, '1 Example Street');
+  });
+
+  test('two typed places finishing in reverse order keep the newer one', () async {
+    final first = Completer<SearchLocation?>();
+    final second = Completer<SearchLocation?>();
+    final calls = [first, second];
+    final session = AppSession(locationService: _PendingLocationService(typedQueue: calls));
+    session.continueAsGuest();
+
+    final older = session.useTypedPlace('1 Example Street');
+    final newer = session.useTypedPlace('2 Sample Road');
+    second.complete(const SearchLocation(latitude: 3, longitude: 4, label: '2 Sample Road'));
+    first.complete(const SearchLocation(latitude: 1, longitude: 2, label: '1 Example Street'));
+
+    expect(await newer, isTrue);
+    expect(await older, isFalse);
+    expect(session.searchLocation?.label, '2 Sample Road');
+  });
+
   test('a stale or vague last-known fix is not used as "Near you"', () {
     final now = DateTime(2026, 1, 1, 12);
     bool usable(Duration age, double accuracy) =>
@@ -181,16 +218,25 @@ void main() {
 
 /// Lookups that finish only when the test says so.
 class _PendingLocationService extends LocationService {
-  _PendingLocationService({Future<LocationResult>? device, Future<SearchLocation?>? typed})
-    : _device = device,
-      _typed = typed;
+  _PendingLocationService({
+    Future<LocationResult>? device,
+    Future<SearchLocation?>? typed,
+    List<Completer<SearchLocation?>>? typedQueue,
+  }) : _device = device,
+       _typed = typed,
+       _typedQueue = typedQueue;
 
   final Future<LocationResult>? _device;
   final Future<SearchLocation?>? _typed;
+  final List<Completer<SearchLocation?>>? _typedQueue;
 
   @override
   Future<LocationResult> current() => _device ?? Future.value(const LocationResult.failed(LocationProblem.failed));
 
   @override
-  Future<SearchLocation?> lookUp(String place) => _typed ?? Future.value(null);
+  Future<SearchLocation?> lookUp(String place) {
+    final queue = _typedQueue;
+    if (queue != null && queue.isNotEmpty) return queue.removeAt(0).future;
+    return _typed ?? Future.value(null);
+  }
 }

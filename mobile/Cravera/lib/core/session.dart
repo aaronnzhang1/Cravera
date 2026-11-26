@@ -14,10 +14,11 @@ class AppSession extends ChangeNotifier {
   LocationProblem? _locationProblem;
   bool _locating = false;
 
-  /// Bumped on sign out. A location lookup that started before then finishes
-  /// into a session that no longer exists, so its result is dropped instead
-  /// of handing the old user's location to the next one.
-  int _locationGeneration = 0;
+  /// Numbers each location request. Only the newest may write its result:
+  /// an older GPS or typed lookup that finishes late is dropped, so it can't
+  /// replace the user's newer choice, or hand a signed-out user's location
+  /// to the next one. Sign out also bumps it.
+  int _locationRequest = 0;
   final List<Restaurant> _bookmarks = [];
   final Map<String, int> _bookmarkRatings = {};
 
@@ -85,11 +86,11 @@ class AppSession extends ChangeNotifier {
   /// Uses the device location. On failure, keeps any typed place already set.
   Future<void> useDeviceLocation() async {
     if (_locating) return;
+    final request = ++_locationRequest;
     _locating = true;
     notifyListeners();
-    final generation = _locationGeneration;
     final result = await locationService.current();
-    if (generation != _locationGeneration) return; // signed out meanwhile
+    if (request != _locationRequest) return; // a newer choice or sign out won
     _locating = false;
     if (result.location != null) {
       _searchLocation = result.location;
@@ -102,9 +103,14 @@ class AppSession extends ChangeNotifier {
 
   /// Looks up a typed place. Returns false if it could not be found.
   Future<bool> useTypedPlace(String place) async {
-    final generation = _locationGeneration;
+    final request = ++_locationRequest;
+    // A typed place replaces any device lookup still running.
+    if (_locating) {
+      _locating = false;
+      notifyListeners();
+    }
     final found = await locationService.lookUp(place);
-    if (generation != _locationGeneration) return false; // signed out meanwhile
+    if (request != _locationRequest) return false; // a newer choice or sign out won
     if (found == null) return false;
     _searchLocation = found;
     notifyListeners();
@@ -128,7 +134,7 @@ class AppSession extends ChangeNotifier {
     _searchLocation = null;
     _locationProblem = null;
     _locating = false;
-    _locationGeneration++;
+    _locationRequest++;
     notifyListeners();
   }
 
