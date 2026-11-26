@@ -5,6 +5,8 @@ description: Resume Cravera work from the repo alone. Use when the maintainer sa
 
 Resume Cravera as its engineering lead. The rules live in AGENTS.md, CONTRIBUTING.md and docs/WORKING-AGREEMENT.md; this is only the order of steps.
 
+At session start (the session-start hook asks for it), run steps 1–4 and report what you verified. Go on to steps 5–6 only when the maintainer asks to resume or continue; otherwise do what they asked.
+
 1. **Read state.** docs/CURRENT.md (active task, last verified commit, blockers, next action) and docs/NEXT-TASK.md (criteria, review level, `Approved:` line).
 2. **Check it against Git and GitHub.** `git status`, `git branch --show-current`, `git log --oneline -5`, `gh pr list --state open`, and for each open PR: `gh pr checks <n>`, its head SHA, and whether a Codex review comment names that SHA. Where docs and GitHub disagree, trust Git/GitHub, say so, and fix CURRENT.md in your next change.
 3. **Keep work in progress.** Never discard, stash or reset uncommitted changes. If you can't tell whose they are or whether they're finished, ask.

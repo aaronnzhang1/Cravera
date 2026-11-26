@@ -6,7 +6,7 @@
           {
             "type": "command",
             "timeout": 5,
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null && git rev-parse --git-dir >/dev/null 2>&1 || { echo 'Session-start Git check: git unavailable. Follow .claude/skills/resume/SKILL.md by hand.'; exit 0; }; n=$(set -o pipefail; git status --porcelain -z 2>/dev/null | tr -cd '\\000' | wc -c | tr -d ' ') || n='unknown (git status failed: run it)'; h=$(git rev-parse --short HEAD 2>/dev/null); ab=$(git rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null | awk '{print \"behind \" $1 \", ahead \" $2}'); echo \"Session-start Git check: HEAD ${h:-none}, ${n:-?} uncommitted path(s), upstream ${ab:-not set}. Before other work, follow .claude/skills/resume/SKILL.md (verify CURRENT.md against Git, PRs and CI; run the checks), then report and continue.\"; exit 0"
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null && git rev-parse --git-dir >/dev/null 2>&1 || { echo 'Session-start Git check: git unavailable. Follow .claude/skills/resume/SKILL.md by hand.'; exit 0; }; n=$(set -o pipefail; git status --porcelain -z 2>/dev/null | tr -cd '\\000' | wc -c | tr -d ' ') || n='unknown (git status failed: run it)'; h=$(git rev-parse --short HEAD 2>/dev/null); ab=$(git rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null | awk '{print \"behind \" $1 \", ahead \" $2}'); echo \"Session-start Git check: HEAD ${h:-none}, ${n:-?} uncommitted path(s), upstream ${ab:-not set}. Before other work, run steps 1-4 of .claude/skills/resume/SKILL.md (verify CURRENT.md against Git, PRs and CI; run the checks) and report. Continue the task only when the maintainer asks to resume or continue.\"; exit 0"
           }
         ]
       }
