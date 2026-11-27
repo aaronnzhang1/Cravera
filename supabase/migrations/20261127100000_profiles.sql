@@ -34,8 +34,14 @@ create policy "profiles: update own"
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
 
+-- Trigger functions live in `private`, which the Data API does not expose,
+-- so no API caller can reach them (calling a revoked function crashes
+-- supabase/postgres 17.6.1.111 in supautils; seen 2026-11-27).
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+
 -- Keeps updated_at honest whatever the client sends.
-create function public.touch_updated_at()
+create function private.touch_updated_at()
 returns trigger
 language plpgsql
 set search_path = ''
@@ -48,12 +54,12 @@ $$;
 
 create trigger profiles_touch_updated_at
   before update on public.profiles
-  for each row execute function public.touch_updated_at();
+  for each row execute function private.touch_updated_at();
 
 -- A profile for every new account. The display name comes from the sign-up
 -- metadata (the person's own input), trimmed and capped; never from a
 -- client-chosen user ID.
-create function public.handle_new_user()
+create function private.handle_new_user()
 returns trigger
 language plpgsql
 security definer
@@ -69,9 +75,9 @@ begin
 end;
 $$;
 
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
-revoke execute on function public.touch_updated_at() from public, anon, authenticated;
+revoke execute on function private.handle_new_user() from public, anon, authenticated;
+revoke execute on function private.touch_updated_at() from public, anon, authenticated;
 
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute function public.handle_new_user();
+  for each row execute function private.handle_new_user();
