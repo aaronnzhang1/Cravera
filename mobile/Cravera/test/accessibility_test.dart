@@ -90,6 +90,47 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('the nothing-matched chat meets the accessibility guidelines', (tester) async {
+    final handle = tester.ensureSemantics();
+    final session = AppSession(
+      locationService: const _FoundLocation(),
+      search: CravingSearch(places: FakePlaces((_) => [])),
+    );
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+    await tester.tap(find.text('Continue as guest'));
+    await _settle(tester);
+    await _showPick(tester);
+    expect(find.textContaining('Nothing open matched'), findsOneWidget);
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+
+  testWidgets('the Yes sheet meets the accessibility guidelines', (tester) async {
+    final handle = tester.ensureSemantics();
+    await _home(tester);
+    await _showPick(tester);
+    await tester.tap(find.text('Yes'));
+    await _settle(tester);
+    expect(find.text('Navigate there'), findsOneWidget);
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+
+  testWidgets('home meets them at 2x text on a small phone', (tester) async {
+    final handle = tester.ensureSemantics();
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _home(tester);
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    await _settle(tester);
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+
   testWidgets('the pick meets them at 2x text on a small phone', (tester) async {
     final handle = tester.ensureSemantics();
     addTearDown(tester.view.reset);
@@ -100,8 +141,7 @@ void main() {
     tester.view.physicalSize = const Size(640, 1136); // 320 x 568
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     await _settle(tester);
-    expect(tester.takeException(), isNull, reason: 'no overflow');
-    await _meetsAll(tester);
+    expect(tester.takeException(), isNull, reason: 'no overflow');    await _meetsAll(tester);
     handle.dispose();
   });
 }

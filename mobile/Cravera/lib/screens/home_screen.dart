@@ -118,13 +118,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 520),
+                  // Fills the screen as before; scrolls instead of overflowing
+                  // when large text makes the page taller than a small phone.
+                  child: LayoutBuilder(
+                    builder: (context, area) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: area.maxHeight),
+                        child: IntrinsicHeight(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                     child: Column(
                       children: [
                         Row(
                           children: [
-                            Text('Cravera', style: text.headlineSmall),
+                            // Shrinks only when large text leaves no room beside the chip.
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text('Cravera', style: text.headlineSmall),
+                              ),
+                            ),
                             const SizedBox(width: 12),
                             // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
                             Expanded(
@@ -174,6 +188,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           onSend: () => _startSearch(_promptController.text.trim()),
                         ),
                       ],
+                    ),
+                  ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -691,17 +709,18 @@ class _PickView extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 8),
                         child: Row(
                           children: [
+                            // At least 56 dp, taller when large text needs it (never clipped).
                             Expanded(
-                              child: SizedBox(
-                                height: 56,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(minHeight: 56),
                                 child: OutlinedButton(onPressed: onNo, child: const Text('No')),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               flex: 2,
-                              child: SizedBox(
-                                height: 56,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(minHeight: 56),
                                 child: FilledButton(onPressed: onYes, child: const Text('Yes')),
                               ),
                             ),
@@ -1142,7 +1161,7 @@ class _QuickPicks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 44,
+      height: 48, // the minimum tap-target height
       child: ListView.separated(
         // Chips scroll out to the screen edge instead of being cut at the margin.
         clipBehavior: Clip.none,
