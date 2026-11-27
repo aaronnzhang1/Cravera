@@ -75,7 +75,7 @@ void main() {
     expect(find.textContaining("That's every open match"), findsOneWidget);
     expect(places.queries, ['ramen'], reason: 'No never makes a new request');
 
-    await tester.enterText(find.widgetWithText(TextField, 'e.g. outdoor seating, no seafood'), 'spicy');
+    await tester.enterText(find.widgetWithText(TextField, 'Tell me more…'), 'spicy');
     await tester.tap(find.byTooltip('Search again'));
     await _settle(tester);
     expect(places.queries, ['ramen', 'ramen spicy']);
@@ -207,6 +207,53 @@ void main() {
     await _tapVisible(tester, find.text('New craving'));
     await _settle(tester);
     expect(find.text('Saved'), findsOneWidget);
+  });
+
+  testWidgets('quick picks on Home each show an icon', (tester) async {
+    await _homeWith(tester, FakePlaces((_) => []));
+    for (final label in ['Cozy ramen nearby', 'Tacos, open late']) {
+      final chip = find.ancestor(of: find.text(label), matching: find.byType(Row)).first;
+      expect(find.descendant(of: chip, matching: find.byType(Icon)), findsOneWidget, reason: label);
+    }
+  });
+
+  testWidgets('nothing matched reads like a chat with one-tap ideas and the input at the bottom', (tester) async {
+    final places = FakePlaces((q) => q == 'qzxv' ? [] : [_place('a', 'Test Noodle House')])..intent = {'textQuery': 'qzxv'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'qzxv');
+
+    expect(find.textContaining('Nothing open matched'), findsOneWidget);
+    expect(find.text('qzxv'), findsOneWidget, reason: "the guest's craving as a bubble");
+    final input = tester.getCenter(find.widgetWithText(TextField, 'Tell me more…'));
+    final answer = tester.getCenter(find.textContaining('Nothing open matched'));
+    expect(input.dy, greaterThan(answer.dy), reason: 'the input sits below the answer, not mid-screen');
+
+    await _tapVisible(tester, find.widgetWithText(ActionChip, 'Something similar'));
+    await _settle(tester);
+    expect(places.queries, ['qzxv', 'something similar']);
+    expect(places.previousIntents.last, {'textQuery': 'qzxv'});
+    expect(find.text('Test Noodle House'), findsOneWidget);
+  });
+
+  testWidgets('nothing matched on a short sideways phone with the keyboard up: the input stays usable', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => []));
+    await _searchFor(tester, 'qzxv');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320
+    await _settle(tester);
+    // Focus the field, then the keyboard opens and the layout switches to scrolling.
+    await tester.tap(find.widgetWithText(TextField, 'Tell me more…'));
+    await tester.pump();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 400); // 200 pt keyboard
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    final field = tester.state<EditableTextState>(find.byType(EditableText));
+    expect(field.widget.focusNode.hasFocus, isTrue, reason: 'the keyboard stays up through the layout switch');
+    await tester.ensureVisible(find.byTooltip('Search again'));
+    await tester.pump();
+    expect(find.byTooltip('Search again').hitTestable(), findsOneWidget);
   });
 
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
