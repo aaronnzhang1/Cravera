@@ -457,6 +457,10 @@
     },
     "place-photo": {
       "verify_jwt": false
+    },
+    // Checks the publishable key and the caller's own access token in code.
+    "delete-account": {
+      "verify_jwt": false
     }
   },
 
