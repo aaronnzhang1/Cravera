@@ -60,7 +60,7 @@ The app lives in **`mobile/Cravera`**. Ignore the old `mobile/cravio` folder; it
 
 > ⚠️ **The `.env` file is not in git.** The app will not build without it.
 > Make one from the template: `copy .env.example .env` (Windows) or `cp .env.example .env` (Mac), then fill in the values.
-> `.env` is bundled **into the app**, so anyone with a build can read it. Put only public settings in it (the Supabase URL and publishable key, `sb_publishable_…`; never the secret key).
+> `.env` is bundled **into the app**, so anyone with a build can read it. Put only public settings in it (the Supabase publishable key, `sb_publishable_…`; never the secret key). The project URL is fixed in `lib/core/constants.dart`.
 > Private keys such as Gemini or Google Places go in Supabase Edge Function secrets, never in `.env` (see `docs/adr/0003-api-key-handling.md`).
 > **Never** commit `.env` or paste it anywhere public.
 

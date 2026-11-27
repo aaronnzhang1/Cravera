@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/constants.dart';
 import '../models/restaurant.dart';
 import 'location_service.dart';
 
@@ -37,41 +38,31 @@ class PlacesSearchException implements Exception {
 /// field shown comes from that response; nothing is filled in here.
 class PlacesService {
   PlacesService({
-    required this.baseUrl,
     required this.publishableKey,
     http.Client? client,
     this.timeout = defaultTimeout,
   })  : _client = client ?? http.Client(),
         _ownsClient = client == null;
 
-  /// The request carries the user's exact location, so it only goes to a
-  /// Supabase project over HTTPS (`https://<project>.supabase.co`), with no
-  /// port, path or credentials. Dart doesn't follow redirects for POST.
-  static bool isSecureUrl(Uri url) =>
-      url.scheme == 'https' &&
-      RegExp(r'^[a-z0-9]+\.supabase\.co$').hasMatch(url.host) &&
-      !url.hasPort &&
-      url.userInfo.isEmpty &&
-      (url.path.isEmpty || url.path == '/');
+  /// The request carries the user's exact location, so it only ever goes to
+  /// Cravera's own project over HTTPS. The address is fixed in code
+  /// ([AppConstants.supabaseUrl]), not read from `.env`, and Dart doesn't
+  /// follow redirects for POST.
+  static final endpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/places-search');
 
-  /// Reads `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from `.env`.
-  /// Returns null when either is missing, so callers can show
-  /// [PlacesSearchError.notConfigured] instead of crashing.
+  /// Reads `SUPABASE_PUBLISHABLE_KEY` from `.env`. Returns null when it is
+  /// missing, so callers can show [PlacesSearchError.notConfigured].
   static PlacesService? fromEnv({http.Client? client}) {
-    String? url;
     String? key;
     try {
-      url = dotenv.maybeGet('SUPABASE_URL');
       key = dotenv.maybeGet('SUPABASE_PUBLISHABLE_KEY');
     } catch (_) {
       return null; // `.env` was never loaded.
     }
-    final base = url == null ? null : Uri.tryParse(url.trim());
-    if (base == null || !isSecureUrl(base) || key == null || key.trim().isEmpty) return null;
-    return PlacesService(baseUrl: base, publishableKey: key.trim(), client: client);
+    if (key == null || key.trim().isEmpty) return null;
+    return PlacesService(publishableKey: key.trim(), client: client);
   }
 
-  final Uri baseUrl;
   final String publishableKey;
   final http.Client _client;
   final bool _ownsClient;
@@ -86,18 +77,14 @@ class PlacesService {
   static const defaultTimeout = Duration(seconds: 12);
   final Duration timeout;
 
-  Uri get _endpoint => baseUrl.resolve('/functions/v1/places-search');
-
   /// Returns open restaurants for [query] around [near], best match first.
   /// An empty list means nothing matched. Throws [PlacesSearchException].
   Future<List<Restaurant>> search({required String query, required SearchLocation near, int? radiusMeters}) async {
-    // Checked here too, so a service built by hand never sends location in clear text.
-    if (!isSecureUrl(baseUrl)) throw const PlacesSearchException(PlacesSearchError.notConfigured);
     final http.Response response;
     try {
       response = await _client
           .post(
-            _endpoint,
+            endpoint,
             headers: {'Content-Type': 'application/json', 'apikey': publishableKey},
             body: jsonEncode({
               'query': query,
