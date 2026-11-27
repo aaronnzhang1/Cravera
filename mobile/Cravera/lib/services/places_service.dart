@@ -80,20 +80,21 @@ class PlacesService {
   /// Returns open restaurants for [query] around [near], best match first.
   /// An empty list means nothing matched. Throws [PlacesSearchException].
   Future<List<Restaurant>> search({required String query, required SearchLocation near, int? radiusMeters}) async {
+    // Never follow a redirect: it could replay the location to another server.
+    // A 3xx answer is treated as a server failure below. (Browsers ignore
+    // this setting; web is not a v0.1.0 target.)
+    final request = http.Request('POST', endpoint)
+      ..followRedirects = false
+      ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
+      ..body = jsonEncode({
+        'query': query,
+        'latitude': near.latitude,
+        'longitude': near.longitude,
+        'radiusMeters': ?radiusMeters,
+      });
     final http.Response response;
     try {
-      response = await _client
-          .post(
-            endpoint,
-            headers: {'Content-Type': 'application/json', 'apikey': publishableKey},
-            body: jsonEncode({
-              'query': query,
-              'latitude': near.latitude,
-              'longitude': near.longitude,
-              'radiusMeters': ?radiusMeters,
-            }),
-          )
-          .timeout(timeout);
+      response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
     } on TimeoutException {
       throw const PlacesSearchException(PlacesSearchError.network);
     } on http.ClientException {

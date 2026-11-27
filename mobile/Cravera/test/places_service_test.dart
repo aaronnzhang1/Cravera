@@ -155,6 +155,19 @@ void main() {
       expect(await forStatus(500), PlacesSearchError.server);
     });
 
+    test('a redirect is never followed and counts as a server error', () async {
+      for (final code in [301, 302, 307, 308]) {
+        final requests = <http.BaseRequest>[];
+        final client = MockClient((request) async {
+          requests.add(request);
+          return http.Response('', code, headers: {'location': 'https://elsewhere.example/collect'});
+        });
+        expect(await errorFor(client), PlacesSearchError.server, reason: '$code');
+        expect(requests, hasLength(1), reason: '$code');
+        expect(requests.single.followRedirects, isFalse, reason: '$code');
+      }
+    });
+
     test('no connection is a network error', () async {
       final client = MockClient((_) async => throw http.ClientException('offline'));
       expect(await errorFor(client), PlacesSearchError.network);
