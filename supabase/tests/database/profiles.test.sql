@@ -38,7 +38,12 @@ select throws_ok($$delete from public.profiles where id = '11111111-1111-4111-81
   '42501', null, 'A cannot delete profiles from the client');
 select throws_ok($$update public.profiles set default_radius_m = 999999
   where id = '11111111-1111-4111-8111-111111111111'$$, '23514', null, 'radius stays within limits');
-select throws_ok($$select public.handle_new_user()$$, '42501', null, 'A cannot call the sign-up trigger function');
+-- Asked as a privilege check, not by calling it: on supabase/postgres
+-- 17.6.1.111, calling any function whose execute is revoked crashes the
+-- server inside supautils (seen 2026-11-27; plain Postgres says 42501).
+select ok(not has_function_privilege('authenticated', 'public.handle_new_user()', 'execute')
+  and not has_function_privilege('anon', 'public.handle_new_user()', 'execute'),
+  'API roles cannot call the sign-up trigger function');
 
 -- Anonymous: nothing at all.
 reset role;
