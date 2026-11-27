@@ -189,9 +189,15 @@ class _NavItem extends StatelessWidget {
           children: [
             Transform.scale(scale: 1 + 0.08 * glow, child: Icon(icon, size: 24, color: color)),
             const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: color, letterSpacing: 0.2),
+            // The bar is a fixed 60 dp, so labels grow with system text only
+            // up to 1.3x, like platform tab bars; screen readers get the full label.
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.3,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: color, letterSpacing: 0.2),
+              ),
             ),
           ],
         ),
