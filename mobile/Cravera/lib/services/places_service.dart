@@ -41,7 +41,11 @@ class PlacesService {
     required this.publishableKey,
     http.Client? client,
     this.timeout = defaultTimeout,
-  }) : _client = client ?? http.Client();
+  })  : _client = client ?? http.Client(),
+        _ownsClient = client == null;
+
+  /// Only HTTPS with a host: the request carries the user's exact location.
+  static bool isSecureUrl(Uri url) => url.scheme == 'https' && url.host.isNotEmpty;
 
   /// Reads `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from `.env`.
   /// Returns null when either is missing, so callers can show
@@ -56,14 +60,20 @@ class PlacesService {
       return null; // `.env` was never loaded.
     }
     final base = url == null ? null : Uri.tryParse(url.trim());
-    final validUrl = base != null && (base.scheme == 'https' || base.scheme == 'http') && base.host.isNotEmpty;
-    if (!validUrl || key == null || key.trim().isEmpty) return null;
+    if (base == null || !isSecureUrl(base) || key == null || key.trim().isEmpty) return null;
     return PlacesService(baseUrl: base, publishableKey: key.trim(), client: client);
   }
 
   final Uri baseUrl;
   final String publishableKey;
   final http.Client _client;
+  final bool _ownsClient;
+
+  /// Closes the HTTP client this service created. A client passed in stays
+  /// open: whoever created it closes it.
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 
   /// Longer than the function's own 8 s limit on its Google call.
   static const defaultTimeout = Duration(seconds: 12);
@@ -74,6 +84,8 @@ class PlacesService {
   /// Returns open restaurants for [query] around [near], best match first.
   /// An empty list means nothing matched. Throws [PlacesSearchException].
   Future<List<Restaurant>> search({required String query, required SearchLocation near, int? radiusMeters}) async {
+    // Checked here too, so a service built by hand never sends location in clear text.
+    if (!isSecureUrl(baseUrl)) throw const PlacesSearchException(PlacesSearchError.notConfigured);
     final http.Response response;
     try {
       response = await _client

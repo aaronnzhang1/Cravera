@@ -160,6 +160,30 @@ void main() {
   });
 
   group('configuration', () {
+    test('a plain-http service never sends the location', () async {
+      var calls = 0;
+      final service = PlacesService(
+        baseUrl: Uri.parse('http://example-project.supabase.co'),
+        publishableKey: 'sb_publishable_test',
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(jsonEncode({'results': []}), 200);
+        }),
+      );
+      await expectLater(
+        service.search(query: 'ramen', near: near),
+        throwsA(isA<PlacesSearchException>().having((e) => e.error, 'error', PlacesSearchError.notConfigured)),
+      );
+      expect(calls, 0);
+    });
+
+    test('close() leaves an injected client open', () {
+      final client = _ClosingClient();
+      PlacesService(baseUrl: Uri.parse('https://example-project.supabase.co'), publishableKey: 'k', client: client)
+          .close();
+      expect(client.closed, isFalse);
+    });
+
     test('fromEnv returns null when .env was never loaded', () {
       expect(PlacesService.fromEnv(), isNull);
     });
@@ -176,9 +200,21 @@ void main() {
       expect(withEnv('SUPABASE_URL=https:/example-project.supabase.co\n$key'), isNull);
       expect(withEnv('SUPABASE_URL=example-project.supabase.co\n$key'), isNull);
       expect(withEnv('SUPABASE_URL=ftp://example-project.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=http://example-project.supabase.co\n$key'), isNull);
       expect(withEnv('SUPABASE_URL=https://example-project.supabase.co\nSUPABASE_PUBLISHABLE_KEY='), isNull);
       expect(withEnv(key), isNull);
       dotenv.clean();
     });
   });
+}
+
+/// Records whether close() was called.
+class _ClosingClient extends http.BaseClient {
+  bool closed = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) => throw UnimplementedError();
+
+  @override
+  void close() => closed = true;
 }
