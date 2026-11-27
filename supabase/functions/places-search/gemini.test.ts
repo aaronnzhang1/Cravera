@@ -5,7 +5,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ALLOWED_TYPES, GEMINI_URL, validateCuration, validateIntent } from "./gemini.ts";
-import { fallbackText, handle, MAX_RADIUS_M, PLACES_URL, reasonsFor, REQUEST_BUDGET_MS } from "./logic.ts";
+import { fallbackText, handle, MAX_RADIUS_M, PLACES_URL, priceFirst, reasonsFor, REQUEST_BUDGET_MS } from "./logic.ts";
+import type { RestaurantResult } from "./logic.ts";
 
 const KEY = "sb_publishable_test_key";
 const env = {
@@ -270,6 +271,31 @@ for (const [what, make] of fallbacks) {
     assert.deepEqual(body.results[0].reasons, ["Close by"]);
   });
 }
+
+test("if curation fails (e.g. Gemini 503), the wanted price still steers the order", async () => {
+  const places = {
+    places: [
+      place("pricey", { priceLevel: "PRICE_LEVEL_EXPENSIVE" }),
+      place("unknown", { priceLevel: undefined }),
+      place("cheap1", { priceLevel: "PRICE_LEVEL_INEXPENSIVE" }),
+      place("cheap2", { priceLevel: "PRICE_LEVEL_MODERATE" }),
+    ],
+  };
+  const g = fakeGoogle(
+    [new Response(JSON.stringify(places))],
+    [geminiAnswer({ ...gymIntent, priceLevels: [1, 2] }), new Response("overloaded", { status: 503 })],
+  );
+  const { results } = await (await handle(request({ query: "cheaper", ...here }), env, g.fn)).json();
+  // In range first, then unknown price, then the rest; Places order within each; nothing dropped.
+  assert.deepEqual(results.map((r: { placeId: string }) => r.placeId), ["cheap1", "cheap2", "unknown", "pricey"]);
+});
+
+test("price tie-break: only reorders, keeps Places order within groups, no-op without a price", () => {
+  const r = (id: string, priceLevel: number | null) => ({ placeId: id, priceLevel }) as unknown as RestaurantResult;
+  const list = [r("a", 3), r("b", 1), r("c", null), r("d", 2), r("e", 1)];
+  assert.deepEqual(priceFirst(list, [1]).map((x) => x.placeId), ["b", "e", "c", "a", "d"]);
+  assert.deepEqual(priceFirst(list, []).map((x) => x.placeId), ["a", "b", "c", "d", "e"]);
+});
 
 test("if understanding fails, curation is skipped and Places order stays", async () => {
   const g = fakeGoogle(
