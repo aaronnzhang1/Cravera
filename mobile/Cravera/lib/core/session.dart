@@ -1,13 +1,22 @@
 import 'package:flutter/widgets.dart';
 
 import '../models/restaurant.dart';
+import '../services/craving_search.dart';
 import '../services/location_service.dart';
 
 class AppSession extends ChangeNotifier {
-  AppSession({this.locationService = const LocationService()});
+  AppSession({this.locationService = const LocationService(), CravingSearch? search})
+      : search = search ?? CravingSearch() {
+    // Screens listen to the session, so pass search changes on.
+    this.search.addListener(notifyListeners);
+  }
 
   /// Finds where to search. Tests pass a fake.
   final LocationService locationService;
+
+  /// The current craving search and its results. Tests pass one with a fake
+  /// [PlacesService].
+  final CravingSearch search;
 
   String? _displayName;
   SearchLocation? _searchLocation;
@@ -83,17 +92,26 @@ class AppSession extends ChangeNotifier {
   LocationProblem? get locationProblem => _locationProblem;
   bool get isLocating => _locating;
 
+  /// True while the search area may be about to change (device fix or typed
+  /// place still being looked up). Searching and directions wait for it, so
+  /// nothing runs against the area the user is leaving.
+  bool get locationChanging => _locating || _lookingUpPlace;
+  bool _lookingUpPlace = false;
+
   /// Uses the device location. On failure, keeps any typed place already set.
   Future<void> useDeviceLocation() async {
     if (_locating) return;
     final request = ++_locationRequest;
     _locating = true;
+    // This replaces any typed lookup still running, whose stale answer won't
+    // clear its own flag, so clear it here or search would stay blocked.
+    _lookingUpPlace = false;
     notifyListeners();
     final result = await locationService.current();
     if (request != _locationRequest) return; // a newer choice or sign out won
     _locating = false;
     if (result.location != null) {
-      _searchLocation = result.location;
+      _setSearchLocation(result.location!);
       _locationProblem = null;
     } else {
       _locationProblem = result.problem;
@@ -109,12 +127,32 @@ class AppSession extends ChangeNotifier {
       _locating = false;
       notifyListeners();
     }
-    final found = await locationService.lookUp(place);
+    _lookingUpPlace = true;
+    notifyListeners();
+    final SearchLocation? found;
+    try {
+      found = await locationService.lookUp(place);
+    } finally {
+      // Only the newest lookup clears the flag; sign out clears it too.
+      if (request == _locationRequest) _lookingUpPlace = false;
+    }
     if (request != _locationRequest) return false; // a newer choice or sign out won
-    if (found == null) return false;
-    _searchLocation = found;
+    if (found == null) {
+      notifyListeners();
+      return false;
+    }
+    _setSearchLocation(found);
     notifyListeners();
     return true;
+  }
+
+  /// Results belong to the area they were searched in: a new area drops the
+  /// current search, including one still waiting for an answer.
+  void _setSearchLocation(SearchLocation location) {
+    final old = _searchLocation;
+    _searchLocation = location;
+    final moved = old == null || old.latitude != location.latitude || old.longitude != location.longitude;
+    if (moved && search.status != SearchStatus.idle) search.reset();
   }
 
   void signIn({required String displayName}) {
@@ -134,7 +172,13 @@ class AppSession extends ChangeNotifier {
     _searchLocation = null;
     _locationProblem = null;
     _locating = false;
+    _lookingUpPlace = false;
     _locationRequest++;
+    search.reset(); // the next user must not see this search
+    // Bookmarks are real places now and aren't tied to an account yet, so
+    // they go too: the next person on this phone must not see them.
+    _bookmarks.clear();
+    _bookmarkRatings.clear();
     notifyListeners();
   }
 
