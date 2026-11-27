@@ -359,12 +359,28 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
     }
   }
 
+  // Without curation (skipped, or Gemini failed, e.g. 503 when overloaded),
+  // the price the guest asked for still steers the order (never filters).
+  if (curation !== "ok") results = priceFirst(results, intent.priceLevels);
+
   // Outcomes only (no craving, intent or places), to see how Gemini is doing.
   console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "curate", curation, "results", results.length);
 
   // 4. Explain, from Places facts only.
   results = results.map((r) => ({ ...r, reasons: reasonsFor(r) }));
   return json(200, { results, intent });
+}
+
+/**
+ * Places in the wanted price levels first, then places with no price, then
+ * the rest; Places order within each group. No levels wanted: unchanged.
+ */
+export function priceFirst(results: RestaurantResult[], priceLevels: number[]): RestaurantResult[] {
+  if (priceLevels.length === 0) return results;
+  const rank = (r: RestaurantResult) =>
+    r.priceLevel === null ? 1 : priceLevels.includes(r.priceLevel) ? 0 : 2;
+  // Array.prototype.sort is stable, so Places order holds within a group.
+  return [...results].sort((a, b) => rank(a) - rank(b));
 }
 
 /** The search text when Gemini didn't answer: the craving, or the previous text plus the refinement. */
