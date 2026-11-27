@@ -102,7 +102,7 @@ class AppSession extends ChangeNotifier {
     if (request != _locationRequest) return; // a newer choice or sign out won
     _locating = false;
     if (result.location != null) {
-      _searchLocation = result.location;
+      _setSearchLocation(result.location!);
       _locationProblem = null;
     } else {
       _locationProblem = result.problem;
@@ -121,9 +121,18 @@ class AppSession extends ChangeNotifier {
     final found = await locationService.lookUp(place);
     if (request != _locationRequest) return false; // a newer choice or sign out won
     if (found == null) return false;
-    _searchLocation = found;
+    _setSearchLocation(found);
     notifyListeners();
     return true;
+  }
+
+  /// Results belong to the area they were searched in: a new area drops the
+  /// current search, including one still waiting for an answer.
+  void _setSearchLocation(SearchLocation location) {
+    final old = _searchLocation;
+    _searchLocation = location;
+    final moved = old == null || old.latitude != location.latitude || old.longitude != location.longitude;
+    if (moved && search.status != SearchStatus.idle) search.reset();
   }
 
   void signIn({required String displayName}) {

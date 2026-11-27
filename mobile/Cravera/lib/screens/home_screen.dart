@@ -235,7 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!search.checkFresh()) return;
     final current = search.current;
     if (current == null) return;
-    _showNavOptions(context, current);
+    _showNavOptions(context, current, search);
   }
 
   /// Out of results, nothing found, or a failed search: say which, and offer
@@ -889,7 +889,7 @@ class _FilterSheetState extends State<_FilterSheet> {
 // Navigation options sheet (Yes path)
 // ---------------------------------------------------------------------------
 
-Future<void> _showNavOptions(BuildContext context, Restaurant restaurant) {
+Future<void> _showNavOptions(BuildContext context, Restaurant restaurant, CravingSearch search) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface2,
@@ -905,6 +905,9 @@ Future<void> _showNavOptions(BuildContext context, Restaurant restaurant) {
               subtitle: const Text('Open directions in your maps app'),
               onTap: () async {
                 Navigator.of(context).pop();
+                // The sheet may have been open a while: check again that this
+                // is still the current, fresh result before opening Maps.
+                if (!search.checkFresh() || search.current?.placeId != restaurant.placeId) return;
                 await _openNavigation(context, restaurant);
               },
             ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cravera/core/session.dart';
 import 'package:cravera/main.dart';
 import 'package:cravera/models/restaurant.dart';
@@ -178,6 +180,47 @@ void main() {
     expect(places.queries, ['ramen', 'ramen']);
   });
 
+  testWidgets('the directions sheet checks freshness again before opening Maps', (tester) async {
+    var now = DateTime(2026, 1, 1, 12);
+    final session = AppSession(
+      locationService: const _FoundLocation(),
+      search: CravingSearch(places: FakePlaces((_) => [_place('a', 'Test Noodle House')]), clock: () => now),
+    );
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+    await tester.tap(find.text('Continue as guest'));
+    await _settle(tester);
+    await _searchFor(tester, 'ramen');
+
+    await tester.tap(find.text('Yes'));
+    await _settle(tester);
+    expect(find.text('Navigate there'), findsOneWidget);
+
+    now = now.add(const Duration(minutes: 20)); // the sheet stayed open
+    await tester.tap(find.text('Navigate there'));
+    await _settle(tester);
+    expect(session.search.status, SearchStatus.expired);
+    expect(find.text('These results are out of date.'), findsOneWidget);
+  });
+
+  test('a new search area drops the search, including one still waiting', () async {
+    final slow = Completer<List<Restaurant>>();
+    final session = AppSession(
+      locationService: const _MovableLocation(),
+      search: CravingSearch(places: FakePlaces((_) => slow.future)),
+    );
+    await session.useDeviceLocation();
+    final pending = session.search.start('ramen', session.searchLocation!);
+
+    await session.useTypedPlace('Elsewhere Example');
+    slow.complete([_place('old-area', 'Old Area Noodles')]);
+    await pending;
+
+    expect(session.searchLocation?.label, 'Elsewhere Example');
+    expect(session.search.status, SearchStatus.idle);
+    expect(session.search.current, isNull);
+  });
+
   test('prices: 0 is Free, 1–4 are dollar signs, anything else is hidden', () {
     expect(priceLabel(0), 'Free');
     expect(priceLabel(1), r'$');
@@ -195,4 +238,14 @@ void main() {
     expect(uri.toString(), isNot(contains('Noodle')));
     expect(directionsUri(const Restaurant(placeId: 'x', name: 'No Coordinates')), isNull);
   });
+}
+
+/// Device location near 10,20; any typed place is somewhere else.
+class _MovableLocation extends LocationService {
+  const _MovableLocation();
+  @override
+  Future<LocationResult> current() async => const LocationResult.found(_nearby);
+  @override
+  Future<SearchLocation?> lookUp(String place) async =>
+      SearchLocation(latitude: 30, longitude: 40, label: place.trim());
 }
