@@ -1,5 +1,6 @@
 // Accessibility pass (TASK-UI-2): Flutter's own guideline checks on the main
 // screens. Fictional data only; the network and GPS are faked.
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cravera/core/session.dart';
@@ -36,6 +37,9 @@ const _pick = Restaurant(
   reasons: ['Budget-friendly', 'Close by'],
 );
 
+/// A real, all-black 8 x 8 PNG: the darkest photo the controls can sit on.
+final _blackPhoto = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAADElEQVR4nGNgGB4AAADIAAGtQHYiAAAAAElFTkSuQmCC');
+
 Future<void> _settle(WidgetTester tester) async {
   // The orb animates forever, so pumpAndSettle never finishes. Step time instead.
   for (var i = 0; i < 6; i++) {
@@ -44,7 +48,7 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 Future<void> _home(WidgetTester tester) async {
-  final places = FakePlaces((_) => [_pick, _pick], photo: (_) => Uint8List.fromList([1, 2, 3]));
+  final places = FakePlaces((_) => [_pick, _pick], photo: (_) => Uint8List.fromList(_blackPhoto));
   final session = AppSession(locationService: const _FoundLocation(), search: CravingSearch(places: places));
   await tester.pumpWidget(MyApp(session: session));
   await tester.pump();
@@ -56,6 +60,18 @@ Future<void> _showPick(WidgetTester tester) async {
   await tester.enterText(find.widgetWithText(TextField, 'Ask Cravera…'), 'ramen');
   await tester.tap(find.byTooltip('Search'));
   await _settle(tester);
+  // Decode the photo for real, so contrast is checked over it, not the placeholder.
+  final photo = find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage);
+  if (photo.evaluate().isNotEmpty) {
+    await tester.runAsync(() => precacheImage((tester.widget<Image>(photo.first)).image, tester.element(photo.first)));
+    await _settle(tester);
+  }
+}
+
+/// The black photo is on screen (decoded), not the placeholder icon.
+void _expectPhotoShown(WidgetTester tester) {
+  expect(find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage), findsOneWidget);
+  expect(find.byIcon(Icons.restaurant_rounded), findsNothing, reason: 'placeholder hidden');
 }
 
 Future<void> _meetsAll(WidgetTester tester) async {
@@ -82,10 +98,11 @@ void main() {
     handle.dispose();
   });
 
-  testWidgets('the pick meets the accessibility guidelines', (tester) async {
+  testWidgets('the pick meets the accessibility guidelines, over a black photo', (tester) async {
     final handle = tester.ensureSemantics();
     await _home(tester);
     await _showPick(tester);
+    _expectPhotoShown(tester);
     await _meetsAll(tester);
     handle.dispose();
   });
