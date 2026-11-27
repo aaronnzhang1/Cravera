@@ -10,6 +10,7 @@ import '../services/craving_search.dart';
 import '../services/location_service.dart';
 import '../services/places_service.dart';
 import '../widgets/cravera_logo.dart';
+import '../widgets/floating_cards.dart';
 import '../widgets/glass.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -71,80 +72,109 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     };
   }
 
-  /// Home: one question, the location, and one input. Nothing else competes
-  /// with typing (concierge plan, TASK-UI-2).
+  /// Home: one question, the location and one input, over drifting cards and
+  /// a breathing orb, so it feels alive (maintainer, 2026-11-26). Nothing
+  /// tappable competes with typing (TASK-UI-2).
   Widget _buildIdle(BuildContext context, AppSession session) {
     final text = Theme.of(context).textTheme;
     // LayoutBuilder reruns when the keyboard resizes the body, so [typing] stays current.
     return LayoutBuilder(
-      builder: (context, _) {
-        // While typing, drop the headline so the input always fits above the
+      builder: (context, box) {
+        // While typing, drop the orb and headline so the input always fits above the
         // keyboard. Read the keyboard from the view: Scaffold hides it from the body's MediaQuery.
         final typing = View.of(context).viewInsets.bottom > 0;
-        return SafeArea(
-          // The floating nav sits behind the keyboard while typing, so don't keep room for it then.
-          bottom: !typing,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Text('Cravera', style: text.headlineSmall),
-                        const SizedBox(width: 12),
-                        // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    if (!typing) ...[
-                      Text(
-                        'What are you craving?',
-                        textAlign: TextAlign.center,
-                        style: text.displaySmall?.copyWith(height: 1.05),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Say it your way. One open spot, right now.',
-                        textAlign: TextAlign.center,
-                        style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
-                      ),
+        // Short screens (such as iPhone SE) get a smaller orb.
+        final compact = box.maxHeight < 640;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            const FloatingCards(),
+            // Fade the cards out toward the bottom, so the examples and the
+            // input always sit on a calm background.
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.background.withValues(alpha: 0),
+                      AppColors.background.withValues(alpha: 0.7),
+                      AppColors.background,
                     ],
-                    const Spacer(),
-                    _LocationProblemBanner(session: session, onFix: () => _askForPlace(session)),
-                    // Example cravings only before typing starts: they are a hint, not a menu.
-                    ListenableBuilder(
-                      listenable: _promptController,
-                      builder: (context, _) => _promptController.text.isNotEmpty || typing
-                          ? const SizedBox.shrink()
-                          : Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _QuickPicks(
-                                onPick: (craving) {
-                                  _promptController.text = craving;
-                                  _startSearch(craving);
-                                },
-                              ),
-                            ),
-                    ),
-                    _PromptInput(
-                      controller: _promptController,
-                      isBusy: false,
-                      onSend: () => _startSearch(_promptController.text.trim()),
-                    ),
-                  ],
+                    stops: const [0.0, 0.6, 0.82],
+                  ),
                 ),
               ),
             ),
-          ),
+            SafeArea(
+              // The floating nav sits behind the keyboard while typing, so don't keep room for it then.
+              bottom: !typing,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Text('Cravera', style: text.headlineSmall),
+                            const SizedBox(width: 12),
+                            // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        if (!typing) ...[
+                          CraveraLogo(size: compact ? 56 : 84),
+                          SizedBox(height: compact ? 14 : 22),
+                          Text(
+                            'What are you craving?',
+                            textAlign: TextAlign.center,
+                            style: text.displaySmall?.copyWith(height: 1.05),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Say it your way. One open spot, right now.',
+                            textAlign: TextAlign.center,
+                            style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
+                        const Spacer(),
+                        _LocationProblemBanner(session: session, onFix: () => _askForPlace(session)),
+                        // Example cravings only before typing starts: they are a hint, not a menu.
+                        ListenableBuilder(
+                          listenable: _promptController,
+                          builder: (context, _) => _promptController.text.isNotEmpty || typing
+                              ? const SizedBox.shrink()
+                              : Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _QuickPicks(
+                                    onPick: (craving) {
+                                      _promptController.text = craving;
+                                      _startSearch(craving);
+                                    },
+                                  ),
+                                ),
+                        ),
+                        _PromptInput(
+                          controller: _promptController,
+                          isBusy: false,
+                          onSend: () => _startSearch(_promptController.text.trim()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
