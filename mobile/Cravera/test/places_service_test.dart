@@ -139,6 +139,12 @@ void main() {
       expect(await serviceWith(client).search(query: 'ramen', near: near), isEmpty);
     });
 
+    test('broken UTF-8 in a 200 answer is a server error', () async {
+      final client = MockClient((_) async => http.Response.bytes([0x7b, 0xff, 0xfe, 0x7d], 200,
+          headers: {'content-type': 'application/json; charset=utf-8'}));
+      expect(await errorFor(client), PlacesSearchError.server);
+    });
+
     test('a malformed body is a server error', () async {
       expect(await errorFor(MockClient((_) async => http.Response('not json', 200))), PlacesSearchError.server);
       expect(await errorFor(MockClient((_) async => http.Response('{"oops":1}', 200))), PlacesSearchError.server);

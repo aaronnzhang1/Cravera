@@ -103,7 +103,13 @@ class PlacesService {
 
     switch (response.statusCode) {
       case 200:
-        return parseResults(response.body);
+        final String body;
+        try {
+          body = utf8.decode(response.bodyBytes);
+        } on FormatException {
+          throw const PlacesSearchException(PlacesSearchError.server);
+        }
+        return parseResults(body);
       case 400:
         throw const PlacesSearchException(PlacesSearchError.rejected);
       case 401:
