@@ -8,7 +8,7 @@ import '../core/app_colors.dart';
 /// Decorative restaurant-style cards that drift upward behind the home
 /// screen, at different depths (far ones are smaller, fainter and blurred).
 ///
-/// They show only a cuisine and an emoji, never a restaurant name: every
+/// They show only a cuisine and an icon, never a restaurant name: every
 /// name the app shows must come from Google Places (see AGENTS.md), so fake
 /// names here could be mistaken for real results.
 ///
@@ -22,10 +22,10 @@ class FloatingCards extends StatefulWidget {
 }
 
 class _Spec {
-  final String emoji;
+  final IconData icon;
   final String cuisine;
   final double depth; // 0 = far, 1 = near
-  const _Spec(this.emoji, this.cuisine, this.depth);
+  const _Spec(this.icon, this.cuisine, this.depth);
 }
 
 class _FloatingCardsState extends State<FloatingCards> with SingleTickerProviderStateMixin {
@@ -34,12 +34,14 @@ class _FloatingCardsState extends State<FloatingCards> with SingleTickerProvider
   // screen and all move at one speed, so the gaps never change and no two
   // cards overlap.
   static const _cards = [
-    _Spec('🍜', 'Ramen', 0.9),
-    _Spec('🌮', 'Tacos', 0.4),
-    _Spec('🍣', 'Sushi', 0.7),
-    _Spec('🍕', 'Pizza', 0.3),
-    _Spec('🥗', 'Salad', 0.8),
-    _Spec('🍔', 'Burgers', 0.5),
+    // Material icons, not emoji: emoji glyphs don't render reliably with the
+    // app's fonts (maintainer saw blank tiles, 2026-11-27).
+    _Spec(Icons.ramen_dining_rounded, 'Ramen', 0.9),
+    _Spec(Icons.tapas_rounded, 'Tacos', 0.4),
+    _Spec(Icons.set_meal_rounded, 'Sushi', 0.7),
+    _Spec(Icons.local_pizza_rounded, 'Pizza', 0.3),
+    _Spec(Icons.eco_rounded, 'Salad', 0.8),
+    _Spec(Icons.lunch_dining_rounded, 'Burgers', 0.5),
   ];
   static const _cardWidth = 118.0; // a near card's width; far cards are smaller
 
@@ -143,7 +145,7 @@ class _MiniCard extends StatelessWidget {
                 color: AppColors.accentSoft,
               ),
               alignment: Alignment.center,
-              child: Text(spec.emoji, style: TextStyle(fontSize: 26 * scale)),
+              child: Icon(spec.icon, size: 28 * scale, color: AppColors.accent),
             ),
             SizedBox(height: 8 * scale),
             Text(

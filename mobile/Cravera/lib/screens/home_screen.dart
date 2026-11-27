@@ -271,52 +271,108 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     : ("That's every open match for “${search.query}” nearby.", 'Add something to narrow or change it.');
     // Retrying only helps when the request itself was fine.
     final canRetry = expired || (failed && search.error != PlacesSearchError.rejected);
-    return SafeArea(
-      child: Center(
-        // Scrolls on short phones when the keyboard opens to refine.
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Icon(
-                  expired
-                      ? Icons.schedule_rounded
-                      : failed
-                          ? Icons.cloud_off_rounded
-                          : Icons.search_off_rounded,
-                  size: 48,
-                  color: AppColors.textMuted,
+    // Out of matches (none, or all rejected): the concierge suggests ways on.
+    final canRefine = !canRetry && !failed;
+    final suggestions = search.foundNothing
+        ? const [('Something similar', 'something similar'), ('Any cuisine', 'any cuisine'), ('Surprise me', 'surprise me')]
+        : const [('Cheaper', 'cheaper'), ('Something different', 'something different'), ('Surprise me', 'surprise me')];
+    // Not a roadblock page: the answer reads like the next turn of a chat
+    // (maintainer, 2026-11-27), with one-tap ways forward and the input
+    // pinned at the bottom like Home's.
+    return LayoutBuilder(
+      builder: (context, _) {
+        // Read the keyboard from the view: Scaffold hides it from the body's MediaQuery.
+        final typing = View.of(context).viewInsets.bottom > 0;
+        return SafeArea(
+          bottom: !typing,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: search.reset,
+                        icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                        label: const Text('New search'),
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(height: typing ? 4 : 16),
+                            if (search.query.trim().isNotEmpty && !search.queryTooLong)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: _Bubble(fromGuest: true, child: Text(search.query.trim(), style: text.bodyLarge)),
+                              ),
+                            const SizedBox(height: 12),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const CraveraLogo(size: 36),
+                                const SizedBox(width: 10),
+                                Flexible(
+                                  child: _Bubble(
+                                    fromGuest: false,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(title, style: text.titleMedium),
+                                        const SizedBox(height: 4),
+                                        Text(detail, style: text.bodyMedium?.copyWith(color: AppColors.textSecondary)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (canRefine) ...[
+                              const SizedBox(height: 14),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 46),
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final (label, words) in suggestions)
+                                      ActionChip(label: Text(label), onPressed: () => _onReprompt(words)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (canRetry)
+                      FilledButton.icon(
+                        onPressed: search.retry,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: Text(expired ? 'Search again' : 'Try again'),
+                      )
+                    else if (canRefine)
+                      _PromptInput(
+                        controller: _repromptController,
+                        isBusy: false,
+                        hint: 'Tell me more…',
+                        sendTooltip: 'Search again',
+                        onSend: () => _onReprompt(_repromptController.text),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                Text(title, textAlign: TextAlign.center, style: text.titleLarge),
-                const SizedBox(height: 8),
-                Text(
-                  detail,
-                  textAlign: TextAlign.center,
-                  style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 20),
-                if (canRetry)
-                  FilledButton.icon(
-                    onPressed: search.retry,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: Text(expired ? 'Search again' : 'Try again'),
-                  )
-                else if (!failed)
-                  _RepromptBanner(controller: _repromptController, onSubmit: _onReprompt),
-                const SizedBox(height: 8),
-                TextButton(onPressed: search.reset, child: const Text('New search')),
-              ],
+              ),
             ),
           ),
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -885,54 +941,33 @@ class _NarrowDownState extends State<_NarrowDown> {
 }
 
 // ---------------------------------------------------------------------------
-// Reprompt banner — on the out-of-results screen
+// Chat bubble — the out-of-results screen reads like a conversation
 // ---------------------------------------------------------------------------
 
-class _RepromptBanner extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String> onSubmit;
-  const _RepromptBanner({required this.controller, required this.onSubmit});
+/// A chat bubble: the guest's craving (right, olive tint) or Cravera's answer
+/// (left, white card).
+class _Bubble extends StatelessWidget {
+  final bool fromGuest;
+  final Widget child;
+  const _Bubble({required this.fromGuest, required this.child});
 
   @override
   Widget build(BuildContext context) {
+    const r = Radius.circular(20);
+    const tail = Radius.circular(6);
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.55)),
+        color: fromGuest ? AppColors.accentSoft : AppColors.surface,
+        border: fromGuest ? null : Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.only(
+          topLeft: fromGuest ? r : tail,
+          topRight: fromGuest ? tail : r,
+          bottomLeft: r,
+          bottomRight: r,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Want to narrow it down? Tell me more…',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. outdoor seating, no seafood',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                  onSubmitted: onSubmit,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _IconAction(
-                tooltip: 'Search again',
-                icon: Icons.arrow_upward_rounded,
-                onPressed: () => onSubmit(controller.text),
-                filled: true,
-              ),
-            ],
-          ),
-        ],
-      ),
+      child: child,
     );
   }
 }
@@ -1004,7 +1039,15 @@ class _PromptInput extends StatelessWidget {
   final TextEditingController controller;
   final bool isBusy;
   final VoidCallback onSend;
-  const _PromptInput({required this.controller, required this.isBusy, required this.onSend});
+  final String hint;
+  final String sendTooltip;
+  const _PromptInput({
+    required this.controller,
+    required this.isBusy,
+    required this.onSend,
+    this.hint = 'Ask Cravera…',
+    this.sendTooltip = 'Search',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1026,8 +1069,8 @@ class _PromptInput extends StatelessWidget {
                 controller: controller,
                 textInputAction: TextInputAction.search,
                 onSubmitted: (_) => onSend(),
-                decoration: const InputDecoration(
-                  hintText: 'Ask Cravera…',
+                decoration: InputDecoration(
+                  hintText: hint,
                   filled: false,
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
@@ -1046,7 +1089,7 @@ class _PromptInput extends StatelessWidget {
             const SizedBox(width: 2),
             _IconAction(
               icon: Icons.arrow_upward_rounded,
-              tooltip: 'Search',
+              tooltip: sendTooltip,
               onPressed: onSend,
               filled: true,
               disabled: isBusy,
@@ -1063,12 +1106,14 @@ class _QuickPicks extends StatelessWidget {
   final ValueChanged<String> onPick;
   const _QuickPicks({required this.onPick});
 
+  // Material icons, not emoji: emoji glyphs don't render reliably with the
+  // app's fonts (maintainer saw blank icons, 2026-11-27).
   static const _picks = [
-    ('🍜', 'Cozy ramen nearby'),
-    ('🌮', 'Tacos, open late'),
-    ('🥗', 'Something healthy'),
-    ('🍣', 'Date-night sushi'),
-    ('🍔', 'A really good burger'),
+    (Icons.ramen_dining_rounded, 'Cozy ramen nearby'),
+    (Icons.nights_stay_rounded, 'Tacos, open late'),
+    (Icons.eco_rounded, 'Something healthy'),
+    (Icons.set_meal_rounded, 'Date-night sushi'),
+    (Icons.lunch_dining_rounded, 'A really good burger'),
   ];
 
   @override
@@ -1082,7 +1127,7 @@ class _QuickPicks extends StatelessWidget {
         itemCount: _picks.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
-          final (emoji, label) = _picks[i];
+          final (icon, label) = _picks[i];
           return Glass(
             radius: 999,
             child: InkWell(
@@ -1091,7 +1136,7 @@ class _QuickPicks extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: Row(
                   children: [
-                    Text(emoji, style: const TextStyle(fontSize: 16)),
+                    Icon(icon, size: 18, color: AppColors.accent),
                     const SizedBox(width: 8),
                     Text(label, style: Theme.of(context).textTheme.labelLarge),
                   ],
