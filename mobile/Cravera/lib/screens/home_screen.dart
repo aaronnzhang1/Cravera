@@ -1289,7 +1289,10 @@ class _PhotoCredit extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('View on Google Maps', style: style?.copyWith(decoration: TextDecoration.underline)),
+                    // Wraps at large text sizes instead of being clipped.
+                    Flexible(
+                      child: Text('View on Google Maps', style: style?.copyWith(decoration: TextDecoration.underline)),
+                    ),
                     const SizedBox(width: 2),
                     const Icon(Icons.open_in_new_rounded, size: 14, color: AppColors.textPrimary),
                   ],

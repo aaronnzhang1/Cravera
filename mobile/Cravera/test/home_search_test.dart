@@ -563,6 +563,35 @@ void main() {
     expect(places.avatarRequests, ['https://lh3.googleusercontent.com/a/fake']);
   });
 
+  testWidgets('photo credits fit a narrow phone at the largest text size', (tester) async {
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final places = FakePlaces(
+      (_) => [
+        const Restaurant(
+          placeId: 'a',
+          name: 'Test Noodle House',
+          photoName: 'places/a/photos/p',
+          photoAuthors: [PhotoAuthor(name: 'Test Photographer With A Long Fictional Name', uri: 'https://maps.google.com/maps/contrib/fake')],
+          photoMapsUri: 'https://www.google.com/maps/place//data=fake',
+          latitude: 10.001,
+          longitude: 20.001,
+        ),
+      ],
+      photo: (_) => Uint8List.fromList([1, 2, 3]),
+    );
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'ramen');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    expect(find.text('Photo: Test Photographer With A Long Fictional Name'), findsOneWidget);
+    expect(find.text('View on Google Maps'), findsOneWidget);
+  });
+
   testWidgets('no photo means no photo credit', (tester) async {
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     await _searchFor(tester, 'ramen');
