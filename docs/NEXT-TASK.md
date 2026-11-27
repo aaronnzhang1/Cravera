@@ -13,13 +13,13 @@
 Tick a box only after checking it in the running app. Never delete or reword a criterion. Propose any change to the maintainer instead.
 
 - [x] The sign-in screen offers "Continue as guest", which opens the home screen without an account.
-- [ ] The app asks for location permission and searches around the device location. If permission is denied or location fails, the user can type a place or address and search around that.
+- [x] The app asks for location permission and searches around the device location. If permission is denied or location fails, the user can type a place or address and search around that.
 - [x] A typed craving returns one real restaurant from Google Places that is open now and within the search radius. The craving text is the Places text query (Gemini parsing is TASK-002).
 - [x] The card shows name, photo, cuisine, price, distance and address from Places. A missing field is hidden, never filled with demo data.
 - [x] No shows the next result from the same search without a new request; when results run out, the user is told and asked to refine. The refine prompt runs a new search with the added text.
 - [x] Yes opens directions to that exact place (place ID or coordinates), not a search by name.
 - [x] No API key for Google or Gemini is in the app, `.env` or the built bundle; the app only calls the Edge Function with the Supabase URL and anon key.
-- [ ] No results, no network and a failing function each show a clear message, and the user can try again.
+- [x] No results, no network and a failing function each show a clear message, and the user can try again.
 - [x] `flutter analyze` and `flutter test` pass, with tests for the result parsing and the No/next logic (the network is faked).
 
 ## Out of scope
