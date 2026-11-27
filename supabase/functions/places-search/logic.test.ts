@@ -165,6 +165,7 @@ test("sends the Places key only in the header to Google", async () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://places.googleapis.com/v1/places:searchText");
   assert.equal((calls[0].init.headers as Record<string, string>)["X-Goog-Api-Key"], "fake-places-key");
+  assert.equal(calls[0].init.redirect, "error");
   assert.ok(!(await res.clone().text()).includes("fake-places-key"));
 });
 

@@ -62,5 +62,5 @@ Ideas captured in the planning docs that no phase owns yet. Promote one by givin
 
 | # | Decision | Needed by |
 |---|---|---|
-| 3 | Guest search abuse protection: per-device and daily limits in the Edge Functions (429, no upstream call), on top of the Google Cloud quota cap used for testing. Every function with `verify_jwt: false` needs it | Before any build leaves the maintainer (testers, TestFlight, Play, public) |
+| 3 | Guest search abuse protection: per-device and daily limits in the Edge Functions (429, no upstream call). While testing there is no quota cap, only a $10 Google Cloud budget alert (maintainer, 2026-11-26). Every function with `verify_jwt: false` needs it | Before any build leaves the maintainer (testers, TestFlight, Play, public) |
 | 4 | Data source for the Trending Spots Hub | If it's scheduled |

@@ -234,6 +234,8 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
       },
       body: JSON.stringify(buildRequestBody(input)),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      // A redirect could replay the craving and location elsewhere: fail instead.
+      redirect: "error",
     });
   } catch (e) {
     // Never log the query or location: they are the user's data.
