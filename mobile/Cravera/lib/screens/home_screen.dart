@@ -138,25 +138,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                     child: Column(
                       children: [
-                        // Title left, chip pinned to the right edge on every screen size.
-                        // Both size to their content; under large text the title scales
-                        // down and the chip (up to 2/3 of the row) ellipsizes.
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Flexible(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text('Cravera', style: text.headlineSmall),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              flex: 2,
-                              child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
-                            ),
-                          ],
+                        _HomeHeader(
+                          // The column's width minus its 20 pt side padding.
+                          maxWidth: area.maxWidth - 40,
+                          title: Text('Cravera', style: text.headlineSmall),
+                          titleStyle: text.headlineSmall,
+                          chip: _LocationChip(session: session, onTap: () => _askForPlace(session)),
+                          chipLabel: _LocationChip.labelFor(session),
                         ),
                         const Spacer(),
                         if (!typing) ...[
@@ -336,6 +324,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // Below this height (a short phone on its side with the keyboard up)
         // the whole screen scrolls instead, so the input is never squeezed.
         final tight = box.maxHeight < 300;
+        // Too little room for a fixed "New search" plus a usable thread (short
+        // sideways phone, keyboard up): everything scrolls together instead.
+        final cramped = box.maxHeight < 160;
         _outcomeTight = tight;
         final header = Align(
           alignment: Alignment.centerLeft,
@@ -421,7 +412,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                 // Compact (short screen or keyboard up): "New search" stays fixed
                 // above; the thread and the input scroll together below it.
-                child: tight
+                child: cramped
+                    ? SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [header, conversation, const SizedBox(height: 8), ?footer],
+                        ),
+                      )
+                    : tight
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -810,15 +808,83 @@ String? priceLabel(int? level) => switch (level) {
 };
 
 /// A small glass pill showing where searches happen. Tap it to change.
+/// "Cravera" on the left and the location chip at the right edge, on one
+/// line when both fit at the guest's text size. When they don't (a narrow
+/// phone, large text, a long place name), the chip moves to its own line,
+/// still on the right, so the title never shrinks below the chosen size.
+class _HomeHeader extends StatelessWidget {
+  final Widget title;
+  final TextStyle? titleStyle;
+  final Widget chip;
+  final String chipLabel;
+
+  /// Width available to the header. Measured by Home's own layout builder:
+  /// Home fills the screen with IntrinsicHeight, which can't contain another.
+  final double maxWidth;
+  const _HomeHeader({
+    required this.maxWidth,
+    required this.title,
+    required this.titleStyle,
+    required this.chip,
+    required this.chipLabel,
+  });
+
+  double _textWidth(BuildContext context, String value, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: style),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final labelStyle = Theme.of(context).textTheme.labelLarge;
+    final needed = _textWidth(context, 'Cravera', titleStyle) +
+        12 +
+        _textWidth(context, chipLabel, labelStyle) +
+        _LocationChip.chromeWidth;
+    if (needed <= maxWidth) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [title, const SizedBox(width: 12), Flexible(child: chip)],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Only a title wider than the whole screen scales down.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: title),
+        ),
+        const SizedBox(height: 8),
+        Align(alignment: Alignment.centerRight, child: chip),
+      ],
+    );
+  }
+}
+
 class _LocationChip extends StatelessWidget {
   final AppSession session;
   final VoidCallback onTap;
   const _LocationChip({required this.session, required this.onTap});
 
+  /// The chip's text (also used to measure whether it fits beside the title).
+  static String labelFor(AppSession session) =>
+      session.isLocating ? 'Locating…' : (session.searchLocation?.label ?? 'Set location');
+
+  /// Width of everything in the chip except its label: padding, both icons, gaps.
+  static const chromeWidth = 14 + 16 + 6 + 2 + 18 + 14;
+
   @override
   Widget build(BuildContext context) {
     final location = session.searchLocation;
-    final label = session.isLocating ? 'Locating…' : (location?.label ?? 'Set location');
+    final label = labelFor(session);
     return Tooltip(
       message: 'Change location',
       child: Glass(

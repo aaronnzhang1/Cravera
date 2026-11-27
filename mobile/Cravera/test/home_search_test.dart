@@ -299,6 +299,21 @@ void main() {
     expect(find.text('New search').hitTestable(), findsOneWidget, reason: 'starting over stays one tap away');
   });
 
+  testWidgets('with almost no room (sideways, keyboard up) the chat still scrolls to the input', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => [])..intent = {'textQuery': 'x'});
+    await _searchFor(tester, 'nice dinner');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320
+    tester.view.viewInsets = const FakeViewPadding(bottom: 520); // keyboard: ~60 pt left
+    await _settle(tester);
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    final input = find.widgetWithText(TextField, 'Tell me more…');
+    await tester.ensureVisible(input);
+    await _settle(tester);
+    expect(input.hitTestable(), findsOneWidget, reason: 'the input can be scrolled to');
+  });
+
   testWidgets('nothing matched on a short sideways phone with the keyboard up: the input stays usable', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => []));

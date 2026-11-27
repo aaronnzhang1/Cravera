@@ -145,6 +145,25 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('at large text on a small phone the title keeps its size; the chip takes its own line', (tester) async {
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _home(tester);
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    await _settle(tester);
+    final normal = tester.getSize(find.text('Cravera')).height;
+    // 1.6x: the largest size at which even the (very wide) test font fits "Cravera" on a 320 pt line.
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    await _settle(tester);
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    final title = tester.getRect(find.text('Cravera'));
+    final chip = tester.getRect(find.byTooltip('Change location'));
+    expect(title.height, greaterThan(normal * 1.5), reason: 'the title grows with the text setting');
+    expect(chip.top, greaterThanOrEqualTo(title.bottom), reason: 'the chip moves below the title');
+    expect(chip.right, moreOrLessEquals(320 - 20, epsilon: 1), reason: 'still at the right edge');
+  });
+
   testWidgets('home meets them at 2x text on a small phone', (tester) async {
     final handle = tester.ensureSemantics();
     addTearDown(tester.view.reset);

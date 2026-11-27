@@ -105,7 +105,11 @@ void layoutAcrossScreens() {
       final column = size.width > 520 ? (size.width - 520) / 2 + 520 : size.width;
       expect(chip.right, moreOrLessEquals(column - 20, epsilon: 1), reason: 'chip at the right edge on $name');
       expect(chip.top, greaterThanOrEqualTo(insets.top), reason: 'chip below the notch/status bar on $name');
-      expect((chip.center.dy - title.center.dy).abs(), lessThan(4), reason: 'chip on the title line on $name');
+      // On the title's line when both fit at this text size, else on its own line below it
+      // (the test font is much wider than the app's, so either can happen here).
+      final sameLine = (chip.center.dy - title.center.dy).abs() < 4;
+      expect(sameLine || chip.top >= title.bottom, isTrue, reason: 'chip beside or below the title on $name');
+      expect(sameLine || size.width < 400, isTrue, reason: 'one line on roomy screens ($name)');
     });
   }
 }
