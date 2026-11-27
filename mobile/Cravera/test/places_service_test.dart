@@ -264,6 +264,48 @@ void main() {
       );
     });
 
+    test('an endless image with no size stops being read just past the limit', () async {
+      var sent = 0;
+      final endless = StreamController<List<int>>();
+      void pump() {
+        // Feed 256 KB chunks until the reader cancels.
+        if (endless.isClosed || endless.isPaused) return;
+        endless.add(Uint8List(256 * 1024));
+        sent += 256 * 1024;
+        if (sent < 100 * 1024 * 1024) scheduleMicrotask(pump);
+      }
+
+      endless.onListen = pump;
+      endless.onResume = pump;
+      var cancelled = false;
+      endless.onCancel = () => cancelled = true;
+      final client = MockClient.streaming((request, body) async {
+        if (request.url == PlacesService.photoEndpoint) {
+          return http.StreamedResponse(Stream.value(utf8.encode(jsonEncode({'photoUri': link}))), 200);
+        }
+        return http.StreamedResponse(endless.stream, 200, headers: {'content-type': 'image/jpeg'});
+      });
+
+      expect(await serviceWith(client).photoBytes(name), isNull);
+      expect(cancelled, isTrue, reason: 'the download is stopped');
+      // A few chunks may already be in flight when it cancels; it must stop near the limit, not read 100 MB.
+      expect(sent, lessThan(PlacesService.maxPhotoBytes + 1024 * 1024), reason: 'not read to the end');
+    });
+
+    test('a declared size over the limit is refused before reading', () async {
+      var bodyRead = false;
+      final client = MockClient.streaming((request, body) async {
+        if (request.url == PlacesService.photoEndpoint) {
+          return http.StreamedResponse(Stream.value(utf8.encode(jsonEncode({'photoUri': link}))), 200);
+        }
+        final image = StreamController<List<int>>(onListen: () => bodyRead = true);
+        return http.StreamedResponse(image.stream, 200,
+            contentLength: PlacesService.maxPhotoBytes + 1, headers: {'content-type': 'image/jpeg'});
+      });
+      expect(await serviceWith(client).photoBytes(name), isNull);
+      expect(bodyRead, isTrue, reason: 'the stream is drained to free the connection, but nothing is kept');
+    });
+
     test('a name that is not a Places photo name is never sent', () async {
       var calls = 0;
       final service = serviceWith(MockClient((_) async {

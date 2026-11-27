@@ -1,5 +1,5 @@
-import 'dart:async' show TimeoutException;
-import 'dart:typed_data' show Uint8List;
+import 'dart:async' show Completer, StreamSubscription, TimeoutException, unawaited;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 import 'dart:convert';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -85,14 +85,38 @@ class PlacesService {
     final link = await photoUrl(photoName);
     if (link == null) return null;
     final request = http.Request('GET', Uri.parse(link))..followRedirects = false;
+    StreamSubscription<List<int>>? reading;
     try {
-      final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
+      final response = await _client.send(request).timeout(timeout);
+      // Decide from the headers before reading any of the body.
       final type = response.headers['content-type'] ?? '';
-      if (response.statusCode != 200 || !type.startsWith('image/')) return null;
-      final bytes = response.bodyBytes;
-      return bytes.isEmpty || bytes.length > maxPhotoBytes ? null : bytes;
+      final declared = response.contentLength;
+      if (response.statusCode != 200 || !type.startsWith('image/') || (declared != null && declared > maxPhotoBytes)) {
+        unawaited(response.stream.listen(null).cancel());
+        return null;
+      }
+      // Read chunk by chunk and stop as soon as the limit is passed, so a
+      // large or endless answer never fills memory.
+      final bytes = BytesBuilder(copy: false);
+      final done = Completer<Uint8List?>();
+      reading = response.stream.listen(
+        (chunk) {
+          bytes.add(chunk);
+          if (bytes.length > maxPhotoBytes && !done.isCompleted) done.complete(null);
+        },
+        onError: (Object _) {
+          if (!done.isCompleted) done.complete(null);
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete(bytes.isEmpty ? null : bytes.takeBytes());
+        },
+        cancelOnError: true,
+      );
+      return await done.future.timeout(timeout, onTimeout: () => null);
     } catch (_) {
       return null;
+    } finally {
+      await reading?.cancel(); // stops a download that passed the limit or timed out
     }
   }
 
