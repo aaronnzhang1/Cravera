@@ -248,6 +248,27 @@ void main() {
     expect(places.locations.single.label, 'Elsewhere Example');
   });
 
+  test('switching to device location during a typed lookup leaves search usable', () async {
+    for (final typedFinishesFirst in [true, false]) {
+      final lookup = Completer<SearchLocation?>();
+      final session = AppSession(locationService: _SlowLookup(lookup));
+
+      final typed = session.useTypedPlace('Elsewhere Example');
+      expect(session.locationChanging, isTrue);
+      if (typedFinishesFirst) {
+        lookup.complete(const SearchLocation(latitude: 30, longitude: 40, label: 'Elsewhere Example'));
+      }
+      await session.useDeviceLocation();
+      if (!typedFinishesFirst) {
+        lookup.complete(const SearchLocation(latitude: 30, longitude: 40, label: 'Elsewhere Example'));
+      }
+      await typed;
+
+      expect(session.locationChanging, isFalse, reason: 'typed finishes first: $typedFinishesFirst');
+      expect(session.searchLocation?.label, 'Near you', reason: 'the newer device choice wins');
+    }
+  });
+
   test('a new search area drops the search, including one still waiting', () async {
     final slow = Completer<List<Restaurant>>();
     final session = AppSession(

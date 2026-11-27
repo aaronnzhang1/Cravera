@@ -103,6 +103,9 @@ class AppSession extends ChangeNotifier {
     if (_locating) return;
     final request = ++_locationRequest;
     _locating = true;
+    // This replaces any typed lookup still running, whose stale answer won't
+    // clear its own flag, so clear it here or search would stay blocked.
+    _lookingUpPlace = false;
     notifyListeners();
     final result = await locationService.current();
     if (request != _locationRequest) return; // a newer choice or sign out won
