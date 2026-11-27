@@ -1,0 +1,107 @@
+// Accessibility pass (TASK-UI-2): Flutter's own guideline checks on the main
+// screens. Fictional data only; the network and GPS are faked.
+import 'dart:typed_data';
+
+import 'package:cravera/core/session.dart';
+import 'package:cravera/main.dart';
+import 'package:cravera/models/restaurant.dart';
+import 'package:cravera/services/craving_search.dart';
+import 'package:cravera/services/location_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'craving_search_test.dart' show FakePlaces;
+
+const _nearby = SearchLocation(latitude: 10, longitude: 20, label: 'Near you');
+
+class _FoundLocation extends LocationService {
+  const _FoundLocation();
+  @override
+  Future<LocationResult> current() async => const LocationResult.found(_nearby);
+}
+
+const _pick = Restaurant(
+  placeId: 'a',
+  name: 'Test Noodle House',
+  cuisine: 'Ramen Restaurant',
+  address: '1 Example St, Testville',
+  priceLevel: 2,
+  rating: 4.5,
+  distanceMeters: 150,
+  photoName: 'places/a/photos/p',
+  photoAuthors: [PhotoAuthor(name: 'Test Photographer', uri: 'https://maps.google.com/maps/contrib/fake')],
+  photoMapsUri: 'https://www.google.com/maps/place//data=fake',
+  latitude: 10.001,
+  longitude: 20.001,
+  reasons: ['Budget-friendly', 'Close by'],
+);
+
+Future<void> _settle(WidgetTester tester) async {
+  // The orb animates forever, so pumpAndSettle never finishes. Step time instead.
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+Future<void> _home(WidgetTester tester) async {
+  final places = FakePlaces((_) => [_pick, _pick], photo: (_) => Uint8List.fromList([1, 2, 3]));
+  final session = AppSession(locationService: const _FoundLocation(), search: CravingSearch(places: places));
+  await tester.pumpWidget(MyApp(session: session));
+  await tester.pump();
+  await tester.tap(find.text('Continue as guest'));
+  await _settle(tester);
+}
+
+Future<void> _showPick(WidgetTester tester) async {
+  await tester.enterText(find.widgetWithText(TextField, 'Ask Cravera…'), 'ramen');
+  await tester.tap(find.byTooltip('Search'));
+  await _settle(tester);
+}
+
+Future<void> _meetsAll(WidgetTester tester) async {
+  await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+  await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+  await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+  await expectLater(tester, meetsGuideline(textContrastGuideline));
+}
+
+void main() {
+  testWidgets('sign-in screen meets the accessibility guidelines', (tester) async {
+    final handle = tester.ensureSemantics();
+    final session = AppSession(locationService: const _FoundLocation(), search: CravingSearch(places: FakePlaces((_) => [])));
+    await tester.pumpWidget(MyApp(session: session));
+    await _settle(tester);
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+
+  testWidgets('home meets the accessibility guidelines', (tester) async {
+    final handle = tester.ensureSemantics();
+    await _home(tester);
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+
+  testWidgets('the pick meets the accessibility guidelines', (tester) async {
+    final handle = tester.ensureSemantics();
+    await _home(tester);
+    await _showPick(tester);
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+
+  testWidgets('the pick meets them at 2x text on a small phone', (tester) async {
+    final handle = tester.ensureSemantics();
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _home(tester);
+    await _showPick(tester);
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    await _settle(tester);
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+}

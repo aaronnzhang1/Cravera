@@ -20,7 +20,7 @@ class AppColors {
   static const accentLight = Color(0xFF8FA86A); // highlights in gradients (orb, avatar)
   static const accentPressed = Color(0xFF3F5724);
   static const onAccent = Color(0xFFFFFFFF); // text/icons on olive
-  static const tomato = Color(0xFFB4472A); // "why this pick" (5.0:1 on cream)
+  static const tomato = Color(0xFFA33D1F); // "why this pick" (5.8:1 on cream, 6.5:1 on white)
   static const sage = Color(0xFF3F6B4A); // secondary: "open now", distance, success (5.9:1)
   static const gold = Color(0xFF8A5A00); // star ratings only (5.5:1)
   static const danger = Color(0xFFB3261E); // sign out, destructive actions

@@ -763,8 +763,9 @@ class _LocationChip extends StatelessWidget {
         radius: 999,
         child: InkWell(
           onTap: session.isLocating ? null : onTap,
+          // 48 dp tall so it is easy to tap (accessibility pass).
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
