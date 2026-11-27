@@ -1304,7 +1304,7 @@ class _PhotoCredit extends StatelessWidget {
   }
 }
 
-/// One credit, 48 dp tall so it is easy to tap, opening [uri] outside the
+/// One credit, at least 48 x 48 dp so it is easy to tap, opening [uri] outside the
 /// app; plain text when there is no link.
 class _CreditLink extends StatelessWidget {
   final String? uri;
@@ -1316,7 +1316,7 @@ class _CreditLink extends StatelessWidget {
   Widget build(BuildContext context) {
     final link = uri == null ? null : Uri.tryParse(uri!);
     final body = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Center(widthFactor: 1, child: child),
