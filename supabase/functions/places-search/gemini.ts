@@ -208,7 +208,11 @@ export async function callGemini(
       return null;
     }
     const data = await res.json() as { status?: unknown; steps?: unknown };
-    if (data?.status !== "completed" || !Array.isArray(data.steps)) return null;
+    if (data?.status !== "completed" || !Array.isArray(data.steps)) {
+      // The status is an enum from Google, never the user's data.
+      console.error("places-search: gemini answer status", String(data?.status).slice(0, 30));
+      return null;
+    }
     const text = data.steps
       .filter((s) => s?.type === "model_output" && Array.isArray(s.content))
       .flatMap((s) => s.content)

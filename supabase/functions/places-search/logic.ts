@@ -311,6 +311,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
   if (results === null) return json(502, { error: "Search failed. Try again." });
 
+  let curation = "skipped";
   // 3. Curate, only if Gemini understood the craving and there is time. It
   //    sees only Places data under refs we choose and returns an order; if
   //    it fails, Places order stays.
@@ -324,11 +325,15 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
       distanceMeters: r.distanceMeters,
     }));
     const order = await curate(gemini, intent, candidates, left() - 500);
+    curation = order ? "ok" : "fallback";
     if (order) {
       const byRef = new Map(candidates.map((c, i) => [c.ref, results![i]]));
       results = order.map((ref) => byRef.get(ref)!);
     }
   }
+
+  // Outcomes only (no craving, intent or places), to see how Gemini is doing.
+  console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "curate", curation, "results", results.length);
 
   // 4. Explain, from Places facts only.
   results = results.map((r) => ({ ...r, reasons: reasonsFor(r) }));

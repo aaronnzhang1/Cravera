@@ -3,6 +3,7 @@
 // is faked; nothing calls Google or Gemini.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ALLOWED_TYPES, GEMINI_URL, validateCuration, validateIntent } from "./gemini.ts";
 import { fallbackText, handle, MAX_RADIUS_M, PLACES_URL, reasonsFor, REQUEST_BUDGET_MS } from "./logic.ts";
 
@@ -428,4 +429,29 @@ test("thinking level is sent only for models known to support it", async () => {
     assert.equal(config.thinking_level, level, String(model));
     assert.equal(g.geminiCalls()[0].body.model, model);
   }
+});
+
+// --- recorded live intents (criterion 2) ---
+
+
+const recorded = JSON.parse(readFileSync(new URL("./recorded-intents.json", import.meta.url), "utf8")).intents as Record<string, unknown>;
+
+test("recorded live intents pass validation unchanged", () => {
+  for (const [craving, raw] of Object.entries(recorded)) {
+    assert.deepEqual(validateIntent(raw), raw, craving);
+  }
+});
+
+test("recorded live intents read the craving sensibly", () => {
+  const i = (k: string) => validateIntent(recorded[k])!;
+  assert.match(i("something warm for a rainy night").textQuery, /warm|soup|noodle|comfort/);
+  assert.deepEqual(i("cheap late-night tacos").priceLevels, [1, 2]);
+  assert.equal(i("cheap late-night tacos").includedType, "mexican_restaurant");
+  assert.ok(i("quiet date spot, not too pricey").wants.includes("quiet"));
+  assert.ok(i("quiet date spot, not too pricey").priceLevels.every((p) => p <= 2));
+  // Refining changes the intent instead of restarting.
+  assert.deepEqual(i("tacos").priceLevels, []);
+  assert.deepEqual(i("tacos + cheaper").priceLevels, [1, 2]);
+  assert.equal(i("tacos + cheaper").textQuery, i("tacos").textQuery);
+  assert.deepEqual(i("tacos + no seafood").avoids, ["seafood"]);
 });
