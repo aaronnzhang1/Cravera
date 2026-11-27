@@ -75,6 +75,10 @@ export type RestaurantResult = {
   /** Google requires showing the photo author's name (and link) with the photo. */
   photoAuthor: string | null;
   photoAuthorUri: string | null;
+  /** Every author of the photo, with link and avatar when Google gives them (TASK-UI-2). */
+  photoAuthors: PhotoAuthor[];
+  /** The photo on Google Maps; Google requires a link to it. */
+  photoMapsUri: string | null;
   latitude: number;
   longitude: number;
   /**
@@ -225,6 +229,8 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
       distanceMeters: Math.round(distance),
       photoName: typeof p.photos?.[0]?.name === "string" ? p.photos[0].name : null,
       ...photoAuthor(p.photos?.[0]),
+      photoAuthors: photoAuthors(p.photos?.[0]),
+      photoMapsUri: photoMapsUri(p.photos?.[0]),
       latitude: lat,
       longitude: lng,
       reasons: [],
@@ -233,22 +239,47 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
   return results;
 }
 
-/** The first author attribution of a photo; the link only if it is https. */
-export function photoAuthor(photo: unknown): { photoAuthor: string | null; photoAuthorUri: string | null } {
-  const author = (photo as { authorAttributions?: unknown[] })?.authorAttributions?.[0] as
-    | { displayName?: unknown; uri?: unknown }
-    | undefined;
-  const name = typeof author?.displayName === "string" && author.displayName.trim() ? author.displayName.trim() : null;
-  let uri: string | null = null;
-  if (name && typeof author?.uri === "string") {
-    try {
-      const parsed = new URL(author.uri.startsWith("//") ? `https:${author.uri}` : author.uri);
-      if (parsed.protocol === "https:") uri = parsed.toString();
-    } catch {
-      uri = null;
-    }
+export type PhotoAuthor = { name: string; uri: string | null; avatarUri: string | null };
+
+/** At most this many authors are sent; a Places photo normally has one. */
+export const MAX_PHOTO_AUTHORS = 3;
+
+/** An https URL (Google sends some as "//host/..."), optionally only on [hosts] or their subdomains. */
+export function httpsUrl(value: unknown, hosts?: string[]): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = new URL(value.startsWith("//") ? `https:${value}` : value);
+    if (parsed.protocol !== "https:") return null;
+    if (hosts && !hosts.some((h) => parsed.hostname === h || parsed.hostname.endsWith(`.${h}`))) return null;
+    return parsed.toString();
+  } catch {
+    return null;
   }
-  return { photoAuthor: name, photoAuthorUri: uri };
+}
+
+/** Every author attribution of a photo that has a name: links only if https, avatars only from Google's image host. */
+export function photoAuthors(photo: unknown): PhotoAuthor[] {
+  const list = (photo as { authorAttributions?: unknown })?.authorAttributions;
+  if (!Array.isArray(list)) return [];
+  const authors: PhotoAuthor[] = [];
+  for (const a of list as { displayName?: unknown; uri?: unknown; photoUri?: unknown }[]) {
+    const name = typeof a?.displayName === "string" ? a.displayName.trim() : "";
+    if (!name) continue;
+    authors.push({ name, uri: httpsUrl(a.uri), avatarUri: httpsUrl(a.photoUri, ["googleusercontent.com"]) });
+    if (authors.length === MAX_PHOTO_AUTHORS) break;
+  }
+  return authors;
+}
+
+/** The first author of a photo (kept for app builds from before TASK-UI-2). */
+export function photoAuthor(photo: unknown): { photoAuthor: string | null; photoAuthorUri: string | null } {
+  const [first] = photoAuthors(photo);
+  return { photoAuthor: first?.name ?? null, photoAuthorUri: first?.uri ?? null };
+}
+
+/** The photo's page on Google Maps, only if it is an https Google link. */
+export function photoMapsUri(photo: unknown): string | null {
+  return httpsUrl((photo as { googleMapsUri?: unknown })?.googleMapsUri, ["google.com", "maps.app.goo.gl"]);
 }
 
 /** SUPABASE_PUBLISHABLE_KEYS may be a JSON object/array of keys or a plain string. */

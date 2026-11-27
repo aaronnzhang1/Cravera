@@ -117,6 +117,32 @@ void main() {
       expect(b.photoAuthorUri, isNull);
     });
 
+    test('keeps every photo author and the photo Maps link, only from safe hosts', () {
+      final [a, b] = PlacesService.parseResults(jsonEncode({
+        'results': [
+          result(placeId: 'a', overrides: {
+            'photoAuthors': [
+              {'name': 'Test Photographer', 'uri': 'https://maps.google.com/maps/contrib/fake', 'avatarUri': 'https://lh3.googleusercontent.com/a/fake'},
+              {'name': ' ', 'uri': 'https://x.example'},
+              {'name': 'Second Tester', 'avatarUri': 'https://evil.example/avatar.png'},
+            ],
+            'photoMapsUri': 'https://www.google.com/maps/place//data=fake',
+          }),
+          result(placeId: 'b', overrides: {
+            'photoAuthor': 'Old Server Tester',
+            'photoMapsUri': 'https://google.com.evil.example/maps',
+          }),
+        ],
+      }));
+      expect(a.photoCredits.map((p) => p.name), ['Test Photographer', 'Second Tester']);
+      expect(a.photoCredits.first.avatarUri, 'https://lh3.googleusercontent.com/a/fake');
+      expect(a.photoCredits.last.avatarUri, isNull);
+      expect(a.photoMapsUri, 'https://www.google.com/maps/place//data=fake');
+      // An older server sends one author; a non-Google Maps link is dropped.
+      expect(b.photoCredits.map((p) => p.name), ['Old Server Tester']);
+      expect(b.photoMapsUri, isNull);
+    });
+
     test('keeps only short plain reasons; none by default', () {
       final [a, b] = PlacesService.parseResults(jsonEncode({
         'results': [
@@ -285,6 +311,19 @@ void main() {
       expect(bytes, [1, 2, 3]);
       expect(requests.map((r) => r.url.toString()), [PlacesService.photoEndpoint.toString(), link]);
       expect(requests.last.followRedirects, isFalse);
+    });
+
+    test('avatars load only from Google\'s image host, without redirects', () async {
+      final requests = <http.BaseRequest>[];
+      final client = MockClient((request) async {
+        requests.add(request);
+        return http.Response.bytes([4, 5], 200, headers: {'content-type': 'image/png'});
+      });
+      expect(await serviceWith(client).avatarBytes('https://evil.example/a.png'), isNull);
+      expect(await serviceWith(client).avatarBytes('http://lh3.googleusercontent.com/a'), isNull);
+      expect(requests, isEmpty);
+      expect(await serviceWith(client).avatarBytes('https://lh3.googleusercontent.com/a/fake'), [4, 5]);
+      expect(requests.single.followRedirects, isFalse);
     });
 
     test('a redirect from the image host is never followed', () async {

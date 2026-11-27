@@ -520,6 +520,38 @@ void main() {
     expect(find.text('Google Maps'), findsOneWidget);
   });
 
+  testWidgets('the credit names every author and links to the photo on Google Maps', (tester) async {
+    final places = FakePlaces(
+      (_) => [
+        const Restaurant(
+          placeId: 'a',
+          name: 'Test Noodle House',
+          photoName: 'places/a/photos/p',
+          photoAuthors: [
+            PhotoAuthor(
+              name: 'Test Photographer',
+              uri: 'https://maps.google.com/maps/contrib/fake',
+              avatarUri: 'https://lh3.googleusercontent.com/a/fake',
+            ),
+            PhotoAuthor(name: 'Second Tester'),
+          ],
+          photoMapsUri: 'https://www.google.com/maps/place//data=fake',
+          latitude: 10.001,
+          longitude: 20.001,
+        ),
+      ],
+      photo: (_) => Uint8List.fromList([1, 2, 3]),
+    );
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Photo: Test Photographer'), findsOneWidget);
+    expect(find.text('Second Tester'), findsOneWidget);
+    expect(find.text('View on Google Maps'), findsOneWidget);
+    expect(find.bySemanticsLabel('View photo on Google Maps'), findsOneWidget);
+    expect(find.text('T'), findsOneWidget, reason: 'initial until the avatar loads');
+    expect(places.avatarRequests, ['https://lh3.googleusercontent.com/a/fake']);
+  });
+
   testWidgets('no photo means no photo credit', (tester) async {
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     await _searchFor(tester, 'ramen');
