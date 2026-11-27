@@ -253,10 +253,10 @@ class AppSession extends ChangeNotifier {
     final service = auth;
     if (service == null || _accountId != expectedAccountId) return AuthOutcome.failed;
     final outcome = await service.deleteAccount(expectedUserId: expectedAccountId);
-    // The service signed the deleted account out; tidy up only if it's still ours.
-    if (outcome == AuthOutcome.ok && (_accountId == expectedAccountId || _accountId == null)) {
-      if (_accountId != null) signOut();
-    }
+    // The service already signed out the deleted account (and only it). Re-read
+    // who is signed in now; that clears the deleted account's local data and
+    // never signs out an account that replaced it.
+    _syncAccount();
     return outcome;
   }
 
