@@ -41,7 +41,7 @@ A release ships when its tasks are merged, its exit criteria are checked on `mai
 | Release | Tasks | Exit criteria | Status |
 |---|---|---|---|
 | v0.1.0 · Guest MVP (Phase 1) | TASK-001 guest search on Places; TASK-UI-1 UI rehaul and Cravera rename; TASK-002 Gemini craving parsing | On an Android emulator and an iPhone: a guest types a craving and gets a real open place nearby; No/refine work; Yes opens directions to that exact place; no Google or Gemini key in the app bundle | In progress |
-| v0.2.0 · Accounts (Phase 1.5) | not yet specified | Supabase sign-up/sign-in; RLS denial-path tests | Not started |
+| v0.2.0 · Accounts (Phase 1.5) | TASK-003 accounts; TASK-004 Saved hub (map, cities, want to go / been); TASK-UI-3 Profile and Friends preview ([plan](plans/v0.2-hub.md)) | Supabase sign-up/sign-in; RLS denial-path tests; saved places persist per account | Planned (direction decided 2026-11-27) |
 
 ## Idea backlog (unscheduled)
 
