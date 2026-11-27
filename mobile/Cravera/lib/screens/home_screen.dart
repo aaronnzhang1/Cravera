@@ -275,12 +275,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final canRetry = expired || (failed && search.error != PlacesSearchError.rejected);
     return SafeArea(
       child: Center(
-        child: ConstrainedBox(
+        // Scrolls on short phones when the keyboard opens to refine.
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Icon(
@@ -313,6 +315,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 TextButton(onPressed: search.reset, child: const Text('New search')),
               ],
             ),
+          ),
           ),
         ),
       ),

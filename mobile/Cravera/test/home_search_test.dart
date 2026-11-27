@@ -81,6 +81,22 @@ void main() {
     expect(find.text('Example Spicy Ramen'), findsOneWidget);
   });
 
+  testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
+    await _searchFor(tester, 'a craving long enough to wrap the title onto several lines');
+    await tester.tap(find.text('No'));
+    await _settle(tester);
+    expect(find.textContaining("That's every open match"), findsOneWidget);
+
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568, like an iPhone SE (1st gen)
+    tester.view.viewInsets = const FakeViewPadding(bottom: 520); // keyboard: 260 pt
+    await _settle(tester);
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    expect(find.text('New search'), findsOneWidget);
+  });
+
   testWidgets('no results says so and offers a refine', (tester) async {
     await _homeWith(tester, FakePlaces((_) => []));
     await _searchFor(tester, 'ramen');
