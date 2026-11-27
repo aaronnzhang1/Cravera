@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../core/app_colors.dart';
 import '../core/routes.dart';
 import '../core/session.dart';
+import '../services/auth_service.dart';
 import '../widgets/cravera_background.dart';
 import '../widgets/cravera_logo.dart';
 
@@ -15,15 +16,41 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  final _accountController = TextEditingController();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
+  bool _busy = false;
+  String? _error;
+
+  /// Set after sign-up when the account waits for its confirmation email.
+  bool _checkEmail = false;
+
+  Future<void> _signUp() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final outcome = await AppSessionScope.of(context).signUpWithEmail(
+      name: _nameController.text,
+      email: _emailController.text,
+      password: _passwordController.text,
+    );
+    if (!mounted) return;
+    if (outcome == AuthOutcome.ok) {
+      context.go(AppRoutes.appHome);
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _checkEmail = outcome == AuthOutcome.confirmEmail;
+      _error = _checkEmail ? null : authMessage(outcome);
+    });
+  }
 
   @override
   void dispose() {
-    _accountController.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -66,16 +93,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _accountController,
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.username],
-                    decoration: const InputDecoration(
-                      hintText: 'Account',
-                      prefixIcon: Icon(Icons.alternate_email_rounded),
+                  if (_checkEmail) ...[
+                    Text(
+                      authMessage(AuthOutcome.confirmEmail),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
                     ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => context.go(AppRoutes.signIn),
+                      child: const Text('Go to sign in'),
+                    ),
+                  ] else ...[
                   TextField(
                     controller: _nameController,
                     textInputAction: TextInputAction.next,
@@ -102,7 +131,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     obscureText: _obscure,
                     textInputAction: TextInputAction.done,
                     autofillHints: const [AutofillHints.newPassword],
+                    onSubmitted: (_) => _signUp(),
                     decoration: InputDecoration(
+                      helperText: 'At least ${SupabaseAuthService.minPasswordLength} characters',
                       hintText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline_rounded),
                       suffixIcon: IconButton(
@@ -111,18 +142,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(_error!, style: TextStyle(color: AppColors.danger), textAlign: TextAlign.center),
+                  ],
                   const SizedBox(height: 18),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () {
-                        final name = _nameController.text.trim();
-                        AppSessionScope.of(context).signIn(displayName: name.isEmpty ? _accountController.text : name);
-                        context.go(AppRoutes.appHome);
-                      },
-                      child: const Text('Create account'),
+                      onPressed: _busy ? null : _signUp,
+                      child: _busy
+                          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
+                          : const Text('Create account'),
                     ),
                   ),
+                  ],
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: () => context.go(AppRoutes.signIn),

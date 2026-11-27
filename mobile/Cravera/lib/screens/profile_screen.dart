@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../core/app_colors.dart';
 import '../core/routes.dart';
 import '../core/session.dart';
+import '../services/auth_service.dart';
 import '../widgets/glass.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -53,7 +54,7 @@ class ProfileScreen extends StatelessWidget {
                     Text(name, style: text.titleLarge),
                     const SizedBox(height: 2),
                     Text(
-                      session.isGuest ? 'Browsing as a guest' : 'Signed in',
+                      session.isGuest ? 'Browsing as a guest' : (session.email ?? 'Signed in'),
                       style: text.bodyMedium?.copyWith(color: AppColors.textMuted),
                     ),
                   ],
@@ -87,7 +88,7 @@ class ProfileScreen extends StatelessWidget {
                 Text('Keep your saves', style: text.titleMedium),
                 const SizedBox(height: 4),
                 Text(
-                  'Create an account so your bookmarks and ratings follow you and shape your picks.',
+                  'Create a free account so Cravera knows you on any phone. Saved places that follow you are coming next.',
                   style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 14),
@@ -123,6 +124,17 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        if (session.isSignedIn) ...[
+          Glass(
+            child: _Row(
+              icon: Icons.delete_outline_rounded,
+              title: 'Delete account',
+              color: AppColors.danger,
+              onTap: () => _confirmDelete(context, session),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         Glass(
           child: _Row(
             icon: Icons.logout_rounded,
@@ -138,6 +150,35 @@ class ProfileScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Asks before deleting: it can't be undone. Then deletes the account on the
+/// server (the caller's own only) and returns to sign-in.
+Future<void> _confirmDelete(BuildContext context, AppSession session) async {
+  final sure = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Delete your account?'),
+      content: const Text('Your account and profile are removed for good. This can’t be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (sure != true || !context.mounted) return;
+  final outcome = await session.deleteAccount();
+  if (!context.mounted) return;
+  if (outcome == AuthOutcome.ok) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    context.go(AppRoutes.signIn);
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authMessage(outcome))));
   }
 }
 

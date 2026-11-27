@@ -1,14 +1,47 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../models/restaurant.dart';
+import '../services/auth_service.dart';
 import '../services/craving_search.dart';
 import '../services/location_service.dart';
 
 class AppSession extends ChangeNotifier {
-  AppSession({this.locationService = const LocationService(), CravingSearch? search})
+  AppSession({this.locationService = const LocationService(), CravingSearch? search, this.auth})
       : search = search ?? CravingSearch() {
     // Screens listen to the session, so pass search changes on.
     this.search.addListener(notifyListeners);
+    // Follow sign-in changes from the server too (a stored session that
+    // expires, or one restored when the app starts).
+    _authChanges = auth?.signedInChanges.listen((signedIn) {
+      if (signedIn) {
+        _loadDisplayName();
+      } else if (_displayName != null) {
+        _clearUserData();
+      }
+      notifyListeners();
+    });
+    if (auth?.isSignedIn ?? false) _loadDisplayName();
+  }
+
+  /// Accounts (TASK-003). Null when the app has no Supabase key: then only
+  /// guest mode works. Tests pass a fake.
+  final AuthService? auth;
+  StreamSubscription<bool>? _authChanges;
+
+  @override
+  void dispose() {
+    _authChanges?.cancel();
+    super.dispose();
+  }
+
+  /// Loads the display name from the signed-in person's profile.
+  Future<void> _loadDisplayName() async {
+    final name = await auth?.displayName();
+    if (!(auth?.isSignedIn ?? false)) return; // signed out meanwhile
+    _displayName = name ?? auth?.email?.split('@').first ?? 'there';
+    notifyListeners();
   }
 
   /// Finds where to search. Tests pass a fake.
@@ -72,7 +105,11 @@ class AppSession extends ChangeNotifier {
 
   bool _isGuest = false;
 
-  bool get isSignedIn => _displayName != null && _displayName!.trim().isNotEmpty;
+  /// Signed in to a real account (a session exists on this device).
+  bool get isSignedIn => auth?.isSignedIn ?? false;
+
+  /// The signed-in person's email, for Profile.
+  String? get email => auth?.email;
 
   /// True when the user chose "Continue as guest": they can use the app but have no account.
   bool get isGuest => _isGuest && !isSignedIn;
@@ -155,10 +192,41 @@ class AppSession extends ChangeNotifier {
     if (moved && search.status != SearchStatus.idle) search.reset();
   }
 
-  void signIn({required String displayName}) {
-    _displayName = displayName.trim().isEmpty ? 'there' : displayName.trim();
-    _isGuest = false;
+  /// Signs in with email and password. A guest's place and search are kept.
+  Future<AuthOutcome> signInWithEmail({required String email, required String password}) async {
+    final service = auth;
+    if (service == null) return AuthOutcome.failed;
+    final outcome = await service.signIn(email: email, password: password);
+    if (outcome == AuthOutcome.ok) {
+      _isGuest = false;
+      await _loadDisplayName();
+    }
     notifyListeners();
+    return outcome;
+  }
+
+  /// Creates an account. With email confirmation on, the result is
+  /// [AuthOutcome.confirmEmail] and nobody is signed in yet.
+  Future<AuthOutcome> signUpWithEmail({required String name, required String email, required String password}) async {
+    final service = auth;
+    if (service == null) return AuthOutcome.failed;
+    final outcome = await service.signUp(email: email, password: password, displayName: name);
+    if (outcome == AuthOutcome.ok) {
+      _isGuest = false;
+      await _loadDisplayName();
+    }
+    notifyListeners();
+    return outcome;
+  }
+
+  /// Deletes the signed-in person's own account (server-side), then clears
+  /// everything on this device like sign out.
+  Future<AuthOutcome> deleteAccount() async {
+    final service = auth;
+    if (service == null || !service.isSignedIn) return AuthOutcome.failed;
+    final outcome = await service.deleteAccount();
+    if (outcome == AuthOutcome.ok) signOut();
+    return outcome;
   }
 
   void continueAsGuest() {
@@ -167,6 +235,15 @@ class AppSession extends ChangeNotifier {
   }
 
   void signOut() {
+    final service = auth;
+    if (service != null && service.isSignedIn) unawaited(service.signOut());
+    _clearUserData();
+    notifyListeners();
+  }
+
+  /// Forgets everything about the person on this device (sign out, account
+  /// deleted, or the session expired).
+  void _clearUserData() {
     _displayName = null;
     _isGuest = false;
     _searchLocation = null;

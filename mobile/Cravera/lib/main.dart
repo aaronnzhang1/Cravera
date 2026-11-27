@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
+import 'core/constants.dart';
 import 'core/routes.dart';
 import 'core/session.dart';
+import 'services/auth_service.dart';
 import 'services/craving_search.dart';
 import 'services/places_service.dart';
 
@@ -15,7 +18,26 @@ Future<void> main() async {
   } catch (_) {
     // `.env` is treated as an asset; if a developer runs without it, we still want UI to boot.
   }
-  runApp(MyApp(session: AppSession(search: CravingSearch(places: PlacesService.fromEnv()))));
+  runApp(MyApp(session: AppSession(search: CravingSearch(places: PlacesService.fromEnv()), auth: await _startAuth())));
+}
+
+/// Accounts need the project's publishable key (public; never a secret key).
+/// Without it, or if Supabase can't start, the app still runs in guest mode.
+Future<AuthService?> _startAuth() async {
+  String? key;
+  try {
+    key = dotenv.maybeGet('SUPABASE_PUBLISHABLE_KEY')?.trim();
+  } catch (_) {
+    return null; // `.env` was never loaded.
+  }
+  if (key == null || key.isEmpty) return null;
+  try {
+    // Keeps the session on the device, so people stay signed in across restarts.
+    await Supabase.initialize(url: AppConstants.supabaseUrl, publishableKey: key);
+    return SupabaseAuthService(Supabase.instance.client);
+  } catch (_) {
+    return null;
+  }
 }
 
 class MyApp extends StatelessWidget {
