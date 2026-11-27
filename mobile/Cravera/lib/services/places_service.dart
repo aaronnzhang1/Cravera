@@ -1,4 +1,5 @@
-import 'dart:async' show TimeoutException;
+import 'dart:async' show Completer, StreamSubscription, TimeoutException, unawaited;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 import 'dart:convert';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -49,6 +50,83 @@ class PlacesService {
   /// ([AppConstants.supabaseUrl]), not read from `.env`, and Dart doesn't
   /// follow redirects for POST.
   static final endpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/places-search');
+
+  /// The function that turns a photo name into an image link without the key.
+  static final photoEndpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/place-photo');
+
+  /// Only Places photo names are sent, matching what the function accepts.
+  static final _photoName = RegExp(r'^places/[A-Za-z0-9_-]{1,300}/photos/[A-Za-z0-9_-]{1,1000}$');
+
+  /// An image link for [photoName], or null if there isn't one. A photo is
+  /// optional, so every failure is just "no photo", never an error.
+  Future<String?> photoUrl(String photoName) async {
+    if (!_photoName.hasMatch(photoName)) return null;
+    final request = http.Request('POST', photoEndpoint)
+      ..followRedirects = false
+      ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
+      ..body = jsonEncode({'photoName': photoName});
+    try {
+      final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
+      if (response.statusCode != 200) return null;
+      final uri = (jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>)['photoUri'];
+      return uri is String && isSafePhotoUri(uri) ? uri : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Largest photo we accept; Google's 800 px photos are far smaller.
+  static const maxPhotoBytes = 5 * 1024 * 1024;
+
+  /// The photo for [photoName] as image bytes, or null. The app downloads it
+  /// itself, without following redirects, so the request can never leave
+  /// Google's photo host (Flutter's own image loader would follow them).
+  Future<Uint8List?> photoBytes(String photoName) async {
+    final link = await photoUrl(photoName);
+    if (link == null) return null;
+    final request = http.Request('GET', Uri.parse(link))..followRedirects = false;
+    StreamSubscription<List<int>>? reading;
+    try {
+      final response = await _client.send(request).timeout(timeout);
+      // Decide from the headers before reading any of the body.
+      final type = response.headers['content-type'] ?? '';
+      final declared = response.contentLength;
+      if (response.statusCode != 200 || !type.startsWith('image/') || (declared != null && declared > maxPhotoBytes)) {
+        unawaited(response.stream.listen(null).cancel());
+        return null;
+      }
+      // Read chunk by chunk and stop as soon as the limit is passed, so a
+      // large or endless answer never fills memory.
+      final bytes = BytesBuilder(copy: false);
+      final done = Completer<Uint8List?>();
+      reading = response.stream.listen(
+        (chunk) {
+          bytes.add(chunk);
+          if (bytes.length > maxPhotoBytes && !done.isCompleted) done.complete(null);
+        },
+        onError: (Object _) {
+          if (!done.isCompleted) done.complete(null);
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete(bytes.isEmpty ? null : bytes.takeBytes());
+        },
+        cancelOnError: true,
+      );
+      return await done.future.timeout(timeout, onTimeout: () => null);
+    } catch (_) {
+      return null;
+    } finally {
+      await reading?.cancel(); // stops a download that passed the limit or timed out
+    }
+  }
+
+  /// Images load only from Google's photo host over HTTPS.
+  static bool isSafePhotoUri(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null &&
+        uri.scheme == 'https' &&
+        (uri.host == 'googleusercontent.com' || uri.host.endsWith('.googleusercontent.com'));
+  }
 
   /// Reads `SUPABASE_PUBLISHABLE_KEY` from `.env`. Returns null when it is
   /// missing, so callers can show [PlacesSearchError.notConfigured].
@@ -150,6 +228,8 @@ class PlacesService {
         rating: _double(item['rating']),
         distanceMeters: _int(item['distanceMeters']),
         photoName: _string(item['photoName']),
+        photoAuthor: _string(item['photoAuthor']),
+        photoAuthorUri: _httpsUrl(item['photoAuthorUri']),
         latitude: latitude,
         longitude: longitude,
       ));
@@ -158,6 +238,12 @@ class PlacesService {
     // problem, not "nothing matched".
     if (results.isNotEmpty && restaurants.isEmpty) throw const PlacesSearchException(PlacesSearchError.server);
     return restaurants;
+  }
+
+  static String? _httpsUrl(Object? v) {
+    final s = _string(v);
+    final uri = s == null ? null : Uri.tryParse(s);
+    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty ? s : null;
   }
 
   static String? _string(Object? v) => v is String && v.trim().isNotEmpty ? v : null;

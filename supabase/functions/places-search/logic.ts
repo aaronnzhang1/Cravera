@@ -45,6 +45,9 @@ export type RestaurantResult = {
   rating: number | null;
   distanceMeters: number;
   photoName: string | null;
+  /** Google requires showing the photo author's name (and link) with the photo. */
+  photoAuthor: string | null;
+  photoAuthorUri: string | null;
   latitude: number;
   longitude: number;
 };
@@ -174,11 +177,30 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
       rating: typeof p.rating === "number" ? p.rating : null,
       distanceMeters: Math.round(distance),
       photoName: typeof p.photos?.[0]?.name === "string" ? p.photos[0].name : null,
+      ...photoAuthor(p.photos?.[0]),
       latitude: lat,
       longitude: lng,
     });
   }
   return results;
+}
+
+/** The first author attribution of a photo; the link only if it is https. */
+export function photoAuthor(photo: unknown): { photoAuthor: string | null; photoAuthorUri: string | null } {
+  const author = (photo as { authorAttributions?: unknown[] })?.authorAttributions?.[0] as
+    | { displayName?: unknown; uri?: unknown }
+    | undefined;
+  const name = typeof author?.displayName === "string" && author.displayName.trim() ? author.displayName.trim() : null;
+  let uri: string | null = null;
+  if (name && typeof author?.uri === "string") {
+    try {
+      const parsed = new URL(author.uri.startsWith("//") ? `https:${author.uri}` : author.uri);
+      if (parsed.protocol === "https:") uri = parsed.toString();
+    } catch {
+      uri = null;
+    }
+  }
+  return { photoAuthor: name, photoAuthorUri: uri };
 }
 
 /** SUPABASE_PUBLISHABLE_KEYS may be a JSON object/array of keys or a plain string. */

@@ -50,8 +50,37 @@ class CravingSearch extends ChangeNotifier {
   /// How many places the user has said No to in this search.
   int get rejections => _rejections;
 
+  /// Photo bytes by place ID, fetched only for places actually shown. A key
+  /// with a null value means "asked, no photo (yet)".
+  final Map<String, Uint8List?> _photos = {};
+
   /// The place to show, while [status] is [SearchStatus.showing].
   Restaurant? get current => _status == SearchStatus.showing ? _results[_index] : null;
+
+  /// The photo of [current], once it has loaded; null means show the placeholder.
+  Uint8List? get currentPhoto {
+    final place = current;
+    return place == null ? null : _photos[place.placeId];
+  }
+
+  /// Fetches the photo for the first pick of a search only (maintainer,
+  /// 2026-11-27: keep photos free), so No never makes a Google request.
+  /// A late answer from an
+  /// older search is dropped.
+  void _loadPhoto() {
+    final service = places;
+    if (_status != SearchStatus.showing || service == null) return;
+    final place = _results[_index];
+    final name = place.photoName;
+    if (name == null || _photos.containsKey(place.placeId)) return;
+    _photos[place.placeId] = null;
+    final request = _request;
+    service.photoBytes(name).then((bytes) {
+      if (request != _request || bytes == null) return;
+      _photos[place.placeId] = bytes;
+      notifyListeners();
+    });
+  }
 
   /// True when the craving is longer than the server accepts.
   bool get queryTooLong => _query.length > maxQueryLength;
@@ -72,6 +101,7 @@ class CravingSearch extends ChangeNotifier {
     _rejections = 0;
     _error = null;
     _searchedAt = null;
+    _photos.clear(); // photo links are short-lived; each search starts fresh
     if (trimmed.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
@@ -97,6 +127,7 @@ class CravingSearch extends ChangeNotifier {
       _status = SearchStatus.failed;
     }
     notifyListeners();
+    _loadPhoto();
   }
 
   /// "No": shows the next result from the same answer, without a request.
@@ -157,6 +188,7 @@ class CravingSearch extends ChangeNotifier {
     _rejections = 0;
     _error = null;
     _searchedAt = null;
+    _photos.clear();
     notifyListeners();
   }
 
