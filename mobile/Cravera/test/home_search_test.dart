@@ -241,10 +241,16 @@ void main() {
     await _searchFor(tester, 'qzxv');
     tester.view.devicePixelRatio = 2;
     tester.view.physicalSize = const Size(1136, 640); // 568 x 320
+    await _settle(tester);
+    // Focus the field, then the keyboard opens and the layout switches to scrolling.
+    await tester.tap(find.widgetWithText(TextField, 'Tell me more…'));
+    await tester.pump();
     tester.view.viewInsets = const FakeViewPadding(bottom: 400); // 200 pt keyboard
     await _settle(tester);
 
     expect(tester.takeException(), isNull, reason: 'no overflow');
+    final field = tester.state<EditableTextState>(find.byType(EditableText));
+    expect(field.widget.focusNode.hasFocus, isTrue, reason: 'the keyboard stays up through the layout switch');
     await tester.ensureVisible(find.byTooltip('Search again'));
     await tester.pump();
     expect(find.byTooltip('Search again').hitTestable(), findsOneWidget);

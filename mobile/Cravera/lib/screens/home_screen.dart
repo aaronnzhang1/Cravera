@@ -24,6 +24,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _promptController = TextEditingController();
   final _repromptController = TextEditingController();
 
+  /// Keeps the outcome screen's input the same widget when the keyboard
+  /// switches it between the pinned and the fully scrolling layout, so the
+  /// field keeps focus and the keyboard stays up.
+  final _outcomeInputKey = GlobalKey();
+
   /// The search ([CravingSearch.searchId]) the user hid "Narrow it down"
   /// for; any new search, even with the same words, can show it again.
   int? _narrowHiddenFor;
@@ -348,6 +353,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               )
             : canRefine
                 ? _PromptInput(
+                    key: _outcomeInputKey,
                     controller: _repromptController,
                     isBusy: false,
                     hint: 'Tell me more…',
@@ -1052,6 +1058,7 @@ class _PromptInput extends StatelessWidget {
   final String hint;
   final String sendTooltip;
   const _PromptInput({
+    super.key,
     required this.controller,
     required this.isBusy,
     required this.onSend,
