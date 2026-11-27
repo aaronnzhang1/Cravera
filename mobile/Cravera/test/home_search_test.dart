@@ -1,0 +1,149 @@
+import 'package:cravera/core/session.dart';
+import 'package:cravera/main.dart';
+import 'package:cravera/models/restaurant.dart';
+import 'package:cravera/screens/home_screen.dart';
+import 'package:cravera/services/craving_search.dart';
+import 'package:cravera/services/location_service.dart';
+import 'package:cravera/services/places_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'craving_search_test.dart' show FakePlaces;
+
+// Fictional data only; the network and GPS are faked.
+
+const _nearby = SearchLocation(latitude: 10, longitude: 20, label: 'Near you');
+
+class _FoundLocation extends LocationService {
+  const _FoundLocation();
+  @override
+  Future<LocationResult> current() async => const LocationResult.found(_nearby);
+}
+
+Restaurant _place(String id, String name) => Restaurant(
+      placeId: id,
+      name: name,
+      cuisine: 'Ramen Restaurant',
+      address: '$id Example St',
+      latitude: 10.001,
+      longitude: 20.001,
+      distanceMeters: 150,
+    );
+
+Future<void> _settle(WidgetTester tester) async {
+  // The logo animates forever, so pumpAndSettle never finishes. Step time instead.
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+Future<AppSession> _homeWith(WidgetTester tester, FakePlaces places) async {
+  final session = AppSession(locationService: const _FoundLocation(), search: CravingSearch(places: places));
+  await tester.pumpWidget(MyApp(session: session));
+  await tester.pump();
+  await tester.tap(find.text('Continue as guest'));
+  await _settle(tester);
+  return session;
+}
+
+Future<void> _searchFor(WidgetTester tester, String craving) async {
+  await tester.enterText(find.widgetWithText(TextField, 'Ask Cravera…'), craving);
+  await tester.tap(find.byTooltip('Search'));
+  await _settle(tester);
+}
+
+void main() {
+  testWidgets('a craving shows a real result; No walks the results, then asks to refine', (tester) async {
+    final places = FakePlaces((q) => q == 'ramen'
+        ? [_place('a', 'Test Noodle House'), _place('b', 'Sample Ramen Bar')]
+        : [_place('c', 'Example Spicy Ramen')]);
+    await _homeWith(tester, places);
+
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Test Noodle House'), findsOneWidget);
+    expect(places.locations.single.label, 'Near you', reason: 'searches around the device location');
+
+    await tester.tap(find.text('No'));
+    await _settle(tester);
+    expect(find.text('Sample Ramen Bar'), findsOneWidget);
+
+    await tester.tap(find.text('No'));
+    await _settle(tester);
+    expect(find.textContaining("That's every open match"), findsOneWidget);
+    expect(places.queries, ['ramen'], reason: 'No never makes a new request');
+
+    await tester.enterText(find.widgetWithText(TextField, 'e.g. outdoor seating, no seafood'), 'spicy');
+    await tester.tap(find.byTooltip('Search again'));
+    await _settle(tester);
+    expect(places.queries, ['ramen', 'ramen spicy']);
+    expect(find.text('Example Spicy Ramen'), findsOneWidget);
+  });
+
+  testWidgets('no results says so and offers a refine', (tester) async {
+    await _homeWith(tester, FakePlaces((_) => []));
+    await _searchFor(tester, 'ramen');
+    expect(find.textContaining('Nothing open matched'), findsOneWidget);
+    expect(find.text('New search'), findsOneWidget);
+  });
+
+  testWidgets('no network shows a message and Try again searches again', (tester) async {
+    var offline = true;
+    final places = FakePlaces(
+        (_) => offline ? throw const PlacesSearchException(PlacesSearchError.network) : [_place('a', 'Test Noodle House')]);
+    await _homeWith(tester, places);
+
+    await _searchFor(tester, 'ramen');
+    expect(find.text('No connection.'), findsOneWidget);
+
+    offline = false;
+    await tester.tap(find.text('Try again'));
+    await _settle(tester);
+    expect(find.text('Test Noodle House'), findsOneWidget);
+    expect(places.queries, ['ramen', 'ramen']);
+  });
+
+  testWidgets('a failing function shows a message, and New search goes back', (tester) async {
+    await _homeWith(tester, FakePlaces((_) => throw const PlacesSearchException(PlacesSearchError.server)));
+    await _searchFor(tester, 'ramen');
+    expect(find.text("Search isn't working right now."), findsOneWidget);
+
+    await tester.tap(find.text('New search'));
+    await _settle(tester);
+    expect(find.textContaining('craving today?'), findsOneWidget);
+  });
+
+  testWidgets('the card\'s close button goes back to Home without another search', (tester) async {
+    final places = FakePlaces((_) => [_place('a', 'Test Noodle House'), _place('b', 'Sample Ramen Bar')]);
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Test Noodle House'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to search'));
+    await _settle(tester);
+
+    expect(find.textContaining('craving today?'), findsOneWidget);
+    expect(find.text('Sample Ramen Bar'), findsNothing, reason: 'close is not No');
+    expect(places.queries, ['ramen']);
+  });
+
+  testWidgets('sign out clears the search', (tester) async {
+    final session = await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
+    await _searchFor(tester, 'ramen');
+    expect(session.search.status, SearchStatus.showing);
+
+    session.signOut();
+    await _settle(tester);
+    expect(session.search.status, SearchStatus.idle);
+    expect(session.search.query, isEmpty);
+  });
+
+  test('Yes opens directions to the exact place, not a name search', () {
+    final uri = directionsUri(_place('fake-place-1', 'Test Noodle House'))!;
+    expect(uri.host, 'www.google.com');
+    expect(uri.path, '/maps/dir/');
+    expect(uri.queryParameters['destination'], '10.001,20.001');
+    expect(uri.queryParameters['destination_place_id'], 'fake-place-1');
+    expect(uri.toString(), isNot(contains('Noodle')));
+    expect(directionsUri(const Restaurant(placeId: 'x', name: 'No Coordinates')), isNull);
+  });
+}

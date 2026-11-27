@@ -1,17 +1,15 @@
-import 'dart:math' show max;
-
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_colors.dart';
 import '../core/session.dart';
 import '../models/restaurant.dart';
+import '../services/craving_search.dart';
 import '../services/location_service.dart';
+import '../services/places_service.dart';
 import '../widgets/cravera_logo.dart';
 import '../widgets/floating_cards.dart';
 import '../widgets/glass.dart';
-
-enum _HomeView { idle, loading, result }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,11 +21,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _promptController = TextEditingController();
   final _repromptController = TextEditingController();
-
-  _HomeView _view = _HomeView.idle;
-  int _rejectionCount = 0;
-  Restaurant? _currentResult;
-  bool _showRepromptBanner = false;
 
   @override
   void initState() {
@@ -53,10 +46,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final session = AppSessionScope.of(context);
-    return switch (_view) {
-      _HomeView.idle => _buildIdle(context, session),
-      _HomeView.loading => _buildLoading(context),
-      _HomeView.result => _buildResult(context, session),
+    final search = session.search;
+    return switch (search.status) {
+      SearchStatus.idle => _buildIdle(context, session),
+      SearchStatus.loading => _buildLoading(context),
+      SearchStatus.showing => _buildResult(context, session),
+      SearchStatus.exhausted || SearchStatus.failed => _buildOutcome(context, search),
     };
   }
 
@@ -189,15 +184,16 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: SingleChildScrollView(
                   child: _InlineRestaurantCard(
-                    restaurant: _currentResult!,
-                    prompt: _promptController.text.trim(),
-                    onNo: _onNo,
+                    restaurant: session.search.current!,
+                    prompt: session.search.query,
+                    onNo: session.search.next,
                     onYes: _onYes,
+                    onClose: session.search.reset,
                     session: session,
                   ),
                 ),
               ),
-              if (_showRepromptBanner) ...[
+              if (session.search.rejections >= 3) ...[
                 const SizedBox(height: 8),
                 _RepromptBanner(controller: _repromptController, onSubmit: _onReprompt),
               ],
@@ -209,67 +205,84 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _startSearch(String prompt) async {
-    if (_view == _HomeView.loading || prompt.isEmpty) return;
+    if (prompt.isEmpty || AppSessionScope.of(context).search.status == SearchStatus.loading) return;
     final session = AppSessionScope.of(context);
     if (session.searchLocation == null) {
       final gotPlace = await _askForPlace(session);
       if (!gotPlace || !mounted) return;
     }
 
-    setState(() {
-      _view = _HomeView.loading;
-      _showRepromptBanner = false;
-    });
-
-    await Future<void>.delayed(const Duration(milliseconds: 2700));
-    if (!mounted) return;
-
-    final items = session.suggestedRestaurants;
-    if (items.isEmpty) {
-      setState(() => _view = _HomeView.idle);
-      return;
-    }
-
-    final restaurant = items[_rejectionCount % max(1, items.length)];
-    setState(() {
-      _currentResult = restaurant;
-      _view = _HomeView.result;
-    });
+    final near = session.searchLocation;
+    if (near == null) return;
+    await session.search.start(prompt, near);
   }
 
-  Future<void> _onNo() async {
-    _rejectionCount++;
-    final showBanner = _rejectionCount >= 3;
-
-    setState(() {
-      _view = _HomeView.loading;
-      _showRepromptBanner = showBanner;
-      _currentResult = null;
-    });
-
-    await Future<void>.delayed(const Duration(milliseconds: 2700));
-    if (!mounted) return;
-
-    final session = AppSessionScope.of(context);
-    final items = session.suggestedRestaurants;
-    final restaurant = items[_rejectionCount % max(1, items.length)];
-    setState(() {
-      _currentResult = restaurant;
-      _view = _HomeView.result;
-    });
-  }
-
+  /// Adds the user's extra words to the craving and searches again.
   void _onReprompt(String extra) {
     if (extra.trim().isEmpty) return;
-    final original = _promptController.text.trim();
-    _rejectionCount = 0;
     _repromptController.clear();
-    _startSearch('$original – ${extra.trim()}');
+    final search = AppSessionScope.of(context).search;
+    search.refine(extra).then((_) {
+      if (mounted) _promptController.text = search.query;
+    });
   }
 
   void _onYes() {
-    if (_currentResult == null) return;
-    _showNavOptions(context, _currentResult!);
+    final current = AppSessionScope.of(context).search.current;
+    if (current == null) return;
+    _showNavOptions(context, current);
+  }
+
+  /// Out of results, nothing found, or a failed search: say which, and offer
+  /// the next step (refine, try again, or start over).
+  Widget _buildOutcome(BuildContext context, CravingSearch search) {
+    final text = Theme.of(context).textTheme;
+    final failed = search.status == SearchStatus.failed;
+    final (title, detail) = failed
+        ? searchErrorText(search.error ?? PlacesSearchError.server)
+        : search.foundNothing
+            ? ('Nothing open matched “${search.query}” nearby.', 'Try different words, or add more detail.')
+            : ("That's every open match for “${search.query}” nearby.", 'Add something to narrow or change it.');
+    return SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(
+                  failed ? Icons.cloud_off_rounded : Icons.search_off_rounded,
+                  size: 48,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(height: 16),
+                Text(title, textAlign: TextAlign.center, style: text.titleLarge),
+                const SizedBox(height: 8),
+                Text(
+                  detail,
+                  textAlign: TextAlign.center,
+                  style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                if (failed)
+                  FilledButton.icon(
+                    onPressed: search.retry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  )
+                else
+                  _RepromptBanner(controller: _repromptController, onSubmit: _onReprompt),
+                const SizedBox(height: 8),
+                TextButton(onPressed: search.reset, child: const Text('New search')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Lets the user pick where to search: a typed place, or the device
@@ -398,6 +411,7 @@ class _InlineRestaurantCard extends StatelessWidget {
   final String prompt;
   final VoidCallback onNo;
   final VoidCallback onYes;
+  final VoidCallback onClose;
   final AppSession session;
 
   const _InlineRestaurantCard({
@@ -405,6 +419,7 @@ class _InlineRestaurantCard extends StatelessWidget {
     required this.prompt,
     required this.onNo,
     required this.onYes,
+    required this.onClose,
     required this.session,
   });
 
@@ -428,7 +443,7 @@ class _InlineRestaurantCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(child: Text("Cravera's pick", style: text.titleMedium)),
             IconButton(
-              onPressed: onNo,
+              onPressed: onClose,
               icon: const Icon(Icons.close_rounded),
               color: AppColors.textSecondary,
               tooltip: 'Back to search',
@@ -542,6 +557,14 @@ String locationProblemText(LocationProblem problem) => switch (problem) {
   LocationProblem.denied => 'Location permission was denied.',
   LocationProblem.deniedForever => 'Location is blocked in settings.',
   LocationProblem.failed => "Couldn't get your location.",
+};
+
+/// What to tell the user when a search fails: a title and what to do next.
+(String, String) searchErrorText(PlacesSearchError error) => switch (error) {
+  PlacesSearchError.network => ('No connection.', 'Check your internet, then try again.'),
+  PlacesSearchError.server => ("Search isn't working right now.", 'Try again in a moment.'),
+  PlacesSearchError.notConfigured => ("Search isn't set up in this app.", 'Try again, or reinstall the app.'),
+  PlacesSearchError.rejected => ('Something went wrong with that search.', 'Try again.'),
 };
 
 /// A small glass pill showing where searches happen. Tap it to change.
@@ -874,10 +897,23 @@ Future<void> _showNavOptions(BuildContext context, Restaurant restaurant) {
   );
 }
 
+/// Directions to this exact place: its coordinates as the destination and its
+/// Google place ID, never a search by name (which could pick another branch).
+/// Null when the place has no coordinates.
+Uri? directionsUri(Restaurant restaurant) {
+  final lat = restaurant.latitude;
+  final lng = restaurant.longitude;
+  if (lat == null || lng == null) return null;
+  return Uri.https('www.google.com', '/maps/dir/', {
+    'api': '1',
+    'destination': '$lat,$lng',
+    'destination_place_id': restaurant.placeId,
+  });
+}
+
 Future<void> _openNavigation(BuildContext context, Restaurant restaurant) async {
-  final encoded = Uri.encodeComponent(restaurant.name);
-  final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encoded');
-  final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  final uri = directionsUri(restaurant);
+  final launched = uri != null && await launchUrl(uri, mode: LaunchMode.externalApplication);
 
   if (!context.mounted) return;
   if (!launched) {
@@ -1084,7 +1120,7 @@ class _PhotoHeader extends StatelessWidget {
                   colors: [AppColors.accentSoft, AppColors.surface2],
                 ),
               ),
-              child: const Center(child: Icon(Icons.ramen_dining_rounded, color: AppColors.textMuted, size: 56)),
+              child: const Center(child: Icon(Icons.restaurant_rounded, color: AppColors.textMuted, size: 56)),
             ),
     );
   }

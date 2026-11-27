@@ -62,5 +62,5 @@ Ideas captured in the planning docs that no phase owns yet. Promote one by givin
 
 | # | Decision | Needed by |
 |---|---|---|
-| 3 | Guest search abuse protection: per-device and daily limits in the Edge Functions (429, no upstream call). While testing, a Google Cloud daily quota on Places API (New) and a $10 budget alert bound cost (maintainer, 2026-11-27). Every function with `verify_jwt: false` needs it | Before any build leaves the maintainer (testers, TestFlight, Play, public) |
+| 3 | Guest search abuse protection: per-device and daily limits in the Edge Functions (429, no upstream call). While testing there is no hard cap (maintainer, 2026-11-27): set a daily quota on SearchTextRequest (about 30/day keeps within the ~1,000 free Enterprise searches a month) once search works end to end. Every function with `verify_jwt: false` needs it | Before any build leaves the maintainer (testers, TestFlight, Play, public) |
 | 4 | Data source for the Trending Spots Hub | If it's scheduled |

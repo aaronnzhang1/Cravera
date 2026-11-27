@@ -4,6 +4,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/app_theme.dart';
 import 'core/routes.dart';
 import 'core/session.dart';
+import 'services/craving_search.dart';
+import 'services/places_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,7 +14,7 @@ Future<void> main() async {
   } catch (_) {
     // `.env` is treated as an asset; if a developer runs without it, we still want UI to boot.
   }
-  runApp(MyApp(session: AppSession()));
+  runApp(MyApp(session: AppSession(search: CravingSearch(places: PlacesService.fromEnv()))));
 }
 
 class MyApp extends StatelessWidget {

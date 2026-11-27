@@ -1,13 +1,22 @@
 import 'package:flutter/widgets.dart';
 
 import '../models/restaurant.dart';
+import '../services/craving_search.dart';
 import '../services/location_service.dart';
 
 class AppSession extends ChangeNotifier {
-  AppSession({this.locationService = const LocationService()});
+  AppSession({this.locationService = const LocationService(), CravingSearch? search})
+      : search = search ?? CravingSearch() {
+    // Screens listen to the session, so pass search changes on.
+    this.search.addListener(notifyListeners);
+  }
 
   /// Finds where to search. Tests pass a fake.
   final LocationService locationService;
+
+  /// The current craving search and its results. Tests pass one with a fake
+  /// [PlacesService].
+  final CravingSearch search;
 
   String? _displayName;
   SearchLocation? _searchLocation;
@@ -135,6 +144,7 @@ class AppSession extends ChangeNotifier {
     _locationProblem = null;
     _locating = false;
     _locationRequest++;
+    search.reset(); // the next user must not see this search
     notifyListeners();
   }
 
