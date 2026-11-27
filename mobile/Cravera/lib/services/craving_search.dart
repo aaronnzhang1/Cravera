@@ -53,6 +53,10 @@ class CravingSearch extends ChangeNotifier {
   int _request = 0;
 
   SearchStatus get status => _status;
+
+  /// Changes with every search (including refines and retries), so a screen
+  /// can remember something for one search only.
+  int get searchId => _request;
   String get query => _query;
   PlacesSearchError? get error => _error;
 

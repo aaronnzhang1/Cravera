@@ -24,9 +24,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _promptController = TextEditingController();
   final _repromptController = TextEditingController();
 
-  /// The search the user hid "Narrow it down" for; it stays hidden until a
-  /// new search (a refine changes the query, so it can come back later).
-  String? _narrowHiddenFor;
+  /// The search ([CravingSearch.searchId]) the user hid "Narrow it down"
+  /// for; any new search, even with the same words, can show it again.
+  int? _narrowHiddenFor;
 
   @override
   void initState() {
@@ -211,12 +211,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-              if (session.search.offerRefine && _narrowHiddenFor != session.search.query) ...[
+              if (session.search.offerRefine && _narrowHiddenFor != session.search.searchId) ...[
                 const SizedBox(height: 6),
                 _NarrowDown(
                   controller: _repromptController,
                   onSubmit: _onReprompt,
-                  onHide: () => setState(() => _narrowHiddenFor = session.search.query),
+                  onHide: () => setState(() => _narrowHiddenFor = session.search.searchId),
                 ),
               ],
             ],

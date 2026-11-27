@@ -48,7 +48,7 @@ const UPSTREAM_TIMEOUT_MS = 8000;
 export const REQUEST_BUDGET_MS = 11_000;
 const MIN_CURATE_MS = 1500;
 const MIN_RETRY_MS = 2500;
-/** "Close by" when the guest wanted near and the place is within this. */
+/** "Close by" when the place is within this. */
 const NEAR_M = 1500;
 const HIGHLY_RATED = 4.5;
 const EARTH_RADIUS_M = 6_371_000;
@@ -303,7 +303,9 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   // 1. Understand. Without Gemini, or if it fails, use the raw text; when
   //    refining, the new words always fit and the previous text is shortened.
   const understood = gemini ? await understand(gemini, input.query, input.previousIntent, input.localHour, left()) : null;
-  const intent = understood ?? fallbackIntent(fallbackText(input));
+  // A refine that falls back keeps the previous (validated) filters.
+  const intent = understood ??
+    (input.previousIntent ? { ...input.previousIntent, textQuery: fallbackText(input) } : fallbackIntent(input.query));
 
   // 2. Search. If the narrowed search finds nothing, try once more with only
   //    the search text, so filters never turn a match into "nothing open".
@@ -335,7 +337,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   }
 
   // 4. Explain, from Places facts only.
-  results = results.map((r) => ({ ...r, reasons: reasonsFor(r, intent) }));
+  results = results.map((r) => ({ ...r, reasons: reasonsFor(r) }));
   return json(200, { results, intent });
 }
 
@@ -348,13 +350,14 @@ export function fallbackText(input: SearchInput): string {
 }
 
 /**
- * "Why this pick", from facts Places gave for this place compared with what
- * the guest asked for. Fixed labels in code: the model can't add or word them.
+ * "Why this pick", from facts Places gave for this place only. Fixed labels
+ * in code: the model can't add, word or influence them (it never decides
+ * what the guest "asked for" on the card).
  */
-export function reasonsFor(r: RestaurantResult, intent: Intent): string[] {
+export function reasonsFor(r: RestaurantResult): string[] {
   const reasons: string[] = [];
-  if (r.priceLevel !== null && intent.priceLevels.includes(r.priceLevel)) reasons.push("In your price range");
-  if (intent.distance === "near" && r.distanceMeters <= NEAR_M) reasons.push("Close by");
+  if (r.priceLevel !== null && r.priceLevel <= 1) reasons.push("Budget-friendly");
+  if (r.distanceMeters <= NEAR_M) reasons.push("Close by");
   if (r.rating !== null && r.rating >= HIGHLY_RATED) reasons.push("Highly rated");
   return reasons;
 }

@@ -138,14 +138,30 @@ test("curation with no usable order is null", () => {
 const fact = (o: Record<string, unknown>) =>
   ({ priceLevel: null, rating: null, distanceMeters: 5000, ...o }) as unknown as Parameters<typeof reasonsFor>[0];
 
-test("reasons come only from Places facts compared with the intent", () => {
-  assert.deepEqual(reasonsFor(fact({ priceLevel: 1, rating: 4.7, distanceMeters: 800 }), intent), [
-    "In your price range",
-    "Close by",
-    "Highly rated",
-  ]);
-  assert.deepEqual(reasonsFor(fact({ priceLevel: 3, rating: 4.4, distanceMeters: 1600 }), intent), []);
-  assert.deepEqual(reasonsFor(fact({ priceLevel: null, distanceMeters: 100 }), { ...intent, distance: "any", priceLevels: [] }), []);
+test("reasons come only from this place's Places facts", () => {
+  assert.deepEqual(reasonsFor(fact({ priceLevel: 1, rating: 4.7, distanceMeters: 800 })), ["Budget-friendly", "Close by", "Highly rated"]);
+  assert.deepEqual(reasonsFor(fact({ priceLevel: 3, rating: 4.4, distanceMeters: 1600 })), []);
+  assert.deepEqual(reasonsFor(fact({ priceLevel: null, rating: null, distanceMeters: 1500 })), ["Close by"]);
+});
+
+test("a wrong model reading of the price can't put a price claim on the card", async () => {
+  // The guest asked for cheap; a misled model says very expensive.
+  const wrong = { ...gymIntent, priceLevels: [4] };
+  const g = fakeGoogle(
+    [new Response(JSON.stringify({ places: [place("a", { priceLevel: "PRICE_LEVEL_VERY_EXPENSIVE" })] }))],
+    [geminiAnswer(wrong)],
+  );
+  const { results } = await (await handle(request({ query: "cheap tacos", ...here }), env, g.fn)).json();
+  assert.ok(!JSON.stringify(results[0].reasons).toLowerCase().includes("price"), JSON.stringify(results[0].reasons));
+});
+
+test("a refine that falls back keeps the previous filters", async () => {
+  const g = fakeGoogle([new Response(JSON.stringify({ places: [] })), new Response("{}")], [new Error("offline")]);
+  const previousIntent = { ...gymIntent, textQuery: "tacos", priceLevels: [1] };
+  const body = await (await handle(request({ query: "closer", previousIntent, ...here }), env, g.fn)).json();
+  assert.deepEqual(g.placesCalls()[0].body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE"]);
+  assert.equal(g.placesCalls()[0].body.textQuery, "tacos closer");
+  assert.deepEqual(body.intent.priceLevels, [1], "later refines keep it too");
 });
 
 // --- the full search with Gemini ---
@@ -172,7 +188,7 @@ test("curation reorders results; every field and reason still comes from Places"
   );
   const { results } = await (await handle(request({ query: "gym food", ...here }), env, g.fn)).json();
   assert.deepEqual(results.map((r: { placeId: string }) => r.placeId), ["b", "c", "a"]);
-  assert.deepEqual(results[0].reasons, ["In your price range", "Close by"]);
+  assert.deepEqual(results[0].reasons, ["Budget-friendly", "Close by"]);
   assert.equal(results[0].name, "Test Place b");
   assert.equal(results[0].priceLevel, 1);
   // Gemini saw only refs and Places fields, never place IDs or coordinates.
@@ -225,7 +241,8 @@ for (const [what, make] of fallbacks) {
     assert.equal(g.placesCalls()[0].body.textQuery, "cheap late-night tacos");
     assert.equal(g.placesCalls()[0].body.includedType, "restaurant");
     assert.deepEqual(body.results.map((r: { placeId: string }) => r.placeId), ["a", "b"]);
-    assert.deepEqual(body.results[0].reasons, []);
+    // Reasons are Places facts only (this fake place is ~140 m away).
+    assert.deepEqual(body.results[0].reasons, ["Close by"]);
   });
 }
 

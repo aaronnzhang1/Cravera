@@ -128,6 +128,16 @@ void main() {
     await _tapVisible(tester, find.text('No'));
     await _settle(tester);
     expect(find.text('Narrow it down'), findsNothing, reason: 'stays hidden for this search');
+
+    // A new search with the same words is a new search: the chip can come back.
+    await _tapVisible(tester, find.byTooltip('Back to search'));
+    await _settle(tester);
+    await _searchFor(tester, 'ramen');
+    for (var i = 0; i < CravingSearch.offerRefineAfter; i++) {
+      await _tapVisible(tester, find.text('No'));
+      await _settle(tester);
+    }
+    expect(find.text('Narrow it down'), findsOneWidget);
   });
 
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
