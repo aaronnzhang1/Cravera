@@ -1,3 +1,5 @@
+import 'dart:typed_data' show Uint8List;
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -200,6 +202,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     onNo: session.search.next,
                     onYes: _onYes,
                     onClose: session.search.reset,
+                    photo: session.search.currentPhoto,
                     session: session,
                   ),
                 ),
@@ -449,6 +452,7 @@ class _InlineRestaurantCard extends StatelessWidget {
   final VoidCallback onNo;
   final VoidCallback onYes;
   final VoidCallback onClose;
+  final Uint8List? photo;
   final AppSession session;
 
   const _InlineRestaurantCard({
@@ -457,6 +461,7 @@ class _InlineRestaurantCard extends StatelessWidget {
     required this.onNo,
     required this.onYes,
     required this.onClose,
+    required this.photo,
     required this.session,
   });
 
@@ -498,7 +503,15 @@ class _InlineRestaurantCard extends StatelessWidget {
             children: [
               Stack(
                 children: [
-                  _PhotoHeader(photoUrl: restaurant.photoUrl),
+                  _PhotoHeader(photo: photo),
+                  // Google requires the photo author's credit with the photo.
+                  if (photo != null && restaurant.photoAuthor != null)
+                    Positioned(
+                      left: 10,
+                      bottom: 10,
+                      right: 70,
+                      child: _PhotoCredit(author: restaurant.photoAuthor!, uri: restaurant.photoAuthorUri),
+                    ),
                   Positioned(
                     top: 12,
                     right: 12,
@@ -553,7 +566,10 @@ class _InlineRestaurantCard extends StatelessWidget {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 8),
+                    // Places data shown outside a Google map needs this credit.
+                    Text('Google Maps', style: text.labelSmall?.copyWith(color: AppColors.textMuted)),
+                    const SizedBox(height: 14),
                     Row(
                       children: [
                         Expanded(
@@ -1149,27 +1165,76 @@ class _Pill extends StatelessWidget {
 }
 
 class _PhotoHeader extends StatelessWidget {
-  final String? photoUrl;
-  const _PhotoHeader({required this.photoUrl});
+  /// Already downloaded by [PlacesService.photoBytes], so nothing here goes
+  /// to the network. Null shows the placeholder.
+  final Uint8List? photo;
+  const _PhotoHeader({required this.photo});
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = photoUrl != null && photoUrl!.trim().isNotEmpty;
+    final bytes = photo;
+    final placeholder = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.accentSoft, AppColors.surface2],
+        ),
+      ),
+      child: const Center(child: Icon(Icons.restaurant_rounded, color: AppColors.textMuted, size: 56)),
+    );
     return SizedBox(
       height: 210,
       width: double.infinity,
-      child: hasPhoto
-          ? Image.network(photoUrl!, fit: BoxFit.cover)
-          : DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.accentSoft, AppColors.surface2],
-                ),
-              ),
-              child: const Center(child: Icon(Icons.restaurant_rounded, color: AppColors.textMuted, size: 56)),
+      child: bytes == null
+          ? placeholder
+          : Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              // Bytes that aren't a valid image show the placeholder.
+              errorBuilder: (context, error, stack) => placeholder,
             ),
+    );
+  }
+}
+
+/// "Photo: [author]" over the photo, linking to the author's page when Google
+/// gives one (https only).
+class _PhotoCredit extends StatelessWidget {
+  final String author;
+  final String? uri;
+  const _PhotoCredit({required this.author, required this.uri});
+
+  @override
+  Widget build(BuildContext context) {
+    final link = uri == null ? null : Uri.tryParse(uri!);
+    final label = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.background.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        'Photo: $author',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppColors.textPrimary,
+              decoration: link == null ? null : TextDecoration.underline,
+            ),
+      ),
+    );
+    if (link == null) return Align(alignment: Alignment.bottomLeft, child: label);
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Semantics(
+        link: true,
+        child: InkWell(
+          onTap: () => launchUrl(link, mode: LaunchMode.externalApplication),
+          child: label,
+        ),
+      ),
     );
   }
 }

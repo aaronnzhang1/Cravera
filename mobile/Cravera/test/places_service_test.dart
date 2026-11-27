@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:cravera/core/constants.dart';
@@ -83,6 +84,18 @@ void main() {
       expect(r.latitude, 37.001);
       expect(r.longitude, -122.001);
       expect(r.photoUrl, isNull);
+    });
+
+    test('keeps the photo author, and only an https author link', () {
+      final [a, b] = PlacesService.parseResults(jsonEncode({
+        'results': [
+          result(placeId: 'a', overrides: {'photoAuthor': 'Test Photographer', 'photoAuthorUri': 'https://maps.google.com/maps/contrib/fake'}),
+          result(placeId: 'b', overrides: {'photoAuthor': 'Test Photographer', 'photoAuthorUri': 'javascript:alert(1)'}),
+        ],
+      }));
+      expect(a.photoAuthor, 'Test Photographer');
+      expect(a.photoAuthorUri, 'https://maps.google.com/maps/contrib/fake');
+      expect(b.photoAuthorUri, isNull);
     });
 
     test('keeps the server order', () {
@@ -186,6 +199,134 @@ void main() {
         service.search(query: 'ramen', near: near),
         throwsA(isA<PlacesSearchException>().having((e) => e.error, 'error', PlacesSearchError.network)),
       );
+    });
+  });
+
+  group('photos', () {
+    const name = 'places/fake-1/photos/AbC_123';
+
+    test('asks the photo function and returns a Google image link', () async {
+      late http.Request sent;
+      final client = MockClient((request) async {
+        sent = request;
+        return http.Response(jsonEncode({'photoUri': 'https://lh3.googleusercontent.com/p/fake=s800'}), 200);
+      });
+      final url = await serviceWith(client).photoUrl(name);
+      expect(url, 'https://lh3.googleusercontent.com/p/fake=s800');
+      expect(sent.url, PlacesService.photoEndpoint);
+      expect(sent.headers['apikey'], 'sb_publishable_test');
+      expect(jsonDecode(sent.body), {'photoName': name});
+      expect(sent.followRedirects, isFalse);
+    });
+
+    test('anything unexpected is just "no photo"', () async {
+      Future<String?> answer(http.Response response) =>
+          serviceWith(MockClient((_) async => response)).photoUrl(name);
+      expect(await answer(http.Response(jsonEncode({'photoUri': 'https://evil.example/x'}), 200)), isNull);
+      expect(await answer(http.Response(jsonEncode({'photoUri': 'http://lh3.googleusercontent.com/x'}), 200)), isNull);
+      expect(await answer(http.Response('{"error":"x"}', 502)), isNull);
+      expect(await answer(http.Response('not json', 200)), isNull);
+      expect(await serviceWith(MockClient((_) async => throw http.ClientException('offline'))).photoUrl(name), isNull);
+    });
+
+    const link = 'https://lh3.googleusercontent.com/p/fake=s800';
+
+    /// First answers the photo function with [link], then the image request with [image].
+    MockClient photoServer(http.Response image, List<http.BaseRequest> requests) => MockClient((request) async {
+          requests.add(request);
+          if (request.url == PlacesService.photoEndpoint) {
+            return http.Response(jsonEncode({'photoUri': link}), 200);
+          }
+          return image;
+        });
+
+    test('downloads the image itself from the Google link', () async {
+      final requests = <http.BaseRequest>[];
+      final bytes = await serviceWith(photoServer(
+        http.Response.bytes([1, 2, 3], 200, headers: {'content-type': 'image/jpeg'}),
+        requests,
+      )).photoBytes(name);
+      expect(bytes, [1, 2, 3]);
+      expect(requests.map((r) => r.url.toString()), [PlacesService.photoEndpoint.toString(), link]);
+      expect(requests.last.followRedirects, isFalse);
+    });
+
+    test('a redirect from the image host is never followed', () async {
+      final requests = <http.BaseRequest>[];
+      final bytes = await serviceWith(photoServer(
+        http.Response('', 302, headers: {'location': 'https://elsewhere.example/collect'}),
+        requests,
+      )).photoBytes(name);
+      expect(bytes, isNull);
+      expect(requests, hasLength(2), reason: 'no request to the redirect target');
+      expect(requests.any((r) => r.url.host == 'elsewhere.example'), isFalse);
+    });
+
+    test('not an image, empty, or too large is "no photo"', () async {
+      Future<Uint8List?> bytesFor(http.Response image) => serviceWith(photoServer(image, [])).photoBytes(name);
+      expect(await bytesFor(http.Response('<html>', 200, headers: {'content-type': 'text/html'})), isNull);
+      expect(await bytesFor(http.Response.bytes([], 200, headers: {'content-type': 'image/jpeg'})), isNull);
+      expect(
+        await bytesFor(http.Response.bytes(
+          Uint8List(PlacesService.maxPhotoBytes + 1),
+          200,
+          headers: {'content-type': 'image/jpeg'},
+        )),
+        isNull,
+      );
+    });
+
+    test('an endless image with no size stops being read just past the limit', () async {
+      var sent = 0;
+      final endless = StreamController<List<int>>();
+      void pump() {
+        // Feed 256 KB chunks until the reader cancels.
+        if (endless.isClosed || endless.isPaused) return;
+        endless.add(Uint8List(256 * 1024));
+        sent += 256 * 1024;
+        if (sent < 100 * 1024 * 1024) scheduleMicrotask(pump);
+      }
+
+      endless.onListen = pump;
+      endless.onResume = pump;
+      var cancelled = false;
+      endless.onCancel = () => cancelled = true;
+      final client = MockClient.streaming((request, body) async {
+        if (request.url == PlacesService.photoEndpoint) {
+          return http.StreamedResponse(Stream.value(utf8.encode(jsonEncode({'photoUri': link}))), 200);
+        }
+        return http.StreamedResponse(endless.stream, 200, headers: {'content-type': 'image/jpeg'});
+      });
+
+      expect(await serviceWith(client).photoBytes(name), isNull);
+      expect(cancelled, isTrue, reason: 'the download is stopped');
+      // A few chunks may already be in flight when it cancels; it must stop near the limit, not read 100 MB.
+      expect(sent, lessThan(PlacesService.maxPhotoBytes + 1024 * 1024), reason: 'not read to the end');
+    });
+
+    test('a declared size over the limit is refused before reading', () async {
+      var bodyRead = false;
+      final client = MockClient.streaming((request, body) async {
+        if (request.url == PlacesService.photoEndpoint) {
+          return http.StreamedResponse(Stream.value(utf8.encode(jsonEncode({'photoUri': link}))), 200);
+        }
+        final image = StreamController<List<int>>(onListen: () => bodyRead = true);
+        return http.StreamedResponse(image.stream, 200,
+            contentLength: PlacesService.maxPhotoBytes + 1, headers: {'content-type': 'image/jpeg'});
+      });
+      expect(await serviceWith(client).photoBytes(name), isNull);
+      expect(bodyRead, isTrue, reason: 'the stream is drained to free the connection, but nothing is kept');
+    });
+
+    test('a name that is not a Places photo name is never sent', () async {
+      var calls = 0;
+      final service = serviceWith(MockClient((_) async {
+        calls++;
+        return http.Response('{}', 200);
+      }));
+      expect(await service.photoUrl('places/x/reviews/y'), isNull);
+      expect(await service.photoUrl('https://evil.example/places/x/photos/y'), isNull);
+      expect(calls, 0);
     });
   });
 
