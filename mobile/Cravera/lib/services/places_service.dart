@@ -1,4 +1,5 @@
 import 'dart:async' show TimeoutException;
+import 'dart:typed_data' show Uint8List;
 import 'dart:convert';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -69,6 +70,27 @@ class PlacesService {
       if (response.statusCode != 200) return null;
       final uri = (jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>)['photoUri'];
       return uri is String && isSafePhotoUri(uri) ? uri : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Largest photo we accept; Google's 800 px photos are far smaller.
+  static const maxPhotoBytes = 5 * 1024 * 1024;
+
+  /// The photo for [photoName] as image bytes, or null. The app downloads it
+  /// itself, without following redirects, so the request can never leave
+  /// Google's photo host (Flutter's own image loader would follow them).
+  Future<Uint8List?> photoBytes(String photoName) async {
+    final link = await photoUrl(photoName);
+    if (link == null) return null;
+    final request = http.Request('GET', Uri.parse(link))..followRedirects = false;
+    try {
+      final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
+      final type = response.headers['content-type'] ?? '';
+      if (response.statusCode != 200 || !type.startsWith('image/')) return null;
+      final bytes = response.bodyBytes;
+      return bytes.isEmpty || bytes.length > maxPhotoBytes ? null : bytes;
     } catch (_) {
       return null;
     }

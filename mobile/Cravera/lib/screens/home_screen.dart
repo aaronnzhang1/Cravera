@@ -1,3 +1,5 @@
+import 'dart:typed_data' show Uint8List;
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -200,6 +202,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     onNo: session.search.next,
                     onYes: _onYes,
                     onClose: session.search.reset,
+                    photo: session.search.currentPhoto,
                     session: session,
                   ),
                 ),
@@ -449,6 +452,7 @@ class _InlineRestaurantCard extends StatelessWidget {
   final VoidCallback onNo;
   final VoidCallback onYes;
   final VoidCallback onClose;
+  final Uint8List? photo;
   final AppSession session;
 
   const _InlineRestaurantCard({
@@ -457,6 +461,7 @@ class _InlineRestaurantCard extends StatelessWidget {
     required this.onNo,
     required this.onYes,
     required this.onClose,
+    required this.photo,
     required this.session,
   });
 
@@ -498,7 +503,7 @@ class _InlineRestaurantCard extends StatelessWidget {
             children: [
               Stack(
                 children: [
-                  _PhotoHeader(photoUrl: restaurant.photoUrl),
+                  _PhotoHeader(photo: photo),
                   Positioned(
                     top: 12,
                     right: 12,
@@ -1149,14 +1154,14 @@ class _Pill extends StatelessWidget {
 }
 
 class _PhotoHeader extends StatelessWidget {
-  final String? photoUrl;
-  const _PhotoHeader({required this.photoUrl});
+  /// Already downloaded by [PlacesService.photoBytes], so nothing here goes
+  /// to the network. Null shows the placeholder.
+  final Uint8List? photo;
+  const _PhotoHeader({required this.photo});
 
   @override
   Widget build(BuildContext context) {
-    final url = photoUrl;
-    // Only Google's photo host is ever loaded; anything else shows the placeholder.
-    final hasPhoto = url != null && PlacesService.isSafePhotoUri(url);
+    final bytes = photo;
     final placeholder = DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1170,15 +1175,15 @@ class _PhotoHeader extends StatelessWidget {
     return SizedBox(
       height: 210,
       width: double.infinity,
-      child: hasPhoto
-          ? Image.network(
-              url,
+      child: bytes == null
+          ? placeholder
+          : Image.memory(
+              bytes,
               fit: BoxFit.cover,
-              // The placeholder shows while loading and if the image fails.
-              loadingBuilder: (context, child, progress) => progress == null ? child : placeholder,
+              gaplessPlayback: true,
+              // Bytes that aren't a valid image show the placeholder.
               errorBuilder: (context, error, stack) => placeholder,
-            )
-          : placeholder,
+            ),
     );
   }
 }

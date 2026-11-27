@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cravera/models/restaurant.dart';
 import 'package:cravera/services/craving_search.dart';
@@ -19,8 +20,8 @@ class FakePlaces extends PlacesService {
   /// Returns results for a query, or throws a [PlacesSearchException].
   FutureOr<List<Restaurant>> Function(String query) answer;
 
-  /// Returns an image link for a photo name; no photo when not set.
-  FutureOr<String?> Function(String name)? photo;
+  /// Returns photo bytes for a photo name; no photo when not set.
+  FutureOr<Uint8List?> Function(String name)? photo;
   final queries = <String>[];
   final locations = <SearchLocation>[];
   final photoRequests = <String>[];
@@ -33,7 +34,7 @@ class FakePlaces extends PlacesService {
   }
 
   @override
-  Future<String?> photoUrl(String photoName) async {
+  Future<Uint8List?> photoBytes(String photoName) async {
     photoRequests.add(photoName);
     return photo?.call(photoName);
   }
@@ -193,19 +194,19 @@ void main() {
         Restaurant(placeId: id, name: 'Test Place $id', photoName: 'places/$id/photos/p', latitude: 10, longitude: 20);
     final places = FakePlaces(
       (_) => [withPhoto('a'), withPhoto('b'), withPhoto('c')],
-      photo: (name) => 'https://lh3.googleusercontent.com/${name.split('/')[1]}',
+      photo: (name) => Uint8List.fromList(name.split('/')[1].codeUnits),
     );
     final search = CravingSearch(places: places);
 
     await search.start('ramen', here);
     await Future<void>.delayed(Duration.zero);
     expect(places.photoRequests, ['places/a/photos/p'], reason: 'not all 20 results');
-    expect(search.current?.photoUrl, 'https://lh3.googleusercontent.com/a');
+    expect(search.currentPhoto, 'a'.codeUnits);
 
     search.next();
     await Future<void>.delayed(Duration.zero);
     expect(places.photoRequests, ['places/a/photos/p', 'places/b/photos/p']);
-    expect(search.current?.photoUrl, 'https://lh3.googleusercontent.com/b');
+    expect(search.currentPhoto, 'b'.codeUnits);
   });
 
   test('no photo, or a failed photo, leaves the card without one', () async {
@@ -216,16 +217,16 @@ void main() {
     await search.start('ramen', here);
     await Future<void>.delayed(Duration.zero);
     expect(places.photoRequests, isEmpty, reason: 'a place without a photo name asks for nothing');
-    expect(search.current?.photoUrl, isNull);
+    expect(search.currentPhoto, isNull);
 
     search.next();
     await Future<void>.delayed(Duration.zero);
     expect(places.photoRequests, ['places/x/photos/p']);
-    expect(search.current?.photoUrl, isNull);
+    expect(search.currentPhoto, isNull);
   });
 
   test('a photo that arrives after a new search is dropped', () async {
-    final late = Completer<String?>();
+    final late = Completer<Uint8List?>();
     final places = FakePlaces(
       (q) => [Restaurant(placeId: q, name: q, photoName: 'places/$q/photos/p', latitude: 1, longitude: 2)],
       photo: (name) => name.contains('old') ? late.future : null,
@@ -233,10 +234,10 @@ void main() {
     final search = CravingSearch(places: places);
     await search.start('old', here);
     await search.start('new', here);
-    late.complete('https://lh3.googleusercontent.com/old');
+    late.complete(Uint8List.fromList([1, 2, 3]));
     await Future<void>.delayed(Duration.zero);
     expect(search.current?.placeId, 'new');
-    expect(search.current?.photoUrl, isNull);
+    expect(search.currentPhoto, isNull);
   });
 
   test('empty cravings are ignored', () async {

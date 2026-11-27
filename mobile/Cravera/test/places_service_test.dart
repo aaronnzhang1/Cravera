@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:cravera/core/constants.dart';
@@ -214,6 +215,53 @@ void main() {
       expect(await answer(http.Response('{"error":"x"}', 502)), isNull);
       expect(await answer(http.Response('not json', 200)), isNull);
       expect(await serviceWith(MockClient((_) async => throw http.ClientException('offline'))).photoUrl(name), isNull);
+    });
+
+    const link = 'https://lh3.googleusercontent.com/p/fake=s800';
+
+    /// First answers the photo function with [link], then the image request with [image].
+    MockClient photoServer(http.Response image, List<http.BaseRequest> requests) => MockClient((request) async {
+          requests.add(request);
+          if (request.url == PlacesService.photoEndpoint) {
+            return http.Response(jsonEncode({'photoUri': link}), 200);
+          }
+          return image;
+        });
+
+    test('downloads the image itself from the Google link', () async {
+      final requests = <http.BaseRequest>[];
+      final bytes = await serviceWith(photoServer(
+        http.Response.bytes([1, 2, 3], 200, headers: {'content-type': 'image/jpeg'}),
+        requests,
+      )).photoBytes(name);
+      expect(bytes, [1, 2, 3]);
+      expect(requests.map((r) => r.url.toString()), [PlacesService.photoEndpoint.toString(), link]);
+      expect(requests.last.followRedirects, isFalse);
+    });
+
+    test('a redirect from the image host is never followed', () async {
+      final requests = <http.BaseRequest>[];
+      final bytes = await serviceWith(photoServer(
+        http.Response('', 302, headers: {'location': 'https://elsewhere.example/collect'}),
+        requests,
+      )).photoBytes(name);
+      expect(bytes, isNull);
+      expect(requests, hasLength(2), reason: 'no request to the redirect target');
+      expect(requests.any((r) => r.url.host == 'elsewhere.example'), isFalse);
+    });
+
+    test('not an image, empty, or too large is "no photo"', () async {
+      Future<Uint8List?> bytesFor(http.Response image) => serviceWith(photoServer(image, [])).photoBytes(name);
+      expect(await bytesFor(http.Response('<html>', 200, headers: {'content-type': 'text/html'})), isNull);
+      expect(await bytesFor(http.Response.bytes([], 200, headers: {'content-type': 'image/jpeg'})), isNull);
+      expect(
+        await bytesFor(http.Response.bytes(
+          Uint8List(PlacesService.maxPhotoBytes + 1),
+          200,
+          headers: {'content-type': 'image/jpeg'},
+        )),
+        isNull,
+      );
     });
 
     test('a name that is not a Places photo name is never sent', () async {
