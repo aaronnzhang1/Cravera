@@ -27,7 +27,7 @@ Map<String, Object?> result({String placeId = 'fake-1', Map<String, Object?> ove
     };
 
 PlacesService serviceWith(MockClient client, {Duration timeout = PlacesService.defaultTimeout}) => PlacesService(
-      baseUrl: Uri.parse('https://example-project.supabase.co'),
+      baseUrl: Uri.parse('https://exampleproject.supabase.co'),
       publishableKey: 'sb_publishable_test',
       client: client,
       timeout: timeout,
@@ -53,7 +53,7 @@ void main() {
       await serviceWith(client).search(query: 'ramen', near: near, radiusMeters: 3000);
 
       expect(sent.method, 'POST');
-      expect(sent.url.toString(), 'https://example-project.supabase.co/functions/v1/places-search');
+      expect(sent.url.toString(), 'https://exampleproject.supabase.co/functions/v1/places-search');
       expect(sent.headers['apikey'], 'sb_publishable_test');
       expect(jsonDecode(sent.body), {'query': 'ramen', 'latitude': 37.0, 'longitude': -122.0, 'radiusMeters': 3000});
     });
@@ -107,11 +107,22 @@ void main() {
           result(placeId: 'no-name', overrides: {'name': ''}),
           result(placeId: 'no-lat', overrides: {'latitude': null}),
           result(overrides: {'placeId': null}),
+          result(placeId: 'bad-lat', overrides: {'latitude': 91}),
+          result(placeId: 'bad-lng', overrides: {'longitude': -181}),
           'not an object',
           result(placeId: 'ok'),
         ],
       }));
       expect(list.map((r) => r.placeId), ['ok']);
+    });
+
+    test('a list where every row is broken is a server error, not "no matches"', () {
+      expect(
+        () => PlacesService.parseResults(jsonEncode({
+          'results': [result(overrides: {'name': null}), result(overrides: {'latitude': 200})],
+        })),
+        throwsA(isA<PlacesSearchException>().having((e) => e.error, 'error', PlacesSearchError.server)),
+      );
     });
 
     test('accepts whole numbers where decimals are expected', () {
@@ -163,7 +174,7 @@ void main() {
     test('a plain-http service never sends the location', () async {
       var calls = 0;
       final service = PlacesService(
-        baseUrl: Uri.parse('http://example-project.supabase.co'),
+        baseUrl: Uri.parse('http://exampleproject.supabase.co'),
         publishableKey: 'sb_publishable_test',
         client: MockClient((_) async {
           calls++;
@@ -179,7 +190,7 @@ void main() {
 
     test('close() leaves an injected client open', () {
       final client = _ClosingClient();
-      PlacesService(baseUrl: Uri.parse('https://example-project.supabase.co'), publishableKey: 'k', client: client)
+      PlacesService(baseUrl: Uri.parse('https://exampleproject.supabase.co'), publishableKey: 'k', client: client)
           .close();
       expect(client.closed, isFalse);
     });
@@ -195,13 +206,18 @@ void main() {
       }
 
       const key = 'SUPABASE_PUBLISHABLE_KEY=sb_publishable_test';
-      final ok = withEnv('SUPABASE_URL=https://example-project.supabase.co\n$key');
-      expect(ok?.baseUrl.host, 'example-project.supabase.co');
-      expect(withEnv('SUPABASE_URL=https:/example-project.supabase.co\n$key'), isNull);
-      expect(withEnv('SUPABASE_URL=example-project.supabase.co\n$key'), isNull);
-      expect(withEnv('SUPABASE_URL=ftp://example-project.supabase.co\n$key'), isNull);
-      expect(withEnv('SUPABASE_URL=http://example-project.supabase.co\n$key'), isNull);
-      expect(withEnv('SUPABASE_URL=https://example-project.supabase.co\nSUPABASE_PUBLISHABLE_KEY='), isNull);
+      final ok = withEnv('SUPABASE_URL=https://exampleproject.supabase.co\n$key');
+      expect(ok?.baseUrl.host, 'exampleproject.supabase.co');
+      expect(withEnv('SUPABASE_URL=https:/exampleproject.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=exampleproject.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=ftp://exampleproject.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=http://exampleproject.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=https://example.com\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=https://evil.example/x.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=https://supabase.co.example.com\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=https://user@exampleproject.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=https://exampleproject.supabase.co:8443\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=https://exampleproject.supabase.co\nSUPABASE_PUBLISHABLE_KEY='), isNull);
       expect(withEnv(key), isNull);
       dotenv.clean();
     });

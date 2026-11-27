@@ -44,8 +44,15 @@ class PlacesService {
   })  : _client = client ?? http.Client(),
         _ownsClient = client == null;
 
-  /// Only HTTPS with a host: the request carries the user's exact location.
-  static bool isSecureUrl(Uri url) => url.scheme == 'https' && url.host.isNotEmpty;
+  /// The request carries the user's exact location, so it only goes to a
+  /// Supabase project over HTTPS (`https://<project>.supabase.co`), with no
+  /// port, path or credentials. Dart doesn't follow redirects for POST.
+  static bool isSecureUrl(Uri url) =>
+      url.scheme == 'https' &&
+      RegExp(r'^[a-z0-9]+\.supabase\.co$').hasMatch(url.host) &&
+      !url.hasPort &&
+      url.userInfo.isEmpty &&
+      (url.path.isEmpty || url.path == '/');
 
   /// Reads `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from `.env`.
   /// Returns null when either is missing, so callers can show
@@ -139,6 +146,7 @@ class PlacesService {
       final latitude = _double(item['latitude']);
       final longitude = _double(item['longitude']);
       if (placeId == null || name == null || latitude == null || longitude == null) continue;
+      if (latitude.abs() > 90 || longitude.abs() > 180) continue;
       restaurants.add(Restaurant(
         placeId: placeId,
         name: name,
@@ -152,6 +160,9 @@ class PlacesService {
         longitude: longitude,
       ));
     }
+    // Rows that all fail mean the response changed shape: that is a server
+    // problem, not "nothing matched".
+    if (results.isNotEmpty && restaurants.isEmpty) throw const PlacesSearchException(PlacesSearchError.server);
     return restaurants;
   }
 
