@@ -530,6 +530,17 @@ class _InlineRestaurantCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(restaurant.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.headlineMedium),
+                    // Why this pick: the guest's own wants this place matches.
+                    // The facts beside it (rating, price, distance) come from Places.
+                    if (restaurant.matches.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Picked for: ${restaurant.matches.join(' · ')}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.bodyMedium?.copyWith(color: AppColors.accent),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,

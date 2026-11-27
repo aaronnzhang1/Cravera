@@ -32,6 +32,19 @@ class PlacesSearchException implements Exception {
   String toString() => 'PlacesSearchException($error)';
 }
 
+/// One answer from `places-search`: the places, best fit first, and the
+/// search intent the server used.
+class SearchAnswer {
+  final List<Restaurant> results;
+
+  /// The server's reading of the craving. The app doesn't interpret it: it
+  /// only sends it back as `previousIntent` when the user refines, and the
+  /// server validates it again. Null when the server sent none.
+  final Map<String, Object?>? intent;
+
+  const SearchAnswer(this.results, {this.intent});
+}
+
 /// Searches for open restaurants through the `places-search` Edge Function.
 ///
 /// The app never talks to Google directly: the function holds the Places key
@@ -156,8 +169,16 @@ class PlacesService {
   final Duration timeout;
 
   /// Returns open restaurants for [query] around [near], best match first.
-  /// An empty list means nothing matched. Throws [PlacesSearchException].
-  Future<List<Restaurant>> search({required String query, required SearchLocation near, int? radiusMeters}) async {
+  /// Empty results mean nothing matched. When refining, [previousIntent] is
+  /// the intent of the search being refined. [localHour] (0-23) lets the
+  /// server read "late-night" or "breakfast". Throws [PlacesSearchException].
+  Future<SearchAnswer> search({
+    required String query,
+    required SearchLocation near,
+    int? radiusMeters,
+    Map<String, Object?>? previousIntent,
+    int? localHour,
+  }) async {
     // Never follow a redirect: it could replay the location to another server.
     // A 3xx answer is treated as a server failure below. (Browsers ignore
     // this setting; web is not a v0.1.0 target.)
@@ -169,6 +190,8 @@ class PlacesService {
         'latitude': near.latitude,
         'longitude': near.longitude,
         'radiusMeters': ?radiusMeters,
+        'previousIntent': ?previousIntent,
+        'localHour': ?localHour,
       });
     final http.Response response;
     try {
@@ -187,7 +210,7 @@ class PlacesService {
         } on FormatException {
           throw const PlacesSearchException(PlacesSearchError.server);
         }
-        return parseResults(body);
+        return SearchAnswer(parseResults(body), intent: parseIntent(body));
       case 400:
         throw const PlacesSearchException(PlacesSearchError.rejected);
       case 401:
@@ -232,6 +255,7 @@ class PlacesService {
         photoAuthorUri: _httpsUrl(item['photoAuthorUri']),
         latitude: latitude,
         longitude: longitude,
+        matches: _matches(item['matches']),
       ));
     }
     // Rows that all fail mean the response changed shape: that is a server
@@ -239,6 +263,23 @@ class PlacesService {
     if (results.isNotEmpty && restaurants.isEmpty) throw const PlacesSearchException(PlacesSearchError.server);
     return restaurants;
   }
+
+  /// The `intent` object of a response body, or null.
+  static Map<String, Object?>? parseIntent(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      final intent = decoded is Map<String, dynamic> ? decoded['intent'] : null;
+      return intent is Map<String, dynamic> ? Map.unmodifiable(intent) : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// The intent's phrases this place matches, as the server sent them. Only
+  /// short plain strings are kept; anything else is dropped.
+  static List<String> _matches(Object? v) => v is List
+      ? List.unmodifiable(v.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty && s.length <= 30).take(4))
+      : const [];
 
   static String? _httpsUrl(Object? v) {
     final s = _string(v);

@@ -20,6 +20,11 @@ class Restaurant {
   final double? latitude;
   final double? longitude;
 
+  /// What the guest asked for that this place matches, chosen by the server
+  /// from the guest's own craving (for example "high protein"). Never a
+  /// description of the restaurant: facts come only from Places.
+  final List<String> matches;
+
   const Restaurant({
     required this.placeId,
     required this.name,
@@ -34,5 +39,6 @@ class Restaurant {
     this.rating,
     this.latitude,
     this.longitude,
+    this.matches = const [],
   });
 }

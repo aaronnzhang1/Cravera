@@ -82,6 +82,23 @@ void main() {
     expect(find.text('Example Spicy Ramen'), findsOneWidget);
   });
 
+  testWidgets('the card says why it was picked, only when the server matched something', (tester) async {
+    final matched = Restaurant(
+      placeId: 'm',
+      name: 'Test Bowl Bar',
+      latitude: 10.001,
+      longitude: 20.001,
+      matches: const ['high protein', 'quick'],
+    );
+    await _homeWith(tester, FakePlaces((_) => [matched, _place('b', 'Sample Ramen Bar')]));
+    await _searchFor(tester, 'gym food');
+    expect(find.text('Picked for: high protein · quick'), findsOneWidget);
+
+    await _tapVisible(tester, find.text('No'));
+    await _settle(tester);
+    expect(find.textContaining('Picked for'), findsNothing);
+  });
+
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
