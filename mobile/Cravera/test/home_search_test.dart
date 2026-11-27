@@ -126,15 +126,64 @@ void main() {
     expect(places.queries, ['ramen']);
   });
 
-  testWidgets('sign out clears the search', (tester) async {
+  testWidgets('sign out clears the search and saved places', (tester) async {
     final session = await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     await _searchFor(tester, 'ramen');
     expect(session.search.status, SearchStatus.showing);
+    await tester.tap(find.byTooltip('Bookmark'));
+    await _settle(tester);
+    session.rateBookmark('a', 4);
+    expect(session.bookmarks, hasLength(1));
 
     session.signOut();
     await _settle(tester);
     expect(session.search.status, SearchStatus.idle);
     expect(session.search.query, isEmpty);
+    expect(session.bookmarks, isEmpty, reason: 'the next person must not see saved places');
+    expect(session.bookmarkRating('a'), 0);
+  });
+
+  testWidgets('a too-long craving says so and offers no pointless retry', (tester) async {
+    final places = FakePlaces((_) => [_place('a', 'Test Noodle House')]);
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'x' * (CravingSearch.maxQueryLength + 1));
+    expect(find.text('That craving is too long.'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    expect(find.text('New search'), findsOneWidget);
+    expect(places.queries, isEmpty);
+  });
+
+  testWidgets('expired results ask for a fresh search', (tester) async {
+    var now = DateTime(2026, 1, 1, 12);
+    final places = FakePlaces((_) => [_place('a', 'Test Noodle House')]);
+    final session = AppSession(
+      locationService: const _FoundLocation(),
+      search: CravingSearch(places: places, clock: () => now),
+    );
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+    await tester.tap(find.text('Continue as guest'));
+    await _settle(tester);
+    await _searchFor(tester, 'ramen');
+
+    now = now.add(const Duration(minutes: 20));
+    await tester.tap(find.text('Yes'));
+    await _settle(tester);
+    expect(find.text('These results are out of date.'), findsOneWidget);
+    expect(find.text('Navigate there'), findsNothing, reason: 'no directions from an old "open now"');
+
+    await tester.tap(find.text('Search again'));
+    await _settle(tester);
+    expect(find.text('Test Noodle House'), findsOneWidget);
+    expect(places.queries, ['ramen', 'ramen']);
+  });
+
+  test('prices: 0 is Free, 1–4 are dollar signs, anything else is hidden', () {
+    expect(priceLabel(0), 'Free');
+    expect(priceLabel(1), r'$');
+    expect(priceLabel(4), r'$$$$');
+    expect(priceLabel(null), isNull);
+    expect(priceLabel(5), isNull);
   });
 
   test('Yes opens directions to the exact place, not a name search', () {

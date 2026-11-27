@@ -134,6 +134,50 @@ void main() {
     expect(search.current, isNull);
   });
 
+  test('results older than 15 minutes expire before No or Yes can use them', () async {
+    var now = DateTime(2026, 1, 1, 12);
+    final places = FakePlaces((_) => [place('a'), place('b')]);
+    final search = CravingSearch(places: places, clock: () => now);
+    await search.start('ramen', here);
+
+    now = now.add(const Duration(minutes: 15));
+    expect(search.checkFresh(), isTrue, reason: 'exactly 15 minutes is still fresh');
+
+    now = now.add(const Duration(seconds: 1));
+    search.next();
+    expect(search.status, SearchStatus.expired, reason: 'No checks the age first');
+    expect(search.current, isNull);
+
+    await search.retry();
+    expect(search.status, SearchStatus.showing);
+    expect(search.current?.placeId, 'a');
+    expect(places.queries, ['ramen', 'ramen']);
+  });
+
+  test('a craving longer than the server accepts fails without a request', () async {
+    final places = FakePlaces((_) => [place('a')]);
+    final search = CravingSearch(places: places);
+
+    await search.start('x' * (CravingSearch.maxQueryLength + 1), here);
+    expect(search.status, SearchStatus.failed);
+    expect(search.error, PlacesSearchError.rejected);
+    expect(search.queryTooLong, isTrue);
+    expect(places.queries, isEmpty);
+
+    await search.start('x' * CravingSearch.maxQueryLength, here);
+    expect(search.status, SearchStatus.showing, reason: 'exactly the limit is fine');
+  });
+
+  test('a refine that makes the craving too long is stopped, not sent', () async {
+    final places = FakePlaces((_) => [place('a')]);
+    final search = CravingSearch(places: places);
+    await search.start('x' * (CravingSearch.maxQueryLength - 3), here);
+
+    await search.refine('spicy');
+    expect(search.queryTooLong, isTrue);
+    expect(places.queries, hasLength(1));
+  });
+
   test('empty cravings are ignored', () async {
     final places = FakePlaces((_) => [place('a')]);
     final search = CravingSearch(places: places);

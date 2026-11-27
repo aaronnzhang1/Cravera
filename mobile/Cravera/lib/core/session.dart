@@ -145,6 +145,10 @@ class AppSession extends ChangeNotifier {
     _locating = false;
     _locationRequest++;
     search.reset(); // the next user must not see this search
+    // Bookmarks are real places now and aren't tied to an account yet, so
+    // they go too: the next person on this phone must not see them.
+    _bookmarks.clear();
+    _bookmarkRatings.clear();
     notifyListeners();
   }
 

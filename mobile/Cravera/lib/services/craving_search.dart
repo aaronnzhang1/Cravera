@@ -5,8 +5,8 @@ import 'location_service.dart';
 import 'places_service.dart';
 
 /// Where a craving search is: nothing yet, asking the server, showing one
-/// place, out of places, or failed.
-enum SearchStatus { idle, loading, showing, exhausted, failed }
+/// place, out of places, failed, or too old to trust (places may have closed).
+enum SearchStatus { idle, loading, showing, exhausted, failed, expired }
 
 /// One craving search and the user's way through its results.
 ///
@@ -15,7 +15,17 @@ enum SearchStatus { idle, loading, showing, exhausted, failed }
 /// [SearchStatus.exhausted] and the screen asks the user to refine, which
 /// runs a new search with the added text.
 class CravingSearch extends ChangeNotifier {
-  CravingSearch({this.places});
+  CravingSearch({this.places, DateTime Function()? clock}) : _now = clock ?? DateTime.now;
+
+  /// The server refuses longer cravings, so they are stopped before sending.
+  static const maxQueryLength = 200;
+
+  /// "Open now" was true when we searched. After this long, places may have
+  /// closed, so the results are dropped and the user searches again.
+  static const freshFor = Duration(minutes: 15);
+
+  final DateTime Function() _now;
+  DateTime? _searchedAt;
 
   /// Null when the app has no publishable key: every search then fails with
   /// [PlacesSearchError.notConfigured].
@@ -43,6 +53,9 @@ class CravingSearch extends ChangeNotifier {
   /// The place to show, while [status] is [SearchStatus.showing].
   Restaurant? get current => _status == SearchStatus.showing ? _results[_index] : null;
 
+  /// True when the craving is longer than the server accepts.
+  bool get queryTooLong => _query.length > maxQueryLength;
+
   /// True when the server found nothing at all (rather than the user
   /// rejecting every result).
   bool get foundNothing => _status == SearchStatus.exhausted && _results.isEmpty;
@@ -58,6 +71,12 @@ class CravingSearch extends ChangeNotifier {
     _index = 0;
     _rejections = 0;
     _error = null;
+    _searchedAt = null;
+    if (trimmed.length > maxQueryLength) {
+      // Retrying can't help: the user has to shorten it.
+      _fail(PlacesSearchError.rejected);
+      return;
+    }
     _status = SearchStatus.loading;
     notifyListeners();
 
@@ -70,6 +89,7 @@ class CravingSearch extends ChangeNotifier {
       final results = await service.search(query: trimmed, near: near);
       if (request != _request) return; // a newer search or a reset won
       _results = List.unmodifiable(results);
+      _searchedAt = _now();
       _status = results.isEmpty ? SearchStatus.exhausted : SearchStatus.showing;
     } on PlacesSearchException catch (e) {
       if (request != _request) return;
@@ -81,7 +101,7 @@ class CravingSearch extends ChangeNotifier {
 
   /// "No": shows the next result from the same answer, without a request.
   void next() {
-    if (_status != SearchStatus.showing) return;
+    if (!checkFresh() || _status != SearchStatus.showing) return;
     _rejections++;
     if (_index + 1 < _results.length) {
       _index++;
@@ -89,6 +109,19 @@ class CravingSearch extends ChangeNotifier {
       _status = SearchStatus.exhausted;
     }
     notifyListeners();
+  }
+
+  /// False (and [SearchStatus.expired]) when the results are older than
+  /// [freshFor]. Call before showing or acting on a result.
+  bool checkFresh() {
+    final at = _searchedAt;
+    if (at == null || _now().difference(at) <= freshFor) return true;
+    if (_status == SearchStatus.showing || _status == SearchStatus.exhausted) {
+      _status = SearchStatus.expired;
+      _results = const [];
+      notifyListeners();
+    }
+    return false;
   }
 
   /// Runs a new search with [extra] added to the current craving.
@@ -116,6 +149,7 @@ class CravingSearch extends ChangeNotifier {
     _index = 0;
     _rejections = 0;
     _error = null;
+    _searchedAt = null;
     notifyListeners();
   }
 

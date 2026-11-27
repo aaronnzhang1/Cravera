@@ -33,6 +33,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (session.searchLocation == null && session.locationProblem == null) {
         session.useDeviceLocation();
       }
+      // Coming back to Home later: results that may have closed are dropped.
+      session.search.checkFresh();
     });
   }
 
@@ -51,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
       SearchStatus.idle => _buildIdle(context, session),
       SearchStatus.loading => _buildLoading(context),
       SearchStatus.showing => _buildResult(context, session),
-      SearchStatus.exhausted || SearchStatus.failed => _buildOutcome(context, search),
+      SearchStatus.exhausted || SearchStatus.failed || SearchStatus.expired => _buildOutcome(context, search),
     };
   }
 
@@ -228,7 +230,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onYes() {
-    final current = AppSessionScope.of(context).search.current;
+    final search = AppSessionScope.of(context).search;
+    // Never send someone to a place based on an old "open now".
+    if (!search.checkFresh()) return;
+    final current = search.current;
     if (current == null) return;
     _showNavOptions(context, current);
   }
@@ -238,11 +243,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildOutcome(BuildContext context, CravingSearch search) {
     final text = Theme.of(context).textTheme;
     final failed = search.status == SearchStatus.failed;
-    final (title, detail) = failed
-        ? searchErrorText(search.error ?? PlacesSearchError.server)
-        : search.foundNothing
-            ? ('Nothing open matched “${search.query}” nearby.', 'Try different words, or add more detail.')
-            : ("That's every open match for “${search.query}” nearby.", 'Add something to narrow or change it.');
+    final expired = search.status == SearchStatus.expired;
+    final (title, detail) = expired
+        ? ('These results are out of date.', 'Places may have closed since. Search again to see what is open now.')
+        : search.queryTooLong
+            ? ('That craving is too long.', 'Keep it under ${CravingSearch.maxQueryLength} characters and search again.')
+            : failed
+                ? searchErrorText(search.error ?? PlacesSearchError.server)
+                : search.foundNothing
+                    ? ('Nothing open matched “${search.query}” nearby.', 'Try different words, or add more detail.')
+                    : ("That's every open match for “${search.query}” nearby.", 'Add something to narrow or change it.');
+    // Retrying only helps when the request itself was fine.
+    final canRetry = expired || (failed && search.error != PlacesSearchError.rejected);
     return SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -254,7 +266,11 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Icon(
-                  failed ? Icons.cloud_off_rounded : Icons.search_off_rounded,
+                  expired
+                      ? Icons.schedule_rounded
+                      : failed
+                          ? Icons.cloud_off_rounded
+                          : Icons.search_off_rounded,
                   size: 48,
                   color: AppColors.textMuted,
                 ),
@@ -267,13 +283,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 20),
-                if (failed)
+                if (canRetry)
                   FilledButton.icon(
                     onPressed: search.retry,
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Try again'),
+                    label: Text(expired ? 'Search again' : 'Try again'),
                   )
-                else
+                else if (!failed)
                   _RepromptBanner(controller: _repromptController, onSubmit: _onReprompt),
                 const SizedBox(height: 8),
                 TextButton(onPressed: search.reset, child: const Text('New search')),
@@ -493,7 +509,7 @@ class _InlineRestaurantCard extends StatelessWidget {
                           ),
                         if ((restaurant.cuisine ?? '').trim().isNotEmpty)
                           _Pill(icon: Icons.restaurant_rounded, label: restaurant.cuisine!.trim()),
-                        if (restaurant.priceLevel != null) _Pill(label: '\$' * restaurant.priceLevel!.clamp(1, 4)),
+                        if (priceLabel(restaurant.priceLevel) case final price?) _Pill(label: price),
                         if (distanceLabel != null)
                           _Pill(icon: Icons.near_me_rounded, label: distanceLabel, color: AppColors.sage),
                       ],
@@ -557,6 +573,14 @@ String locationProblemText(LocationProblem problem) => switch (problem) {
   LocationProblem.denied => 'Location permission was denied.',
   LocationProblem.deniedForever => 'Location is blocked in settings.',
   LocationProblem.failed => "Couldn't get your location.",
+};
+
+/// Google's price level as shown on the card: 0 is free, 1–4 are dollar
+/// signs, anything else (or nothing) shows no price.
+String? priceLabel(int? level) => switch (level) {
+  0 => 'Free',
+  1 || 2 || 3 || 4 => '\$' * level!,
+  _ => null,
 };
 
 /// What to tell the user when a search fails: a title and what to do next.
