@@ -56,7 +56,8 @@ class PlacesService {
       return null; // `.env` was never loaded.
     }
     final base = url == null ? null : Uri.tryParse(url.trim());
-    if (base == null || !base.hasScheme || key == null || key.trim().isEmpty) return null;
+    final validUrl = base != null && (base.scheme == 'https' || base.scheme == 'http') && base.host.isNotEmpty;
+    if (!validUrl || key == null || key.trim().isEmpty) return null;
     return PlacesService(baseUrl: base, publishableKey: key.trim(), client: client);
   }
 

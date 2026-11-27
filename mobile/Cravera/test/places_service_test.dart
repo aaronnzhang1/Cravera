@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cravera/services/location_service.dart';
 import 'package:cravera/services/places_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -159,8 +160,25 @@ void main() {
   });
 
   group('configuration', () {
-    test('fromEnv returns null when .env was never loaded or values are missing', () {
+    test('fromEnv returns null when .env was never loaded', () {
       expect(PlacesService.fromEnv(), isNull);
+    });
+
+    test('fromEnv accepts a valid URL and key, and rejects missing or malformed ones', () {
+      PlacesService? withEnv(String env) {
+        dotenv.loadFromString(envString: env, isOptional: true);
+        return PlacesService.fromEnv();
+      }
+
+      const key = 'SUPABASE_PUBLISHABLE_KEY=sb_publishable_test';
+      final ok = withEnv('SUPABASE_URL=https://example-project.supabase.co\n$key');
+      expect(ok?.baseUrl.host, 'example-project.supabase.co');
+      expect(withEnv('SUPABASE_URL=https:/example-project.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=example-project.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=ftp://example-project.supabase.co\n$key'), isNull);
+      expect(withEnv('SUPABASE_URL=https://example-project.supabase.co\nSUPABASE_PUBLISHABLE_KEY='), isNull);
+      expect(withEnv(key), isNull);
+      dotenv.clean();
     });
   });
 }
