@@ -34,6 +34,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _replyKey = GlobalKey();
   int? _replyShownFor;
 
+  /// Whether the chat uses its compact layout (header, thread and input in
+  /// one scroll view), set while building it.
+  bool _outcomeTight = false;
+
   /// The search ([CravingSearch.searchId]) the user hid "Narrow it down"
   /// for; any new search, even with the same words, can show it again.
   int? _narrowHiddenFor;
@@ -287,12 +291,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildOutcome(BuildContext context, CravingSearch search) {
     // A long thread (many messages, large text, small phone) could leave the
     // newest reply out of view: scroll it to the top once per answer. Older
-    // messages stay above it, the suggestions below.
+    // messages stay above it, the suggestions below. In the compact layout
+    // "New search" scrolls too, so there scroll only as far as needed.
     if (_replyShownFor != search.searchId) {
       _replyShownFor = search.searchId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final reply = _replyKey.currentContext;
-        if (reply != null && reply.mounted) Scrollable.ensureVisible(reply, alignment: 0);
+        if (reply == null || !reply.mounted) return;
+        if (_outcomeTight) {
+          Scrollable.ensureVisible(reply, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+        } else {
+          Scrollable.ensureVisible(reply, alignment: 0);
+        }
       });
     }
     final text = Theme.of(context).textTheme;
@@ -326,6 +336,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // Below this height (a short phone on its side with the keyboard up)
         // the whole screen scrolls instead, so the input is never squeezed.
         final tight = box.maxHeight < 300;
+        _outcomeTight = tight;
         final header = Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
@@ -804,8 +815,10 @@ class _LocationChip extends StatelessWidget {
         radius: 999,
         child: InkWell(
           onTap: session.isLocating ? null : onTap,
-          // 48 dp tall so it is easy to tap (accessibility pass).
-          child: Padding(
+          // At least 48 dp tall so it is easy to tap, even with small system text.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -828,6 +841,7 @@ class _LocationChip extends StatelessWidget {
                 const Icon(Icons.expand_more_rounded, size: 18, color: AppColors.textMuted),
               ],
             ),
+          ),
           ),
         ),
       ),

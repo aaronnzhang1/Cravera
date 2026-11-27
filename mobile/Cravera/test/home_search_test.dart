@@ -279,6 +279,25 @@ void main() {
     expect(find.text('nice dinner').hitTestable(), findsNothing, reason: 'the oldest scrolled up, still reachable');
   });
 
+  testWidgets('a long thread on a short sideways phone keeps New search on screen', (tester) async {
+    addTearDown(tester.view.reset);
+    final places = FakePlaces((_) => [])..intent = {'textQuery': 'x'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'nice dinner');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320, sideways: the compact layout
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5; // tall suggestions below the reply
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _settle(tester);
+    for (final more in ['cheaper', 'something Asian fusion', 'quieter']) {
+      await tester.enterText(find.widgetWithText(TextField, 'Tell me more…'), more);
+      await tester.tap(find.byTooltip('Search again'));
+      await _settle(tester);
+    }
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    expect(find.text('New search').hitTestable(), findsOneWidget, reason: 'starting over stays one tap away');
+  });
+
   testWidgets('nothing matched on a short sideways phone with the keyboard up: the input stays usable', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => []));

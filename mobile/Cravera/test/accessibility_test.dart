@@ -134,6 +134,17 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('home meets them with small system text (0.8x)', (tester) async {
+    final handle = tester.ensureSemantics();
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _home(tester);
+    tester.platformDispatcher.textScaleFactorTestValue = 0.8;
+    await _settle(tester);
+    expect(tester.getSize(find.byTooltip('Change location')).height, greaterThanOrEqualTo(48));
+    await _meetsAll(tester);
+    handle.dispose();
+  });
+
   testWidgets('home meets them at 2x text on a small phone', (tester) async {
     final handle = tester.ensureSemantics();
     addTearDown(tester.view.reset);
