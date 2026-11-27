@@ -14,9 +14,8 @@
   - Web builds: browsers ignore `followRedirects = false`; web isn't a v0.1.0 target.
   - Edge Function tests run locally with Node 24, not in CI.
   - UI (→ redesign): the floating nav bar covers the bottom of the Yes sheet; the No/Yes buttons move when a name wraps; fixed 60 pt nav tabs, non-wrapping price chips, tab slide direction; no Back/Cancel from sign-up and the guest prompt promises saved bookmarks/ratings (→ auth).
-  - iPhone: not run yet. The iOS Simulator needs the Mac: `flutter run` in `mobile/Cravera` there. Not run on a real Android phone either.
-  - The Mac's `.env` may still hold the real Gemini/Places keys (unverified): delete them there, run `flutter clean`, and add `SUPABASE_PUBLISHABLE_KEY` (keys are in Supabase secrets as `GOOGLE_MAPS_API_KEY`, `GOOGLE_GEMINI_API_KEY`).
-  - `mobile/Cravera/cursorrules` duplicates AGENTS.md and PRODUCT.md: delete once the maintainer agrees.
+  - iPhone: on 2026-11-26 the app built and opened to the sign-in screen on the Mac's iOS Simulator (iPhone 16e, iOS 26.3) with Flutter 3.41.9; the TASK-001 demo has not been run there yet. Not run on a real Android phone either.
   - The usage-limit handover PR was closed unmerged (maintainer, 2026-11-27); branch `feat/usage-limit-handover` is kept, behind `main`.
   - Windows PC: Flutter 3.41.9 (matches CI), `Pixel_10_Pro` emulator, `adb` and `emulator` under `%LOCALAPPDATA%\Android\Sdk` (not on PATH; in Git Bash set `MSYS_NO_PATHCONV=1` for `adb shell` paths), Supabase CLI 3.4.0 at `~/bin/supabase.exe`, logged in and linked.
-- **Next action:** on the Mac, clean its `.env` (open problem above), then start TASK-002 with its first criterion on a `feat/task-002-…` branch. Optional: repeat the TASK-001 demo on the iPhone Simulator.
+  - Mac (Intel, x86_64): Flutter 3.41.9 at `~/flutter` (git checkout, matches CI), Xcode, CocoaPods, iPhone 16e simulator, GitHub CLI logged in. `.env` rebuilt from `.env.example` with only `SUPABASE_PUBLISHABLE_KEY` (2026-11-26), then `flutter clean`. Not set up yet: Supabase CLI, Android emulator.
+- **Next action:** start TASK-002 with its first criterion on a `feat/task-002-…` branch. Optional: repeat the TASK-001 demo on the iPhone Simulator.

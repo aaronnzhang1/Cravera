@@ -13,8 +13,10 @@ The app lives in **`mobile/Cravera`**. Ignore the old `mobile/cravio` folder; it
 
 ### On a Mac
 
-1. **Install Flutter**: follow https://docs.flutter.dev/get-started/install/macos
-   (or with Homebrew: `brew install --cask flutter`).
+1. **Install Flutter 3.41.9**, the version CI uses (`.github/workflows/ci.yml`). Clone it with
+   `git clone -b 3.41.9 https://github.com/flutter/flutter.git ~/flutter` and add `~/flutter/bin` to your PATH.
+   A newer Flutter rewrites `pubspec.lock` and the iOS project files, and those changes can break CI.
+   To switch an existing clone: `cd ~/flutter && git fetch --tags && git checkout 3.41.9`.
 2. **Install Xcode** from the Mac App Store, open it once, and accept the license.
    Then run in Terminal:
    ```bash
