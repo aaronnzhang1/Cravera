@@ -12,6 +12,8 @@ import {
   parseInput,
   parsePublishableKeys,
   photoAuthor,
+  photoAuthors,
+  photoMapsUri,
 } from "./logic.ts";
 
 const KEY = "sb_publishable_test_key";
@@ -31,7 +33,12 @@ function place(overrides: Record<string, unknown> = {}) {
     types: ["ramen_restaurant", "restaurant", "food", "point_of_interest"],
     photos: [{
       name: "places/fake-place-1/photos/abc",
-      authorAttributions: [{ displayName: "Test Photographer", uri: "//maps.google.com/maps/contrib/fake" }],
+      authorAttributions: [{
+        displayName: "Test Photographer",
+        uri: "//maps.google.com/maps/contrib/fake",
+        photoUri: "//lh3.googleusercontent.com/a/fake-avatar",
+      }],
+      googleMapsUri: "https://www.google.com/maps/place//data=fake-photo",
     }],
     currentOpeningHours: { openNow: true },
     ...overrides,
@@ -185,6 +192,12 @@ test("maps a Places result to card data", () => {
   assert.equal(r.photoName, "places/fake-place-1/photos/abc");
   assert.equal(r.photoAuthor, "Test Photographer");
   assert.equal(r.photoAuthorUri, "https://maps.google.com/maps/contrib/fake");
+  assert.deepEqual(r.photoAuthors, [{
+    name: "Test Photographer",
+    uri: "https://maps.google.com/maps/contrib/fake",
+    avatarUri: "https://lh3.googleusercontent.com/a/fake-avatar",
+  }]);
+  assert.equal(r.photoMapsUri, "https://www.google.com/maps/place//data=fake-photo");
   assert.ok(r.distanceMeters > 100 && r.distanceMeters < 200);
 });
 
@@ -220,6 +233,34 @@ test("photo author: missing name means no author; only https links", () => {
   assert.deepEqual(photoAuthor({ authorAttributions: [{ displayName: " ", uri: "https://x.example" }] }), { photoAuthor: null, photoAuthorUri: null });
   assert.deepEqual(photoAuthor({ authorAttributions: [{ displayName: "A", uri: "javascript:alert(1)" }] }), { photoAuthor: "A", photoAuthorUri: null });
   assert.deepEqual(photoAuthor({ authorAttributions: [{ displayName: "A", uri: "http://x.example" }] }), { photoAuthor: "A", photoAuthorUri: null });
+});
+
+test("photo authors: every named author, none dropped; avatars only from Google's image host", () => {
+  const authors = photoAuthors({
+    authorAttributions: [
+      { displayName: "A", uri: "https://x.example/a", photoUri: "https://lh3.googleusercontent.com/a" },
+      { displayName: " ", uri: "https://x.example/skip" },
+      { displayName: "B", photoUri: "https://evil.example/avatar.png" },
+      { displayName: "C", photoUri: "https://googleusercontent.com.evil.example/c" },
+      { displayName: "D" },
+    ],
+  });
+  assert.deepEqual(authors, [
+    { name: "A", uri: "https://x.example/a", avatarUri: "https://lh3.googleusercontent.com/a" },
+    { name: "B", uri: null, avatarUri: null },
+    { name: "C", uri: null, avatarUri: null },
+    { name: "D", uri: null, avatarUri: null },
+  ]);
+  assert.deepEqual(photoAuthors({}), []);
+  assert.deepEqual(photoAuthors({ authorAttributions: "nope" }), []);
+});
+
+test("photo Maps link: https Google links only", () => {
+  assert.equal(photoMapsUri({ googleMapsUri: "https://maps.app.goo.gl/fake" }), "https://maps.app.goo.gl/fake");
+  assert.equal(photoMapsUri({ googleMapsUri: "http://www.google.com/maps/fake" }), null);
+  assert.equal(photoMapsUri({ googleMapsUri: "https://google.com.evil.example/maps" }), null);
+  assert.equal(photoMapsUri({ googleMapsUri: "javascript:alert(1)" }), null);
+  assert.equal(photoMapsUri({}), null);
 });
 
 test("missing optional fields become null, never demo data", () => {
