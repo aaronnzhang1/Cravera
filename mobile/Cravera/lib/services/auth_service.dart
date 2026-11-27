@@ -58,8 +58,9 @@ abstract class AuthService {
   /// The signed-in person's display name from their profile, or null.
   Future<String?> displayName();
 
-  /// Deletes the signed-in person's own account on the server, then signs out.
-  Future<AuthOutcome> deleteAccount();
+  /// Deletes the account [expectedUserId] on the server, then signs it out.
+  /// Does nothing (failed) if a different account is signed in by then.
+  Future<AuthOutcome> deleteAccount({required String expectedUserId});
 }
 
 /// The real service, on the Supabase client set up in `main.dart`.
@@ -136,24 +137,36 @@ class SupabaseAuthService implements AuthService {
   }
 
   @override
-  Future<AuthOutcome> deleteAccount() async {
-    if (!isSignedIn) return AuthOutcome.failed;
+  Future<AuthOutcome> deleteAccount({required String expectedUserId}) async {
+    // Bind everything to the session that asked: its own token for the
+    // request and the follow-up check, and sign out only if it's still the
+    // one on this device (never a session that replaced it meanwhile).
+    final session = _client.auth.currentSession;
+    if (session == null || session.user.id != expectedUserId) return AuthOutcome.failed;
+    final token = session.accessToken;
     return reconcileDelete(
-      // The function finds the account from the caller's own token; nothing
-      // in the request names a user.
-      deleteOnServer: () async =>
-          (await _client.functions.invoke('delete-account', body: const <String, Object?>{})).status == 200,
-      accountStillExists: _accountStillExists,
-      signOutLocally: signOut,
+      // The function finds the account from this token; nothing in the
+      // request names a user.
+      deleteOnServer: () async => (await _client.functions.invoke(
+            'delete-account',
+            body: const <String, Object?>{},
+            headers: {'Authorization': 'Bearer $token'},
+          ))
+              .status ==
+          200,
+      accountStillExists: () => _accountStillExists(token),
+      signOutLocally: () async {
+        if (userId == expectedUserId) await signOut();
+      },
     );
   }
 
-  /// Whether this session's account still exists on the server: false only
-  /// when Supabase says the user is gone (never for an expired token or a
-  /// network error, which are null: unknown).
-  Future<bool?> _accountStillExists() async {
+  /// Whether the account behind [token] still exists on the server: false
+  /// only when Supabase says the user is gone (never for an expired token or
+  /// a network error, which are null: unknown).
+  Future<bool?> _accountStillExists(String token) async {
     try {
-      await _client.auth.getUser();
+      await _client.auth.getUser(token);
       return true;
     } on AuthException catch (e) {
       return e.code == 'user_not_found' ? false : null;

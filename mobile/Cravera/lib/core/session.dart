@@ -26,6 +26,15 @@ class AppSession extends ChangeNotifier {
   /// Numbers display-name lookups: an answer for an older session is dropped.
   int _nameRequest = 0;
 
+  /// Goes up whenever an account is lost or replaced on this device, so
+  /// screens can drop anything the previous person typed or opened.
+  int _accountGeneration = 0;
+  int get accountGeneration => _accountGeneration;
+
+  /// The signed-in account's ID (null for guests). Screens capture it before
+  /// an account action, so the action can't land on a different account.
+  String? get accountId => _accountId;
+
   /// Matches [_accountId] to the auth service: clears the previous account's
   /// data on this device when it was lost or replaced, then loads the new
   /// account's display name.
@@ -36,7 +45,10 @@ class AppSession extends ChangeNotifier {
     final hadAccount = _accountId != null;
     _accountId = id;
     _nameRequest++;
-    if (hadAccount) _clearUserData();
+    if (hadAccount) {
+      _accountGeneration++;
+      _clearUserData();
+    }
     if (id != null) {
       _isGuest = false;
       unawaited(_loadDisplayName(id, _nameRequest));
@@ -235,11 +247,16 @@ class AppSession extends ChangeNotifier {
 
   /// Deletes the signed-in person's own account (server-side), then clears
   /// everything on this device like sign out.
-  Future<AuthOutcome> deleteAccount() async {
+  /// Only for [expectedAccountId], the account the guest confirmed for: if
+  /// another account is signed in by now, nothing is deleted or cleared.
+  Future<AuthOutcome> deleteAccount({required String expectedAccountId}) async {
     final service = auth;
-    if (service == null || !service.isSignedIn) return AuthOutcome.failed;
-    final outcome = await service.deleteAccount();
-    if (outcome == AuthOutcome.ok) signOut();
+    if (service == null || _accountId != expectedAccountId) return AuthOutcome.failed;
+    final outcome = await service.deleteAccount(expectedUserId: expectedAccountId);
+    // The service signed the deleted account out; tidy up only if it's still ours.
+    if (outcome == AuthOutcome.ok && (_accountId == expectedAccountId || _accountId == null)) {
+      if (_accountId != null) signOut();
+    }
     return outcome;
   }
 
@@ -251,6 +268,7 @@ class AppSession extends ChangeNotifier {
   void signOut() {
     final service = auth;
     if (service != null && service.isSignedIn) unawaited(service.signOut());
+    if (_accountId != null) _accountGeneration++;
     _accountId = null;
     _nameRequest++;
     _clearUserData();

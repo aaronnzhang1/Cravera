@@ -46,6 +46,16 @@ class FakeAuth implements AuthService {
   /// The server ending the session (expired or revoked elsewhere).
   void expire() => _set(false);
 
+  /// Another account replacing this one's session directly (no sign-out first).
+  void switchTo(String otherEmail) {
+    _email = otherEmail;
+    _name = 'Other Diner';
+    _set(true);
+  }
+
+  /// Accounts whose delete was asked for.
+  final deleted = <String>[];
+
   @override
   Future<AuthOutcome> signIn({required String email, required String password}) async {
     if (email.trim() != knownEmail || password != knownPassword) return AuthOutcome.invalidCredentials;
@@ -80,8 +90,10 @@ class FakeAuth implements AuthService {
   }
 
   @override
-  Future<AuthOutcome> deleteAccount() async {
+  Future<AuthOutcome> deleteAccount({required String expectedUserId}) async {
     deleteCalls++;
+    if (userId != expectedUserId) return AuthOutcome.failed;
+    deleted.add(expectedUserId);
     if (deleteAnswer == AuthOutcome.ok) _set(false);
     return deleteAnswer;
   }
@@ -172,6 +184,40 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
   });
 
+  testWidgets('if another account takes over while the delete dialog is open, Delete does nothing', (tester) async {
+    final auth = FakeAuth();
+    final session = AppSession(auth: auth);
+    await _start(tester, session);
+    await _signIn(tester, FakeAuth.knownEmail, FakeAuth.knownPassword);
+    await tester.tap(find.text('Profile'));
+    await _settle(tester);
+    await tester.ensureVisible(find.text('Delete account'));
+    await tester.tap(find.text('Delete account'));
+    await _settle(tester);
+
+    auth.switchTo('other-tester@example.test'); // B replaces A while A's dialog is open
+    await _settle(tester);
+    if (find.text('Delete').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Delete'));
+      await _settle(tester);
+    }
+    expect(auth.deleted, isEmpty, reason: 'B is never deleted by the confirmation A opened');
+    expect(auth.isSignedIn, isTrue);
+  });
+
+  testWidgets('a craving typed by one account is gone when another account takes over', (tester) async {
+    final auth = FakeAuth();
+    final session = AppSession(auth: auth);
+    await _start(tester, session);
+    await _signIn(tester, FakeAuth.knownEmail, FakeAuth.knownPassword);
+    await tester.enterText(find.widgetWithText(TextField, 'Ask Cravera…'), 'a private craving');
+    await tester.pump();
+
+    auth.switchTo('other-tester@example.test');
+    await _settle(tester);
+    expect(find.text('a private craving'), findsNothing);
+  });
+
   testWidgets('a failed delete keeps the account and says so', (tester) async {
     final auth = FakeAuth(deleteAnswer: AuthOutcome.network);
     final session = AppSession(auth: auth);
@@ -229,6 +275,18 @@ void main() {
     auth.nameGate!.complete('Old Session Name');
     await pumpEventQueue();
     expect(session.displayName, isNot('Old Session Name'), reason: 'a late answer from the old session is dropped');
+  });
+
+  test('a delete can only target the account it was confirmed for', () async {
+    final auth = FakeAuth();
+    final session = AppSession(auth: auth);
+    await session.signInWithEmail(email: FakeAuth.knownEmail, password: FakeAuth.knownPassword);
+    final confirmedFor = session.accountId!;
+    auth.switchTo('other-tester@example.test');
+    await pumpEventQueue();
+    expect(await session.deleteAccount(expectedAccountId: confirmedFor), AuthOutcome.failed);
+    expect(auth.deleted, isEmpty);
+    expect(session.isSignedIn, isTrue, reason: 'B stays signed in');
   });
 
   group('delete: an unclear answer is settled by asking whether the account still exists', () {

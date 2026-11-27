@@ -156,6 +156,10 @@ class ProfileScreen extends StatelessWidget {
 /// Asks before deleting: it can't be undone. Then deletes the account on the
 /// server (the caller's own only) and returns to sign-in.
 Future<void> _confirmDelete(BuildContext context, AppSession session) async {
+  // The account this confirmation is for: if another one is signed in by the
+  // time Delete is tapped, nothing happens.
+  final account = session.accountId;
+  if (account == null) return;
   final sure = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -171,10 +175,10 @@ Future<void> _confirmDelete(BuildContext context, AppSession session) async {
       ],
     ),
   );
-  if (sure != true || !context.mounted) return;
-  final outcome = await session.deleteAccount();
+  if (sure != true || !context.mounted || session.accountId != account) return;
+  final outcome = await session.deleteAccount(expectedAccountId: account);
   if (!context.mounted) return;
-  if (outcome == AuthOutcome.ok) {
+  if (outcome == AuthOutcome.ok && session.accountId == null) {
     ScaffoldMessenger.of(context).clearSnackBars();
     context.go(AppRoutes.signIn);
   } else {
