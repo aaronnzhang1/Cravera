@@ -145,6 +145,34 @@ void main() {
     expect(find.text('no seafood'), findsNothing, reason: 'the old draft is gone');
   });
 
+  testWidgets('refine chips are always on the pick and refine with the current intent', (tester) async {
+    final places = FakePlaces((_) => [_place('a', 'Test Noodle House'), _place('b', 'Sample Ramen Bar')])
+      ..intent = {'textQuery': 'ramen'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'ramen');
+
+    for (final label in ['Cheaper', 'Closer', 'Something else']) {
+      expect(find.widgetWithText(ActionChip, label), findsOneWidget, reason: 'visible before any No');
+    }
+    await _tapVisible(tester, find.widgetWithText(ActionChip, 'Cheaper'));
+    await _settle(tester);
+    expect(places.queries, ['ramen', 'cheaper']);
+    expect(places.previousIntents.last, {'textQuery': 'ramen'});
+  });
+
+  testWidgets('the nav bar hides while a pick is showing and comes back after', (tester) async {
+    await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
+    expect(find.text('Saved'), findsOneWidget, reason: 'nav bar on Home');
+
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Test Noodle House'), findsOneWidget);
+    expect(find.text('Saved'), findsNothing, reason: 'no nav bar over the pick');
+
+    await _tapVisible(tester, find.text('New craving'));
+    await _settle(tester);
+    expect(find.text('Saved'), findsOneWidget);
+  });
+
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
