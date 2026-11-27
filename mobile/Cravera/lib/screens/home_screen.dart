@@ -504,6 +504,14 @@ class _InlineRestaurantCard extends StatelessWidget {
               Stack(
                 children: [
                   _PhotoHeader(photo: photo),
+                  // Google requires the photo author's credit with the photo.
+                  if (photo != null && restaurant.photoAuthor != null)
+                    Positioned(
+                      left: 10,
+                      bottom: 10,
+                      right: 70,
+                      child: _PhotoCredit(author: restaurant.photoAuthor!, uri: restaurant.photoAuthorUri),
+                    ),
                   Positioned(
                     top: 12,
                     right: 12,
@@ -558,7 +566,10 @@ class _InlineRestaurantCard extends StatelessWidget {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 8),
+                    // Places data shown outside a Google map needs this credit.
+                    Text('Google Maps', style: text.labelSmall?.copyWith(color: AppColors.textMuted)),
+                    const SizedBox(height: 14),
                     Row(
                       children: [
                         Expanded(
@@ -1184,6 +1195,46 @@ class _PhotoHeader extends StatelessWidget {
               // Bytes that aren't a valid image show the placeholder.
               errorBuilder: (context, error, stack) => placeholder,
             ),
+    );
+  }
+}
+
+/// "Photo: [author]" over the photo, linking to the author's page when Google
+/// gives one (https only).
+class _PhotoCredit extends StatelessWidget {
+  final String author;
+  final String? uri;
+  const _PhotoCredit({required this.author, required this.uri});
+
+  @override
+  Widget build(BuildContext context) {
+    final link = uri == null ? null : Uri.tryParse(uri!);
+    final label = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.background.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        'Photo: $author',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppColors.textPrimary,
+              decoration: link == null ? null : TextDecoration.underline,
+            ),
+      ),
+    );
+    if (link == null) return Align(alignment: Alignment.bottomLeft, child: label);
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Semantics(
+        link: true,
+        child: InkWell(
+          onTap: () => launchUrl(link, mode: LaunchMode.externalApplication),
+          child: label,
+        ),
+      ),
     );
   }
 }

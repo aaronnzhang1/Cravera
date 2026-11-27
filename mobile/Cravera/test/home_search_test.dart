@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cravera/core/session.dart';
 import 'package:cravera/main.dart';
@@ -65,11 +66,11 @@ void main() {
     expect(find.text('Test Noodle House'), findsOneWidget);
     expect(places.locations.single.label, 'Near you', reason: 'searches around the device location');
 
-    await tester.tap(find.text('No'));
+    await _tapVisible(tester, find.text('No'));
     await _settle(tester);
     expect(find.text('Sample Ramen Bar'), findsOneWidget);
 
-    await tester.tap(find.text('No'));
+    await _tapVisible(tester, find.text('No'));
     await _settle(tester);
     expect(find.textContaining("That's every open match"), findsOneWidget);
     expect(places.queries, ['ramen'], reason: 'No never makes a new request');
@@ -85,7 +86,7 @@ void main() {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     await _searchFor(tester, 'a craving long enough to wrap the title onto several lines');
-    await tester.tap(find.text('No'));
+    await _tapVisible(tester, find.text('No'));
     await _settle(tester);
     expect(find.textContaining("That's every open match"), findsOneWidget);
 
@@ -185,7 +186,7 @@ void main() {
     await _searchFor(tester, 'ramen');
 
     now = now.add(const Duration(minutes: 20));
-    await tester.tap(find.text('Yes'));
+    await _tapVisible(tester, find.text('Yes'));
     await _settle(tester);
     expect(find.text('These results are out of date.'), findsOneWidget);
     expect(find.text('Navigate there'), findsNothing, reason: 'no directions from an old "open now"');
@@ -208,7 +209,7 @@ void main() {
     await _settle(tester);
     await _searchFor(tester, 'ramen');
 
-    await tester.tap(find.text('Yes'));
+    await _tapVisible(tester, find.text('Yes'));
     await _settle(tester);
     expect(find.text('Navigate there'), findsOneWidget);
 
@@ -303,6 +304,33 @@ void main() {
     expect(session.search.current, isNull);
   });
 
+  testWidgets('a photo shows its author''s credit, and the card credits Google Maps', (tester) async {
+    final places = FakePlaces(
+      (_) => [
+        const Restaurant(
+          placeId: 'a',
+          name: 'Test Noodle House',
+          photoName: 'places/a/photos/p',
+          photoAuthor: 'Test Photographer',
+          latitude: 10.001,
+          longitude: 20.001,
+        ),
+      ],
+      photo: (_) => Uint8List.fromList([1, 2, 3]),
+    );
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Photo: Test Photographer'), findsOneWidget);
+    expect(find.text('Google Maps'), findsOneWidget);
+  });
+
+  testWidgets('no photo means no photo credit', (tester) async {
+    await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
+    await _searchFor(tester, 'ramen');
+    expect(find.textContaining('Photo:'), findsNothing);
+    expect(find.text('Google Maps'), findsOneWidget);
+  });
+
   test('prices: 0 is Free, 1–4 are dollar signs, anything else is hidden', () {
     expect(priceLabel(0), 'Free');
     expect(priceLabel(1), r'$');
@@ -340,4 +368,11 @@ class _SlowLookup extends LocationService {
   Future<LocationResult> current() async => const LocationResult.found(_nearby);
   @override
   Future<SearchLocation?> lookUp(String place) => lookup.future;
+}
+
+/// Scrolls a button into view before tapping it, as a user would.
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
 }

@@ -228,6 +228,8 @@ class PlacesService {
         rating: _double(item['rating']),
         distanceMeters: _int(item['distanceMeters']),
         photoName: _string(item['photoName']),
+        photoAuthor: _string(item['photoAuthor']),
+        photoAuthorUri: _httpsUrl(item['photoAuthorUri']),
         latitude: latitude,
         longitude: longitude,
       ));
@@ -236,6 +238,12 @@ class PlacesService {
     // problem, not "nothing matched".
     if (results.isNotEmpty && restaurants.isEmpty) throw const PlacesSearchException(PlacesSearchError.server);
     return restaurants;
+  }
+
+  static String? _httpsUrl(Object? v) {
+    final s = _string(v);
+    final uri = s == null ? null : Uri.tryParse(s);
+    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty ? s : null;
   }
 
   static String? _string(Object? v) => v is String && v.trim().isNotEmpty ? v : null;

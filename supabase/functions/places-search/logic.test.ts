@@ -11,6 +11,7 @@ import {
   MAX_RADIUS_M,
   parseInput,
   parsePublishableKeys,
+  photoAuthor,
 } from "./logic.ts";
 
 const KEY = "sb_publishable_test_key";
@@ -28,7 +29,10 @@ function place(overrides: Record<string, unknown> = {}) {
     rating: 4.4,
     primaryTypeDisplayName: { text: "Ramen Restaurant" },
     types: ["ramen_restaurant", "restaurant", "food", "point_of_interest"],
-    photos: [{ name: "places/fake-place-1/photos/abc" }],
+    photos: [{
+      name: "places/fake-place-1/photos/abc",
+      authorAttributions: [{ displayName: "Test Photographer", uri: "//maps.google.com/maps/contrib/fake" }],
+    }],
     currentOpeningHours: { openNow: true },
     ...overrides,
   };
@@ -179,6 +183,8 @@ test("maps a Places result to card data", () => {
   assert.equal(r.priceLevel, 2);
   assert.equal(r.rating, 4.4);
   assert.equal(r.photoName, "places/fake-place-1/photos/abc");
+  assert.equal(r.photoAuthor, "Test Photographer");
+  assert.equal(r.photoAuthorUri, "https://maps.google.com/maps/contrib/fake");
   assert.ok(r.distanceMeters > 100 && r.distanceMeters < 200);
 });
 
@@ -207,6 +213,13 @@ test("drops open, in-radius places that are not restaurants", () => {
 test("drops places outside the search circle (box corners)", () => {
   const corner = place({ id: "far", location: { latitude: 37.04, longitude: -122.05 } });
   assert.deepEqual(mapPlaces({ places: [corner] }, input), []);
+});
+
+test("photo author: missing name means no author; only https links", () => {
+  assert.deepEqual(photoAuthor({}), { photoAuthor: null, photoAuthorUri: null });
+  assert.deepEqual(photoAuthor({ authorAttributions: [{ displayName: " ", uri: "https://x.example" }] }), { photoAuthor: null, photoAuthorUri: null });
+  assert.deepEqual(photoAuthor({ authorAttributions: [{ displayName: "A", uri: "javascript:alert(1)" }] }), { photoAuthor: "A", photoAuthorUri: null });
+  assert.deepEqual(photoAuthor({ authorAttributions: [{ displayName: "A", uri: "http://x.example" }] }), { photoAuthor: "A", photoAuthorUri: null });
 });
 
 test("missing optional fields become null, never demo data", () => {

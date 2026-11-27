@@ -86,6 +86,18 @@ void main() {
       expect(r.photoUrl, isNull);
     });
 
+    test('keeps the photo author, and only an https author link', () {
+      final [a, b] = PlacesService.parseResults(jsonEncode({
+        'results': [
+          result(placeId: 'a', overrides: {'photoAuthor': 'Test Photographer', 'photoAuthorUri': 'https://maps.google.com/maps/contrib/fake'}),
+          result(placeId: 'b', overrides: {'photoAuthor': 'Test Photographer', 'photoAuthorUri': 'javascript:alert(1)'}),
+        ],
+      }));
+      expect(a.photoAuthor, 'Test Photographer');
+      expect(a.photoAuthorUri, 'https://maps.google.com/maps/contrib/fake');
+      expect(b.photoAuthorUri, isNull);
+    });
+
     test('keeps the server order', () {
       final list = PlacesService.parseResults(jsonEncode({
         'results': [result(placeId: 'b'), result(placeId: 'a'), result(placeId: 'c')],

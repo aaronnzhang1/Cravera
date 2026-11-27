@@ -6,6 +6,10 @@ class Restaurant {
   /// Google Places photo resource name (`places/<id>/photos/<id>`). Turning it
   /// into an image needs the server, because the Places key must stay there.
   final String? photoName;
+
+  /// Who took the photo, and their page. Google requires showing this with the photo.
+  final String? photoAuthor;
+  final String? photoAuthorUri;
   final String? cuisine;
   final String? address;
   final int? priceLevel;
@@ -21,6 +25,8 @@ class Restaurant {
     required this.name,
     this.photoUrl,
     this.photoName,
+    this.photoAuthor,
+    this.photoAuthorUri,
     this.cuisine,
     this.address,
     this.priceLevel,
