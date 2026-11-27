@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../core/app_colors.dart';
 import '../core/routes.dart';
 import '../core/session.dart';
+import '../services/auth_service.dart';
 import '../widgets/cravera_background.dart';
 import '../widgets/cravera_logo.dart';
 
@@ -18,6 +19,27 @@ class _SignInScreenState extends State<SignInScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _signIn() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final outcome = await AppSessionScope.of(context)
+        .signInWithEmail(email: _emailController.text, password: _passwordController.text);
+    if (!mounted) return;
+    if (outcome == AuthOutcome.ok) {
+      context.go(AppRoutes.appHome);
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = authMessage(outcome);
+    });
+  }
 
   @override
   void dispose() {
@@ -78,6 +100,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     obscureText: _obscure,
                     autofillHints: const [AutofillHints.password],
                     textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _signIn(),
                     decoration: InputDecoration(
                       hintText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline_rounded),
@@ -89,17 +112,18 @@ class _SignInScreenState extends State<SignInScreen> {
                       ),
                     ),
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(_error!, style: TextStyle(color: AppColors.danger), textAlign: TextAlign.center),
+                  ],
                   const SizedBox(height: 18),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () {
-                        final email = _emailController.text.trim();
-                        final nameFromEmail = email.contains('@') ? email.split('@').first : email;
-                        AppSessionScope.of(context).signIn(displayName: nameFromEmail.isEmpty ? 'there' : nameFromEmail);
-                        context.go(AppRoutes.appHome);
-                      },
-                      child: const Text('Sign in'),
+                      onPressed: _busy ? null : _signIn,
+                      child: _busy
+                          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
+                          : const Text('Sign in'),
                     ),
                   ),
                   const SizedBox(height: 10),

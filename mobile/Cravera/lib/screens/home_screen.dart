@@ -38,6 +38,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// one scroll view), set while building it.
   bool _outcomeTight = false;
 
+  /// The account generation the typed drafts belong to: when the account is
+  /// lost or replaced, drafts are cleared so the next person never sees them.
+  int? _draftsFor;
+
   /// The search ([CravingSearch.searchId]) the user hid "Narrow it down"
   /// for; any new search, even with the same words, can show it again.
   int? _narrowHiddenFor;
@@ -77,6 +81,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final session = AppSessionScope.of(context);
     final search = session.search;
+    // A different person now: drop what the previous one typed (after this
+    // frame, since clearing a field rebuilds its listeners).
+    final generation = session.accountGeneration;
+    if (_draftsFor != generation) {
+      final changed = _draftsFor != null;
+      _draftsFor = generation;
+      if (changed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _promptController.clear();
+          _repromptController.clear();
+          // Close any dialog the previous person opened (e.g. "Where should I search?").
+          Navigator.of(context, rootNavigator: true).popUntil((route) => route is! PopupRoute);
+        });
+      }
+    }
     return switch (search.status) {
       SearchStatus.idle => _buildIdle(context, session),
       SearchStatus.loading => _buildLoading(context),
@@ -241,13 +261,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       return;
     }
+    // The craving belongs to whoever typed it: if another account takes over
+    // while the place dialog is open, nothing from it is used.
+    final generation = session.accountGeneration;
     if (session.searchLocation == null) {
-      final gotPlace = await _askForPlace(session);
-      if (!gotPlace || !mounted) return;
+      final gotPlace = await _askForPlace(session, generation);
+      if (!gotPlace || !mounted || session.accountGeneration != generation) return;
     }
 
     final near = session.searchLocation;
-    if (near == null) return;
+    if (near == null || session.accountGeneration != generation) return;
     // A refine draft belongs to the search it was typed for.
     _repromptController.clear();
     await session.search.start(prompt, near);
@@ -453,12 +476,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// Lets the user pick where to search: a typed place, or the device
   /// location again. Returns true once a location is set.
-  Future<bool> _askForPlace(AppSession session) async {
+  Future<bool> _askForPlace(AppSession session, [int? generation]) async {
+    final opened = generation ?? session.accountGeneration;
     final choice = await showDialog<_PlaceChoice>(
       context: context,
       builder: (_) => _PlaceDialog(offerDeviceLocation: session.searchLocation?.label != 'Near you'),
     );
-    if (choice == null || !mounted) return false;
+    // Another account took over meanwhile: its location is not the previous person's to set.
+    if (choice == null || !mounted || session.accountGeneration != opened) return false;
     if (choice.useDevice) {
       final before = session.searchLocation;
       await session.useDeviceLocation();
