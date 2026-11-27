@@ -117,6 +117,7 @@ void main() {
     await _tapVisible(tester, find.text('Narrow it down'));
     await _settle(tester);
     expect(find.widgetWithText(TextField, 'e.g. cheaper, no seafood'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'e.g. cheaper, no seafood'), 'no seafood');
     await _tapVisible(tester, find.byTooltip('Close'));
     await _settle(tester);
     expect(find.widgetWithText(TextField, 'e.g. cheaper, no seafood'), findsNothing);
@@ -129,7 +130,8 @@ void main() {
     await _settle(tester);
     expect(find.text('Narrow it down'), findsNothing, reason: 'stays hidden for this search');
 
-    // A new search with the same words is a new search: the chip can come back.
+    // A new search with the same words is a new search: the chip can come back,
+    // without a draft typed for the old one.
     await _tapVisible(tester, find.byTooltip('Back to search'));
     await _settle(tester);
     await _searchFor(tester, 'ramen');
@@ -138,6 +140,9 @@ void main() {
       await _settle(tester);
     }
     expect(find.text('Narrow it down'), findsOneWidget);
+    await _tapVisible(tester, find.text('Narrow it down'));
+    await _settle(tester);
+    expect(find.text('no seafood'), findsNothing, reason: 'the old draft is gone');
   });
 
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {

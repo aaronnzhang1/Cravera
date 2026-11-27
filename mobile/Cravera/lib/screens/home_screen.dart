@@ -243,6 +243,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     final near = session.searchLocation;
     if (near == null) return;
+    // A refine draft belongs to the search it was typed for.
+    _repromptController.clear();
     await session.search.start(prompt, near);
   }
 
