@@ -5,7 +5,7 @@
 | Role | Who | Does |
 |---|---|---|
 | Builder | Claude Code | Plans, builds, runs checks, opens draft PRs, owns CURRENT.md |
-| Reviewer | Codex (Claude Code plugin) | Reviews independently; `/codex:rescue` for a diagnosis or second implementation |
+| Reviewer | Codex: local plugin (run by the lead) and cloud Codex on GitHub | Reviews independently per the [review loop](../CONTRIBUTING.md#review-loop); `/codex:rescue` for a diagnosis or second implementation |
 | Maintainer | Aaron | Assigns work, accepts and merges, approves anything outward-facing: merges, deletions, purchases, deployments, credentials |
 
 Either model can take either role when assigned. The reviewer never reviews its own change.

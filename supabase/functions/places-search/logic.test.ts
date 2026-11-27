@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import {
   buildRequestBody,
   DEFAULT_RADIUS_M,
+  distanceMeters,
   handle,
   mapPlaces,
   MAX_RADIUS_M,
@@ -95,6 +96,9 @@ test("validates query and coordinates", () => {
   assert.equal(typeof parseInput({ query: "  ", ...here }), "string");
   assert.equal(typeof parseInput({ query: "x".repeat(201), ...here }), "string");
   assert.equal(typeof parseInput({ query: "ramen", latitude: 91, longitude: 0 }), "string");
+  assert.equal(typeof parseInput({ query: "ramen", latitude: 89.9, longitude: 0 }), "string");
+  assert.equal(typeof parseInput({ query: "ramen", latitude: -85.1, longitude: 0 }), "string");
+  assert.equal(typeof parseInput({ query: "ramen", latitude: 85, longitude: 0 }), "object");
   assert.equal(typeof parseInput({ query: "ramen", latitude: "37", longitude: 0 }), "string");
   assert.equal(typeof parseInput(null), "string");
 });
@@ -123,6 +127,35 @@ test("always asks Places for open-now restaurants inside a box around the user",
   const { low, high } = body.locationRestriction.rectangle;
   assert.ok(low.latitude < 37 && high.latitude > 37);
   assert.ok(low.longitude < -122 && high.longitude > -122);
+});
+
+test("the box always contains the whole search circle", () => {
+  // Codex's edge case: 20 km at 37°, a point 19,993 m due north.
+  const edge = { query: "ramen", latitude: 37, longitude: -122, radiusMeters: 20000 };
+  const { low, high } = buildRequestBody(edge).locationRestriction.rectangle;
+  assert.ok(distanceMeters(37, -122, 37.1798, -122) < 20000);
+  assert.ok(high.latitude > 37.1798);
+  // Due east and west edges, at a high latitude where longitude degrees are short.
+  const north = { query: "ramen", latitude: 69, longitude: 18, radiusMeters: 20000 };
+  const box = buildRequestBody(north).locationRestriction.rectangle;
+  for (let lng = 17; lng <= 19; lng += 0.001) {
+    if (distanceMeters(69, 18, 69, lng) <= 20000) {
+      assert.ok(lng >= box.low.longitude && lng <= box.high.longitude, `lng ${lng}`);
+    }
+  }
+  assert.ok(low.latitude < 36.8202);
+});
+
+test("the box stays within Google's 180° width at every allowed latitude", () => {
+  for (const latitude of [-85, -60, 0, 60, 85]) {
+    const { low, high } = buildRequestBody({ query: "ramen", latitude, longitude: 0, radiusMeters: 20000 }).locationRestriction.rectangle;
+    assert.ok(high.longitude - low.longitude < 180, `lat ${latitude}`);
+  }
+});
+
+test("a box across the antimeridian wraps instead of breaking", () => {
+  const { low, high } = buildRequestBody({ query: "ramen", latitude: 0, longitude: 179.99, radiusMeters: 20000 }).locationRestriction.rectangle;
+  assert.ok(low.longitude > 179 && high.longitude < -179, `${low.longitude} .. ${high.longitude}`);
 });
 
 test("sends the Places key only in the header to Google", async () => {
