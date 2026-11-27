@@ -160,6 +160,23 @@ void main() {
     expect(places.previousIntents.last, {'textQuery': 'ramen'});
   });
 
+  testWidgets('on a short phone with a home indicator, chips and No / Yes are on screen without scrolling', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => [_place('a', 'A Test Place With A Name Long Enough To Wrap Twice')]));
+    await _searchFor(tester, 'ramen');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    tester.view.padding = const FakeViewPadding(bottom: 68); // 34 pt home indicator
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    for (final label in ['Cheaper', 'Closer', 'No', 'Yes']) {
+      expect(find.text(label).hitTestable(), findsOneWidget, reason: '$label reachable without scrolling');
+    }
+    final yesBottom = tester.getBottomLeft(find.text('Yes')).dy;
+    expect(yesBottom, lessThanOrEqualTo(568 - 34), reason: 'above the home indicator');
+  });
+
   testWidgets('the nav bar hides while a pick is showing and comes back after', (tester) async {
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     expect(find.text('Saved'), findsOneWidget, reason: 'nav bar on Home');

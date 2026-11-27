@@ -17,17 +17,18 @@ class AppShellScaffold extends StatelessWidget {
     final index = _tabIndexFor(location);
     final search = AppSessionScope.of(context).search;
 
-    return CraveraBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        extendBody: true,
-        body: SafeArea(bottom: false, child: child),
-        // Hidden while a pick is showing: the pick screen and its Yes sheet
-        // own the bottom of the screen (the bar used to cover the sheet).
-        bottomNavigationBar: ListenableBuilder(
-          listenable: search,
-          builder: (context, _) => search.status == SearchStatus.showing && index == 0
-              ? const SizedBox.shrink()
+    // Rebuilt on search changes: while a pick is showing there is no nav bar
+    // at all (not just an empty one), so the pick gets the bottom safe area
+    // and the bar can't cover the pick or its Yes sheet.
+    return ListenableBuilder(
+      listenable: search,
+      builder: (context, _) => CraveraBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBody: true,
+          body: SafeArea(bottom: false, child: child),
+          bottomNavigationBar: search.status == SearchStatus.showing && index == 0
+              ? null
               : GlassNav(
                   currentIndex: index,
                   onTap: (i) {

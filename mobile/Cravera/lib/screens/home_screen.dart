@@ -533,16 +533,6 @@ class _PickView extends StatelessWidget {
                           const SizedBox(height: 6),
                           // Places data shown outside a Google map needs this credit.
                           Text('Google Maps', style: text.labelSmall?.copyWith(color: AppColors.textMuted)),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final (label, words) in refines)
-                                ActionChip(label: Text(label), onPressed: () => onRefine(words)),
-                            ],
-                          ),
-                          if (narrowDown != null) ...[const SizedBox(height: 4), narrowDown!],
                         ],
                       ),
                     ),
@@ -550,26 +540,49 @@ class _PickView extends StatelessWidget {
                 ),
               ),
             ),
-            // No / Yes stay in thumb reach whatever the screen height.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 56,
-                      child: OutlinedButton(onPressed: onNo, child: const Text('No')),
+            // Refine chips and No / Yes stay on screen and in thumb reach,
+            // above the home indicator, whatever the screen height or text size.
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final (label, words) in refines) ...[
+                            ActionChip(label: Text(label), onPressed: () => onRefine(words)),
+                            const SizedBox(width: 8),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 56,
-                      child: FilledButton(onPressed: onYes, child: const Text('Yes')),
+                    ?narrowDown,
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: OutlinedButton(onPressed: onNo, child: const Text('No')),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 56,
+                            child: FilledButton(onPressed: onYes, child: const Text('Yes')),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -1166,7 +1179,8 @@ class _RoundIcon extends StatelessWidget {
     return IconButton.filled(
       tooltip: tooltip,
       onPressed: onPressed,
-      style: IconButton.styleFrom(backgroundColor: AppColors.background.withValues(alpha: 0.7), foregroundColor: color),
+      // The opaque cream scrim keeps the icon readable over any photo (3:1+ for controls).
+      style: IconButton.styleFrom(backgroundColor: AppColors.scrim, foregroundColor: color),
       icon: Icon(icon),
     );
   }
