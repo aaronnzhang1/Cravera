@@ -2,7 +2,7 @@
 
 Cravera removes food indecision. A guest tells the app what they're craving in plain language and gets **one** nearby restaurant that is open now, instead of working through clunky filters. Over time, bookmarks and ratings teach it the user's taste.
 
-Sources merged here: the original Notion "Project Hub" (`Project - AI Food Concierge.pdf`), `Project-Overview.md`, the HTML prototype, and `mobile/Cravera/cursorrules`, all kept outside the repo in `C:\Developer\Cravera Docs` except the last. This file is now the single home for scope and roadmap.
+Sources merged here: the original Notion "Project Hub" (`Project - AI Food Concierge.pdf`), `Project-Overview.md`, the HTML prototype, and `mobile/Cravera/cursorrules` (deleted 2026-11-26; see Git history). The first three are kept outside the repo in `C:\Developer\Cravera Docs`. This file is now the single home for scope and roadmap.
 
 ## Core loop (Phase 1)
 
