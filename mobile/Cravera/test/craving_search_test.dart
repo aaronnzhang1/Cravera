@@ -189,7 +189,7 @@ void main() {
     expect(places.queries, hasLength(1));
   });
 
-  test('photos load only for the place on screen, once each', () async {
+  test('only the first pick gets a photo; No makes no Google request', () async {
     Restaurant withPhoto(String id) =>
         Restaurant(placeId: id, name: 'Test Place $id', photoName: 'places/$id/photos/p', latitude: 10, longitude: 20);
     final places = FakePlaces(
@@ -204,9 +204,10 @@ void main() {
     expect(search.currentPhoto, 'a'.codeUnits);
 
     search.next();
+    search.next();
     await Future<void>.delayed(Duration.zero);
-    expect(places.photoRequests, ['places/a/photos/p', 'places/b/photos/p']);
-    expect(search.currentPhoto, 'b'.codeUnits);
+    expect(places.photoRequests, ['places/a/photos/p'], reason: 'photos stay free: first pick only');
+    expect(search.currentPhoto, isNull, reason: 'later picks show the placeholder');
   });
 
   test('no photo, or a failed photo, leaves the card without one', () async {
@@ -221,7 +222,7 @@ void main() {
 
     search.next();
     await Future<void>.delayed(Duration.zero);
-    expect(places.photoRequests, ['places/x/photos/p']);
+    expect(places.photoRequests, isEmpty);
     expect(search.currentPhoto, isNull);
   });
 

@@ -63,7 +63,9 @@ class CravingSearch extends ChangeNotifier {
     return place == null ? null : _photos[place.placeId];
   }
 
-  /// Fetches the photo for the place on screen, once. A late answer from an
+  /// Fetches the photo for the first pick of a search only (maintainer,
+  /// 2026-11-27: keep photos free), so No never makes a Google request.
+  /// A late answer from an
   /// older search is dropped.
   void _loadPhoto() {
     final service = places;
@@ -138,7 +140,6 @@ class CravingSearch extends ChangeNotifier {
       _status = SearchStatus.exhausted;
     }
     notifyListeners();
-    _loadPhoto();
   }
 
   /// False (and [SearchStatus.expired]) when the results are older than
