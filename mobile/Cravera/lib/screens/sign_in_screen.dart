@@ -105,6 +105,8 @@ class _SignInScreenState extends State<SignInScreen> {
                       hintText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline_rounded),
                       suffixIcon: IconButton(
+                        // Screen readers announce what the eye does.
+                        tooltip: _obscure ? 'Show password' : 'Hide password',
                         onPressed: () => setState(() => _obscure = !_obscure),
                         icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded),
                       ),
