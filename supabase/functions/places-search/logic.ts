@@ -4,6 +4,19 @@
 //
 // Rules (AGENTS.md): every restaurant field comes from Google Places, the
 // search is always open-now, and the Places key never leaves the server.
+// Gemini (gemini.ts) only shapes the search text and the order; open-now, the
+// radius and the restaurant check are set here, after it, in code.
+
+import {
+  type Candidate,
+  curate,
+  DEFAULT_GEMINI_MODEL,
+  fallbackIntent,
+  type GeminiConfig,
+  type Intent,
+  understand,
+  validateIntent,
+} from "./gemini.ts";
 
 export const PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
 
@@ -34,6 +47,10 @@ export type SearchInput = {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  /** The intent of the search being refined, from the app. Untrusted: validated. */
+  previousIntent: Intent | null;
+  /** The guest's local hour (0-23), so "late-night" or "breakfast" make sense. */
+  localHour: number | null;
 };
 
 export type RestaurantResult = {
@@ -50,11 +67,16 @@ export type RestaurantResult = {
   photoAuthorUri: string | null;
   latitude: number;
   longitude: number;
+  /** The intent's own `wants` this place matches (for "why this pick"). Never text about the place. */
+  matches: string[];
 };
 
 export type Env = {
   placesKey: string | undefined;
   publishableKeys: string | undefined;
+  /** Optional: without it, search uses the raw text and Places order. */
+  geminiKey?: string | undefined;
+  geminiModel?: string | undefined;
 };
 
 type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
@@ -82,7 +104,12 @@ export function parseInput(body: unknown): SearchInput | string {
     }
     radiusMeters = Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, b.radiusMeters));
   }
-  return { query, latitude, longitude, radiusMeters };
+  // Both are optional hints: a bad value is ignored, not an error.
+  const previousIntent = b.previousIntent === undefined ? null : validateIntent(b.previousIntent);
+  const localHour = Number.isInteger(b.localHour) && (b.localHour as number) >= 0 && (b.localHour as number) <= 23
+    ? b.localHour as number
+    : null;
+  return { query, latitude, longitude, radiusMeters, previousIntent, localHour };
 }
 
 function wrapLongitude(lng: number): number {
@@ -93,7 +120,9 @@ function wrapLongitude(lng: number): number {
  * Text Search (New) only *restricts* to a rectangle, so we send the box around
  * the circle and then drop anything outside the circle in [mapPlaces].
  */
-export function buildRequestBody(input: SearchInput) {
+const PRICE_LEVEL_NAMES = ["", "PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE", "PRICE_LEVEL_VERY_EXPENSIVE"];
+
+export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIntent(input.query)) {
   // Same sphere as distanceMeters, plus 1% margin, so the box always holds the
   // whole circle; mapPlaces then drops the corners.
   const angular = (input.radiusMeters * 1.01) / EARTH_RADIUS_M;
@@ -102,8 +131,10 @@ export function buildRequestBody(input: SearchInput) {
   const cosLat = Math.cos((input.latitude * Math.PI) / 180);
   const dLng = Math.sin(angular) >= cosLat ? 179 : Math.min(toDeg(Math.asin(Math.sin(angular) / cosLat)), 179);
   return {
-    textQuery: input.query,
-    includedType: "restaurant",
+    textQuery: intent.textQuery,
+    // Only an allow-listed restaurant type (validateIntent), else "restaurant".
+    includedType: intent.includedType ?? "restaurant",
+    ...(intent.priceLevels.length > 0 ? { priceLevels: intent.priceLevels.map((p) => PRICE_LEVEL_NAMES[p]) } : {}),
     // Without this, Google may skip the type filter (e.g. for an address query).
     strictTypeFiltering: true,
     openNow: true,
@@ -180,6 +211,7 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
       ...photoAuthor(p.photos?.[0]),
       latitude: lat,
       longitude: lng,
+      matches: [],
     });
   }
   return results;
@@ -245,16 +277,63 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const input = parseInput(body);
   if (typeof input === "string") return json(400, { error: input });
 
+  const gemini: GeminiConfig | null = env.geminiKey
+    ? { key: env.geminiKey, model: env.geminiModel || DEFAULT_GEMINI_MODEL, fetchFn }
+    : null;
+
+  // 1. Understand. Without Gemini, or if it fails, use the raw text (added to
+  //    the previous search text when refining).
+  const raw = input.previousIntent ? `${input.previousIntent.textQuery} ${input.query}`.slice(0, MAX_QUERY_LENGTH) : input.query;
+  const intent = (gemini && await understand(gemini, input.query, input.previousIntent, input.localHour)) ||
+    fallbackIntent(raw);
+
+  // 2. Search. If the narrowed search finds nothing, try once more with only
+  //    the search text, so filters never turn a match into "nothing open".
+  let results = await searchPlaces(input, intent, env.placesKey, fetchFn);
+  if (results === null) return json(502, { error: "Search failed. Try again." });
+  if (results.length === 0 && (intent.includedType !== null || intent.priceLevels.length > 0)) {
+    const relaxed = await searchPlaces(input, { ...intent, includedType: null, priceLevels: [] }, env.placesKey, fetchFn);
+    if (relaxed === null) return json(502, { error: "Search failed. Try again." });
+    results = relaxed;
+  }
+
+  // 3. Curate. Gemini sees only Places data, under refs we choose; if it
+  //    fails, Places order stays.
+  if (gemini && results.length > 0) {
+    const candidates: Candidate[] = results.map((r, i) => ({
+      ref: `c${i + 1}`,
+      name: r.name,
+      cuisine: r.cuisine,
+      priceLevel: r.priceLevel,
+      rating: r.rating,
+      distanceMeters: r.distanceMeters,
+    }));
+    const order = await curate(gemini, intent, candidates);
+    if (order) {
+      const byRef = new Map(candidates.map((c, i) => [c.ref, results![i]]));
+      results = order.map(({ ref, matches }) => ({ ...byRef.get(ref)!, matches }));
+    }
+  }
+  return json(200, { results, intent });
+}
+
+/** One Places call. Returns null on any upstream failure. */
+async function searchPlaces(
+  input: SearchInput,
+  intent: Intent,
+  placesKey: string,
+  fetchFn: FetchFn,
+): Promise<RestaurantResult[] | null> {
   let upstream: Response;
   try {
     upstream = await fetchFn(PLACES_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": env.placesKey,
+        "X-Goog-Api-Key": placesKey,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify(buildRequestBody(input)),
+      body: JSON.stringify(buildRequestBody(input, intent)),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       // A redirect could replay the craving and location elsewhere: fail instead.
       redirect: "error",
@@ -262,19 +341,16 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   } catch (e) {
     // Never log the query or location: they are the user's data.
     console.error("places-search: upstream request failed", (e as Error)?.name);
-    return json(502, { error: "Search failed. Try again." });
+    return null;
   }
   if (!upstream.ok) {
     console.error("places-search: upstream status", upstream.status);
-    return json(502, { error: "Search failed. Try again." });
+    return null;
   }
-
-  let data: unknown;
   try {
-    data = await upstream.json();
+    return mapPlaces(await upstream.json(), input);
   } catch {
     console.error("places-search: upstream returned invalid JSON");
-    return json(502, { error: "Search failed. Try again." });
+    return null;
   }
-  return json(200, { results: mapPlaces(data, input) });
 }
