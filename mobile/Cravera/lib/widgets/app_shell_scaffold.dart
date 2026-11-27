@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/routes.dart';
+import '../core/session.dart';
+import '../services/craving_search.dart';
 import 'cravera_background.dart';
 import 'glass_nav.dart';
 
@@ -13,20 +15,31 @@ class AppShellScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     final index = _tabIndexFor(location);
+    final search = AppSessionScope.of(context).search;
 
-    return CraveraBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        extendBody: true,
-        body: SafeArea(bottom: false, child: child),
-        bottomNavigationBar: GlassNav(
-          currentIndex: index,
-          onTap: (i) {
-            if (i == 0) context.go(AppRoutes.appHome);
-            if (i == 1) context.go(AppRoutes.appBookmarks);
-            if (i == 2) context.go(AppRoutes.appFriends);
-            if (i == 3) context.go(AppRoutes.appProfile);
-          },
+    // Rebuilt on search changes: while a pick is showing there is no nav bar
+    // at all (not just an empty one), so the pick gets the bottom safe area
+    // and the bar can't cover the pick or its Yes sheet.
+    return ListenableBuilder(
+      listenable: search,
+      builder: (context, _) => CraveraBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBody: true,
+          body: SafeArea(bottom: false, child: child),
+          // Same test as Home uses to draw the pick, so an expired pick
+          // (shown as "out of date") gets the nav bar back.
+          bottomNavigationBar: search.status == SearchStatus.showing && search.isFresh && index == 0
+              ? null
+              : GlassNav(
+                  currentIndex: index,
+                  onTap: (i) {
+                    if (i == 0) context.go(AppRoutes.appHome);
+                    if (i == 1) context.go(AppRoutes.appBookmarks);
+                    if (i == 2) context.go(AppRoutes.appFriends);
+                    if (i == 3) context.go(AppRoutes.appProfile);
+                  },
+                ),
         ),
       ),
     );

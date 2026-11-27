@@ -132,7 +132,7 @@ void main() {
 
     // A new search with the same words is a new search: the chip can come back,
     // without a draft typed for the old one.
-    await _tapVisible(tester, find.byTooltip('Back to search'));
+    await _tapVisible(tester, find.text('New craving'));
     await _settle(tester);
     await _searchFor(tester, 'ramen');
     for (var i = 0; i < CravingSearch.offerRefineAfter; i++) {
@@ -143,6 +143,70 @@ void main() {
     await _tapVisible(tester, find.text('Narrow it down'));
     await _settle(tester);
     expect(find.text('no seafood'), findsNothing, reason: 'the old draft is gone');
+  });
+
+  testWidgets('refine chips are always on the pick and refine with the current intent', (tester) async {
+    final places = FakePlaces((_) => [_place('a', 'Test Noodle House'), _place('b', 'Sample Ramen Bar')])
+      ..intent = {'textQuery': 'ramen'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'ramen');
+
+    for (final label in ['Cheaper', 'Closer', 'Something else']) {
+      expect(find.widgetWithText(ActionChip, label), findsOneWidget, reason: 'visible before any No');
+    }
+    await _tapVisible(tester, find.widgetWithText(ActionChip, 'Cheaper'));
+    await _settle(tester);
+    expect(places.queries, ['ramen', 'cheaper']);
+    expect(places.previousIntents.last, {'textQuery': 'ramen'});
+  });
+
+  testWidgets('on a short phone with a home indicator, chips and No / Yes are on screen without scrolling', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => [_place('a', 'A Test Place With A Name Long Enough To Wrap Twice')]));
+    await _searchFor(tester, 'ramen');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    tester.view.padding = const FakeViewPadding(bottom: 68); // 34 pt home indicator
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    for (final label in ['Cheaper', 'Closer', 'No', 'Yes']) {
+      expect(find.text(label).hitTestable(), findsOneWidget, reason: '$label reachable without scrolling');
+    }
+    final yesBottom = tester.getBottomLeft(find.text('Yes')).dy;
+    expect(yesBottom, lessThanOrEqualTo(568 - 34), reason: 'above the home indicator');
+  });
+
+  testWidgets('"Narrow it down" fits with the keyboard open on a short sideways phone', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => [for (var i = 0; i < 8; i++) _place('$i', 'Test Place $i')]));
+    await _searchFor(tester, 'ramen');
+    for (var i = 0; i < CravingSearch.offerRefineAfter; i++) {
+      await _tapVisible(tester, find.text('No'));
+      await _settle(tester);
+    }
+    await _tapVisible(tester, find.text('Narrow it down'));
+    await _settle(tester);
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320, sideways
+    tester.view.viewInsets = const FakeViewPadding(bottom: 400); // 200 pt keyboard
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    expect(find.widgetWithText(TextField, 'e.g. cheaper, no seafood').hitTestable(), findsOneWidget);
+  });
+
+  testWidgets('the nav bar hides while a pick is showing and comes back after', (tester) async {
+    await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
+    expect(find.text('Saved'), findsOneWidget, reason: 'nav bar on Home');
+
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Test Noodle House'), findsOneWidget);
+    expect(find.text('Saved'), findsNothing, reason: 'no nav bar over the pick');
+
+    await _tapVisible(tester, find.text('New craving'));
+    await _settle(tester);
+    expect(find.text('Saved'), findsOneWidget);
   });
 
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
@@ -191,7 +255,7 @@ void main() {
 
     await tester.tap(find.text('New search'));
     await _settle(tester);
-    expect(find.textContaining('craving today?'), findsOneWidget);
+    expect(find.text('What are you craving?'), findsOneWidget);
   });
 
   testWidgets('the card\'s close button goes back to Home without another search', (tester) async {
@@ -200,10 +264,10 @@ void main() {
     await _searchFor(tester, 'ramen');
     expect(find.text('Test Noodle House'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Back to search'));
+    await tester.tap(find.text('New craving'));
     await _settle(tester);
 
-    expect(find.textContaining('craving today?'), findsOneWidget);
+    expect(find.text('What are you craving?'), findsOneWidget);
     expect(find.text('Sample Ramen Bar'), findsNothing, reason: 'close is not No');
     expect(places.queries, ['ramen']);
   });
@@ -258,6 +322,28 @@ void main() {
     await _settle(tester);
     expect(find.text('Test Noodle House'), findsOneWidget);
     expect(places.queries, ['ramen', 'ramen']);
+  });
+
+  testWidgets('a pick that goes stale on a redraw brings the nav bar back with the out-of-date screen', (tester) async {
+    var now = DateTime(2026, 1, 1, 12);
+    final session = AppSession(
+      locationService: const _FoundLocation(),
+      search: CravingSearch(places: FakePlaces((_) => [_place('a', 'Test Noodle House')]), clock: () => now),
+    );
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+    await tester.tap(find.text('Continue as guest'));
+    await _settle(tester);
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Saved'), findsNothing);
+
+    // Time passes with no tap; something else redraws Home.
+    now = now.add(const Duration(minutes: 20));
+    session.toggleBookmark(_place('z', 'Other'));
+    await _settle(tester);
+    expect(find.text('These results are out of date.'), findsOneWidget);
+    expect(session.search.status, SearchStatus.expired);
+    expect(find.text('Saved'), findsOneWidget, reason: 'nav bar is back');
   });
 
   testWidgets('the directions sheet checks freshness again before opening Maps', (tester) async {

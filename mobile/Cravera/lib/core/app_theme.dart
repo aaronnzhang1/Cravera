@@ -11,8 +11,8 @@ class AppRadius {
 }
 
 class AppTheme {
-  static ThemeData dark() {
-    final base = ThemeData.dark(useMaterial3: true);
+  static ThemeData light() {
+    final base = ThemeData.light(useMaterial3: true);
 
     // Fraunces (a soft serif) for big headings gives a warm, editorial feel
     // that suits food; Outfit stays for everything else because it reads well small.
@@ -40,13 +40,13 @@ class AppTheme {
 
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         surface: AppColors.surface,
         surfaceContainerHighest: AppColors.surface3,
         primary: AppColors.accent,
         onPrimary: AppColors.onAccent,
         secondary: AppColors.sage,
-        onSecondary: AppColors.background,
+        onSecondary: AppColors.onAccent,
         error: AppColors.danger,
         onSurface: AppColors.textPrimary,
         onSurfaceVariant: AppColors.textMuted,
@@ -59,7 +59,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
-      // Cards and inputs are see-through like glass, so the background glows show.
+      // Cards and inputs are slightly see-through, so the background glows show.
       cardTheme: CardThemeData(
         color: AppColors.glassBase,
         surfaceTintColor: Colors.transparent,
@@ -124,8 +124,8 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.surface3,
-        contentTextStyle: GoogleFonts.outfit(color: AppColors.textPrimary),
+        backgroundColor: AppColors.textPrimary,
+        contentTextStyle: GoogleFonts.outfit(color: AppColors.background),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.medium)),
       ),

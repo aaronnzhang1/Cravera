@@ -68,7 +68,7 @@ class _GlassNavState extends State<GlassNav> with SingleTickerProviderStateMixin
       child: DecoratedBox(
         decoration: const BoxDecoration(
           borderRadius: BorderRadius.all(Radius.circular(999)),
-          boxShadow: [BoxShadow(color: Color(0x73000000), blurRadius: 30, offset: Offset(0, 12))],
+          boxShadow: [BoxShadow(color: Color(0x1F2A2420), blurRadius: 30, offset: Offset(0, 12))],
         ),
         child: Glass(
           blur: true,

@@ -119,19 +119,18 @@ class _MiniCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = scaleFor(spec.depth);
+    // On cream, cards need more presence than on the old dark theme to read
+    // as "alive", while staying behind the question and the input.
     final card = Opacity(
-      opacity: 0.14 + 0.24 * spec.depth,
+      opacity: 0.35 + 0.40 * spec.depth,
       child: Container(
         width: 118 * scale,
         padding: EdgeInsets.all(12 * scale),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22 * scale),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.white.withValues(alpha: 0.14), Colors.white.withValues(alpha: 0.04)],
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+          color: AppColors.surface,
+          border: Border.all(color: AppColors.border),
+          boxShadow: [BoxShadow(color: AppColors.textPrimary.withValues(alpha: 0.06), blurRadius: 18, offset: const Offset(0, 6))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,7 +140,7 @@ class _MiniCard extends StatelessWidget {
               height: 54 * scale,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14 * scale),
-                color: AppColors.accent.withValues(alpha: 0.22),
+                color: AppColors.accentSoft,
               ),
               alignment: Alignment.center,
               child: Text(spec.emoji, style: TextStyle(fontSize: 26 * scale)),
@@ -160,7 +159,7 @@ class _MiniCard extends StatelessWidget {
                   child: Container(
                     height: 5 * scale,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
+                      color: AppColors.surface3,
                       borderRadius: BorderRadius.circular(9),
                     ),
                   ),
