@@ -44,6 +44,10 @@ abstract class AuthService {
   /// The signed-in person's email, for the Profile screen.
   String? get email;
 
+  /// The signed-in account's ID (null when signed out). The session uses it
+  /// to notice an account being lost or replaced; it is never sent anywhere.
+  String? get userId;
+
   /// Fires when someone signs in or out (also when a stored session expires).
   Stream<bool> get signedInChanges;
 
@@ -71,6 +75,9 @@ class SupabaseAuthService implements AuthService {
 
   @override
   String? get email => _client.auth.currentUser?.email;
+
+  @override
+  String? get userId => _client.auth.currentSession?.user.id;
 
   @override
   Stream<bool> get signedInChanges => _client.auth.onAuthStateChange.map((s) => s.session != null);
@@ -131,16 +138,53 @@ class SupabaseAuthService implements AuthService {
   @override
   Future<AuthOutcome> deleteAccount() async {
     if (!isSignedIn) return AuthOutcome.failed;
-    try {
+    return reconcileDelete(
       // The function finds the account from the caller's own token; nothing
       // in the request names a user.
-      final res = await _client.functions.invoke('delete-account', body: const <String, Object?>{});
-      if (res.status != 200) return AuthOutcome.failed;
-      await signOut();
-      return AuthOutcome.ok;
-    } catch (e) {
-      return outcomeFor(e);
+      deleteOnServer: () async =>
+          (await _client.functions.invoke('delete-account', body: const <String, Object?>{})).status == 200,
+      accountStillExists: _accountStillExists,
+      signOutLocally: signOut,
+    );
+  }
+
+  /// Whether this session's account still exists on the server: false only
+  /// when Supabase says the user is gone (never for an expired token or a
+  /// network error, which are null: unknown).
+  Future<bool?> _accountStillExists() async {
+    try {
+      await _client.auth.getUser();
+      return true;
+    } on AuthException catch (e) {
+      return e.code == 'user_not_found' ? false : null;
+    } catch (_) {
+      return null;
     }
+  }
+
+  /// Deletes on the server, and settles an unclear answer: if the request
+  /// failed or its answer was lost but the account is confirmed gone, the
+  /// delete happened, so this device signs out too. Otherwise it reports the
+  /// failure and keeps the person signed in.
+  static Future<AuthOutcome> reconcileDelete({
+    required Future<bool> Function() deleteOnServer,
+    required Future<bool?> Function() accountStillExists,
+    required Future<void> Function() signOutLocally,
+  }) async {
+    Object? error;
+    try {
+      if (await deleteOnServer()) {
+        await signOutLocally();
+        return AuthOutcome.ok;
+      }
+    } catch (e) {
+      error = e;
+    }
+    if (await accountStillExists() == false) {
+      await signOutLocally();
+      return AuthOutcome.ok;
+    }
+    return error == null ? AuthOutcome.failed : outcomeFor(error);
   }
 
   static AuthOutcome? _checkInput(String email, String password) {

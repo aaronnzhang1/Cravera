@@ -14,15 +14,34 @@ class AppSession extends ChangeNotifier {
     this.search.addListener(notifyListeners);
     // Follow sign-in changes from the server too (a stored session that
     // expires, or one restored when the app starts).
-    _authChanges = auth?.signedInChanges.listen((signedIn) {
-      if (signedIn) {
-        _loadDisplayName();
-      } else if (_displayName != null) {
-        _clearUserData();
-      }
-      notifyListeners();
-    });
-    if (auth?.isSignedIn ?? false) _loadDisplayName();
+    _authChanges = auth?.signedInChanges.listen((_) => _syncAccount());
+    _syncAccount(notify: false);
+  }
+
+  /// The account this session is showing; null for guests and signed out.
+  /// Tracked on its own (not through the display name, which loads later),
+  /// so losing or replacing an account always clears its local data.
+  String? _accountId;
+
+  /// Numbers display-name lookups: an answer for an older session is dropped.
+  int _nameRequest = 0;
+
+  /// Matches [_accountId] to the auth service: clears the previous account's
+  /// data on this device when it was lost or replaced, then loads the new
+  /// account's display name.
+  void _syncAccount({bool notify = true}) {
+    final service = auth;
+    final id = (service != null && service.isSignedIn) ? service.userId : null;
+    if (id == _accountId) return;
+    final hadAccount = _accountId != null;
+    _accountId = id;
+    _nameRequest++;
+    if (hadAccount) _clearUserData();
+    if (id != null) {
+      _isGuest = false;
+      unawaited(_loadDisplayName(id, _nameRequest));
+    }
+    if (notify) notifyListeners();
   }
 
   /// Accounts (TASK-003). Null when the app has no Supabase key: then only
@@ -36,10 +55,11 @@ class AppSession extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Loads the display name from the signed-in person's profile.
-  Future<void> _loadDisplayName() async {
+  /// Loads the display name from the signed-in person's profile; dropped if
+  /// the account changed or signed out meanwhile.
+  Future<void> _loadDisplayName(String accountId, int request) async {
     final name = await auth?.displayName();
-    if (!(auth?.isSignedIn ?? false)) return; // signed out meanwhile
+    if (request != _nameRequest || _accountId != accountId) return;
     _displayName = name ?? auth?.email?.split('@').first ?? 'there';
     notifyListeners();
   }
@@ -197,10 +217,7 @@ class AppSession extends ChangeNotifier {
     final service = auth;
     if (service == null) return AuthOutcome.failed;
     final outcome = await service.signIn(email: email, password: password);
-    if (outcome == AuthOutcome.ok) {
-      _isGuest = false;
-      await _loadDisplayName();
-    }
+    if (outcome == AuthOutcome.ok) _syncAccount(notify: false);
     notifyListeners();
     return outcome;
   }
@@ -211,10 +228,7 @@ class AppSession extends ChangeNotifier {
     final service = auth;
     if (service == null) return AuthOutcome.failed;
     final outcome = await service.signUp(email: email, password: password, displayName: name);
-    if (outcome == AuthOutcome.ok) {
-      _isGuest = false;
-      await _loadDisplayName();
-    }
+    if (outcome == AuthOutcome.ok) _syncAccount(notify: false);
     notifyListeners();
     return outcome;
   }
@@ -237,6 +251,8 @@ class AppSession extends ChangeNotifier {
   void signOut() {
     final service = auth;
     if (service != null && service.isSignedIn) unawaited(service.signOut());
+    _accountId = null;
+    _nameRequest++;
     _clearUserData();
     notifyListeners();
   }

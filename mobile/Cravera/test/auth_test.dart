@@ -31,6 +31,11 @@ class FakeAuth implements AuthService {
   @override
   String? get email => _signedIn ? _email : null;
   @override
+  String? get userId => _signedIn ? 'fake-user-${_email ?? 'x'}' : null;
+
+  /// When set, the profile lookup waits for it (a slow network).
+  Completer<String?>? nameGate;
+  @override
   Stream<bool> get signedInChanges => _changes.stream;
 
   void _set(bool signedIn) {
@@ -68,7 +73,11 @@ class FakeAuth implements AuthService {
   }
 
   @override
-  Future<String?> displayName() async => _signedIn ? _name : null;
+  Future<String?> displayName() async {
+    final gate = nameGate;
+    if (gate != null) return gate.future;
+    return _signedIn ? _name : null;
+  }
 
   @override
   Future<AuthOutcome> deleteAccount() async {
@@ -204,6 +213,47 @@ void main() {
     await _settle(tester);
     expect(find.text('What are you craving?'), findsOneWidget);
     expect(session.isGuest, isTrue);
+  });
+
+  test('a session that ends while its name is still loading still clears local data', () async {
+    final auth = FakeAuth()..nameGate = Completer<String?>();
+    final session = AppSession(auth: auth);
+    expect(await session.signInWithEmail(email: FakeAuth.knownEmail, password: FakeAuth.knownPassword), AuthOutcome.ok);
+    session.toggleBookmark(session.suggestedRestaurants.first);
+
+    auth.expire(); // before the profile lookup answers
+    await pumpEventQueue();
+    expect(session.isSignedIn, isFalse);
+    expect(session.bookmarks, isEmpty, reason: 'cleared even though no name had loaded');
+
+    auth.nameGate!.complete('Old Session Name');
+    await pumpEventQueue();
+    expect(session.displayName, isNot('Old Session Name'), reason: 'a late answer from the old session is dropped');
+  });
+
+  group('delete: an unclear answer is settled by asking whether the account still exists', () {
+    Future<(AuthOutcome, int)> run({required Future<bool> Function() delete, required bool? exists}) async {
+      var signedOut = 0;
+      final outcome = await SupabaseAuthService.reconcileDelete(
+        deleteOnServer: delete,
+        accountStillExists: () async => exists,
+        signOutLocally: () async => signedOut++,
+      );
+      return (outcome, signedOut);
+    }
+
+    test('confirmed delete signs out', () async {
+      expect(await run(delete: () async => true, exists: true), (AuthOutcome.ok, 1));
+    });
+    test('answer lost, account gone: counts as deleted and signs out', () async {
+      expect(await run(delete: () async => throw TimeoutException('lost'), exists: false), (AuthOutcome.ok, 1));
+      expect(await run(delete: () async => false, exists: false), (AuthOutcome.ok, 1));
+    });
+    test('answer lost, account still there or unknown: reports the failure, stays signed in', () async {
+      expect(await run(delete: () async => throw TimeoutException('lost'), exists: true), (AuthOutcome.network, 0));
+      expect(await run(delete: () async => throw TimeoutException('lost'), exists: null), (AuthOutcome.network, 0));
+      expect(await run(delete: () async => false, exists: null), (AuthOutcome.failed, 0));
+    });
   });
 
   test('Supabase errors map to outcomes by code, never by message text', () {
