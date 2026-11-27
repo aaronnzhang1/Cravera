@@ -29,6 +29,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// field keeps focus and the keyboard stays up.
   final _outcomeInputKey = GlobalKey();
 
+  /// Cravera's newest reply in the chat, and the search it was last scrolled
+  /// into view for: each new answer is brought to the top of the view once.
+  final _replyKey = GlobalKey();
+  int? _replyShownFor;
+
   /// The search ([CravingSearch.searchId]) the user hid "Narrow it down"
   /// for; any new search, even with the same words, can show it again.
   int? _narrowHiddenFor;
@@ -280,6 +285,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Out of results, nothing found, or a failed search: say which, and offer
   /// the next step (refine, try again, or start over).
   Widget _buildOutcome(BuildContext context, CravingSearch search) {
+    // A long thread (many messages, large text, small phone) could leave the
+    // newest reply out of view: scroll it to the top once per answer. Older
+    // messages stay above it, the suggestions below.
+    if (_replyShownFor != search.searchId) {
+      _replyShownFor = search.searchId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final reply = _replyKey.currentContext;
+        if (reply != null && reply.mounted) Scrollable.ensureVisible(reply, alignment: 0);
+      });
+    }
     final text = Theme.of(context).textTheme;
     final failed = search.status == SearchStatus.failed;
     final expired = search.status == SearchStatus.expired || !search.isFresh;
@@ -334,6 +349,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ],
             const SizedBox(height: 12),
             Row(
+              key: _replyKey,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const CraveraLogo(size: 36),

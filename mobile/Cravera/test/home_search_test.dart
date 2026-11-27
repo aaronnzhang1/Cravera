@@ -255,6 +255,30 @@ void main() {
     expect(ys[0] < ys[1] && ys[1] < ys[2], isTrue, reason: 'in the order sent');
   });
 
+  testWidgets('a long thread on a small phone at large text keeps the newest reply in view', (tester) async {
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final places = FakePlaces((_) => [])..intent = {'textQuery': 'x'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'nice dinner');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    await _settle(tester);
+    for (final more in ['cheaper', 'something Asian fusion', 'quieter', 'open later', 'with a patio']) {
+      await tester.enterText(find.widgetWithText(TextField, 'Tell me more…'), more);
+      await tester.tap(find.byTooltip('Search again'));
+      await _settle(tester);
+    }
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    // The newest reply starts at the top of the view (read first); older messages are above, scrollable.
+    final reply = tester.getRect(find.text('Nothing open matched that nearby.'));
+    final top = tester.getRect(find.text('New search')).bottom;
+    expect(reply.top, greaterThanOrEqualTo(top), reason: 'newest reply starts in view');
+    expect(reply.top, lessThan(top + 60), reason: 'newest reply at the top of the thread view');
+    expect(find.text('nice dinner').hitTestable(), findsNothing, reason: 'the oldest scrolled up, still reachable');
+  });
+
   testWidgets('nothing matched on a short sideways phone with the keyboard up: the input stays usable', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => []));
