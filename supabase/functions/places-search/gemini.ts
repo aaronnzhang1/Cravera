@@ -160,6 +160,8 @@ export function validateCuration(raw: unknown, refs: string[]): Curation | null 
     seen.add(ref);
     out.push(ref);
   }
+  // No usable ref at all is not a ranking: keep Places order (and log it as such).
+  if (out.length === 0) return null;
   for (const ref of refs) if (!seen.has(ref)) out.push(ref);
   return out;
 }
@@ -209,8 +211,9 @@ export async function callGemini(
     }
     const data = await res.json() as { status?: unknown; steps?: unknown };
     if (data?.status !== "completed" || !Array.isArray(data.steps)) {
-      // The status is an enum from Google, never the user's data.
-      console.error("places-search: gemini answer status", String(data?.status).slice(0, 30));
+      // Only Google's known status names are logged; anything else is a fixed label.
+      const known = ["in_progress", "requires_action", "failed", "cancelled", "incomplete", "requires_continuation"];
+      console.error("places-search: gemini answer status", known.includes(data?.status as string) ? data.status : "unexpected_status");
       return null;
     }
     const text = data.steps

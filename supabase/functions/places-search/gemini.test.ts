@@ -131,7 +131,24 @@ test("curation keeps only refs we sent, each once, and appends the rest in Place
 });
 
 test("curation with no usable order is null", () => {
-  for (const bad of [null, "c1", { order: "c1" }, {}]) assert.equal(validateCuration(bad, ["c1"]), null);
+  for (const bad of [null, "c1", { order: "c1" }, {}, { order: [] }, { order: [{ ref: "c9" }] }]) {
+    assert.equal(validateCuration(bad, ["c1"]), null, JSON.stringify(bad));
+  }
+});
+
+test("an unexpected Gemini status is logged as a fixed label, never echoed", async () => {
+  const logged: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => logged.push(args);
+  try {
+    const g = fakeGoogle([new Response(JSON.stringify({ places: [] }))], [geminiAnswer(gymIntent, "my craving is tacos")]);
+    await handle(request({ query: "tacos", ...here }), env, g.fn);
+  } finally {
+    console.error = original;
+  }
+  const text = JSON.stringify(logged);
+  assert.ok(!text.includes("tacos"), text);
+  assert.ok(text.includes("unexpected_status"), text);
 });
 
 // --- why this pick ---
