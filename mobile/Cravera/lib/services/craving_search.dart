@@ -59,6 +59,13 @@ class CravingSearch extends ChangeNotifier {
   /// How many places the user has said No to in this search.
   int get rejections => _rejections;
 
+  /// After this many Nos, the screen offers a small "Narrow it down" option.
+  /// Earlier felt pushy (maintainer, 2026-11-26).
+  static const offerRefineAfter = 5;
+
+  /// Whether to offer narrowing the search, under the current card.
+  bool get offerRefine => _status == SearchStatus.showing && _rejections >= offerRefineAfter;
+
   /// Photo bytes by place ID, fetched only for places actually shown. A key
   /// with a null value means "asked, no photo (yet)".
   final Map<String, Uint8List?> _photos = {};
