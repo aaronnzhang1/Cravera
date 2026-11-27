@@ -40,6 +40,17 @@ export const MAX_RADIUS_M = 20000;
 export const MAX_QUERY_LENGTH = 200;
 export const MAX_ABS_LATITUDE = 85;
 const UPSTREAM_TIMEOUT_MS = 8000;
+/**
+ * The whole request must answer within this, below the app's 15 s timeout:
+ * a step that wouldn't fit is skipped (curation, the relaxed retry), so a
+ * slow Gemini never costs the guest a result Places already gave.
+ */
+export const REQUEST_BUDGET_MS = 11_000;
+const MIN_CURATE_MS = 1500;
+const MIN_RETRY_MS = 2500;
+/** "Close by" when the guest wanted near and the place is within this. */
+const NEAR_M = 1500;
+const HIGHLY_RATED = 4.5;
 const EARTH_RADIUS_M = 6_371_000;
 
 export type SearchInput = {
@@ -67,8 +78,11 @@ export type RestaurantResult = {
   photoAuthorUri: string | null;
   latitude: number;
   longitude: number;
-  /** The intent's own `wants` this place matches (for "why this pick"). Never text about the place. */
-  matches: string[];
+  /**
+   * Why this pick, built in code from this result's Places facts and the
+   * intent (price, distance, rating). Never text from the model.
+   */
+  reasons: string[];
 };
 
 export type Env = {
@@ -77,6 +91,8 @@ export type Env = {
   /** Optional: without it, search uses the raw text and Places order. */
   geminiKey?: string | undefined;
   geminiModel?: string | undefined;
+  /** Milliseconds clock; tests replace it. */
+  now?: () => number;
 };
 
 type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
@@ -211,7 +227,7 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
       ...photoAuthor(p.photos?.[0]),
       latitude: lat,
       longitude: lng,
-      matches: [],
+      reasons: [],
     });
   }
   return results;
@@ -277,29 +293,32 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const input = parseInput(body);
   if (typeof input === "string") return json(400, { error: input });
 
+  const now = env.now ?? Date.now;
+  const deadline = now() + REQUEST_BUDGET_MS;
+  const left = () => deadline - now();
   const gemini: GeminiConfig | null = env.geminiKey
     ? { key: env.geminiKey, model: env.geminiModel || DEFAULT_GEMINI_MODEL, fetchFn }
     : null;
 
-  // 1. Understand. Without Gemini, or if it fails, use the raw text (added to
-  //    the previous search text when refining).
-  const raw = input.previousIntent ? `${input.previousIntent.textQuery} ${input.query}`.slice(0, MAX_QUERY_LENGTH) : input.query;
-  const intent = (gemini && await understand(gemini, input.query, input.previousIntent, input.localHour)) ||
-    fallbackIntent(raw);
+  // 1. Understand. Without Gemini, or if it fails, use the raw text; when
+  //    refining, the new words always fit and the previous text is shortened.
+  const understood = gemini ? await understand(gemini, input.query, input.previousIntent, input.localHour, left()) : null;
+  const intent = understood ?? fallbackIntent(fallbackText(input));
 
   // 2. Search. If the narrowed search finds nothing, try once more with only
   //    the search text, so filters never turn a match into "nothing open".
-  let results = await searchPlaces(input, intent, env.placesKey, fetchFn);
+  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
   if (results === null) return json(502, { error: "Search failed. Try again." });
-  if (results.length === 0 && (intent.includedType !== null || intent.priceLevels.length > 0)) {
-    const relaxed = await searchPlaces(input, { ...intent, includedType: null, priceLevels: [] }, env.placesKey, fetchFn);
-    if (relaxed === null) return json(502, { error: "Search failed. Try again." });
-    results = relaxed;
+  if (results.length === 0 && (intent.includedType !== null || intent.priceLevels.length > 0) && left() >= MIN_RETRY_MS) {
+    const relaxed = { ...intent, includedType: null, priceLevels: [] };
+    results = await searchPlaces(input, relaxed, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
+    if (results === null) return json(502, { error: "Search failed. Try again." });
   }
 
-  // 3. Curate. Gemini sees only Places data, under refs we choose; if it
-  //    fails, Places order stays.
-  if (gemini && results.length > 0) {
+  // 3. Curate, only if Gemini understood the craving and there is time. It
+  //    sees only Places data under refs we choose and returns an order; if
+  //    it fails, Places order stays.
+  if (gemini && understood && results.length > 1 && left() >= MIN_CURATE_MS) {
     const candidates: Candidate[] = results.map((r, i) => ({
       ref: `c${i + 1}`,
       name: r.name,
@@ -308,13 +327,36 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
       rating: r.rating,
       distanceMeters: r.distanceMeters,
     }));
-    const order = await curate(gemini, intent, candidates);
+    const order = await curate(gemini, intent, candidates, left() - 500);
     if (order) {
       const byRef = new Map(candidates.map((c, i) => [c.ref, results![i]]));
-      results = order.map(({ ref, matches }) => ({ ...byRef.get(ref)!, matches }));
+      results = order.map((ref) => byRef.get(ref)!);
     }
   }
+
+  // 4. Explain, from Places facts only.
+  results = results.map((r) => ({ ...r, reasons: reasonsFor(r, intent) }));
   return json(200, { results, intent });
+}
+
+/** The search text when Gemini didn't answer: the craving, or the previous text plus the refinement. */
+export function fallbackText(input: SearchInput): string {
+  if (!input.previousIntent) return input.query;
+  const room = MAX_QUERY_LENGTH - input.query.length - 1;
+  if (room <= 0) return input.query;
+  return `${input.previousIntent.textQuery.slice(0, room).trim()} ${input.query}`;
+}
+
+/**
+ * "Why this pick", from facts Places gave for this place compared with what
+ * the guest asked for. Fixed labels in code: the model can't add or word them.
+ */
+export function reasonsFor(r: RestaurantResult, intent: Intent): string[] {
+  const reasons: string[] = [];
+  if (r.priceLevel !== null && intent.priceLevels.includes(r.priceLevel)) reasons.push("In your price range");
+  if (intent.distance === "near" && r.distanceMeters <= NEAR_M) reasons.push("Close by");
+  if (r.rating !== null && r.rating >= HIGHLY_RATED) reasons.push("Highly rated");
+  return reasons;
 }
 
 /** One Places call. Returns null on any upstream failure. */
@@ -323,7 +365,9 @@ async function searchPlaces(
   intent: Intent,
   placesKey: string,
   fetchFn: FetchFn,
+  timeoutMs: number,
 ): Promise<RestaurantResult[] | null> {
+  if (timeoutMs <= 0) return null;
   let upstream: Response;
   try {
     upstream = await fetchFn(PLACES_URL, {
@@ -334,7 +378,7 @@ async function searchPlaces(
         "X-Goog-FieldMask": FIELD_MASK,
       },
       body: JSON.stringify(buildRequestBody(input, intent)),
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       // A redirect could replay the craving and location elsewhere: fail instead.
       redirect: "error",
     });

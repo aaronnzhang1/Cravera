@@ -164,8 +164,10 @@ class PlacesService {
     if (_ownsClient) _client.close();
   }
 
-  /// Longer than the function's own 8 s limit on its Google call.
-  static const defaultTimeout = Duration(seconds: 12);
+  /// Longer than the function's own 11 s budget for the whole search
+  /// (Gemini, Places, Gemini), so the app never gives up on an answer that is
+  /// still on its way.
+  static const defaultTimeout = Duration(seconds: 15);
   final Duration timeout;
 
   /// Returns open restaurants for [query] around [near], best match first.
@@ -255,7 +257,7 @@ class PlacesService {
         photoAuthorUri: _httpsUrl(item['photoAuthorUri']),
         latitude: latitude,
         longitude: longitude,
-        matches: _matches(item['matches']),
+        reasons: _reasons(item['reasons']),
       ));
     }
     // Rows that all fail mean the response changed shape: that is a server
@@ -275,9 +277,9 @@ class PlacesService {
     }
   }
 
-  /// The intent's phrases this place matches, as the server sent them. Only
-  /// short plain strings are kept; anything else is dropped.
-  static List<String> _matches(Object? v) => v is List
+  /// The server's reasons for this pick. Only short plain strings are kept;
+  /// anything else is dropped.
+  static List<String> _reasons(Object? v) => v is List
       ? List.unmodifiable(v.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty && s.length <= 30).take(4))
       : const [];
 

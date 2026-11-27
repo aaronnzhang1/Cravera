@@ -117,15 +117,15 @@ void main() {
       expect(b.photoAuthorUri, isNull);
     });
 
-    test('keeps only short plain match phrases; none by default', () {
+    test('keeps only short plain reasons; none by default', () {
       final [a, b] = PlacesService.parseResults(jsonEncode({
         'results': [
-          result(placeId: 'a', overrides: {'matches': ['high protein', 42, '', 'x' * 31, 'quick', 'cozy', 'warm', 'late']}),
+          result(placeId: 'a', overrides: {'reasons': ['In your price range', 42, '', 'x' * 31, 'Close by', 'a', 'b', 'c']}),
           result(placeId: 'b'),
         ],
       }));
-      expect(a.matches, ['high protein', 'quick', 'cozy', 'warm']);
-      expect(b.matches, isEmpty);
+      expect(a.reasons, ['In your price range', 'Close by', 'a', 'b']);
+      expect(b.reasons, isEmpty);
     });
 
     test('reads the intent object, or null', () {
