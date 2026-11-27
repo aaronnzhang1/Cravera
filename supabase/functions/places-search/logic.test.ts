@@ -235,7 +235,7 @@ test("photo author: missing name means no author; only https links", () => {
   assert.deepEqual(photoAuthor({ authorAttributions: [{ displayName: "A", uri: "http://x.example" }] }), { photoAuthor: "A", photoAuthorUri: null });
 });
 
-test("photo authors: all named authors, capped; avatars only from Google's image host", () => {
+test("photo authors: every named author, none dropped; avatars only from Google's image host", () => {
   const authors = photoAuthors({
     authorAttributions: [
       { displayName: "A", uri: "https://x.example/a", photoUri: "https://lh3.googleusercontent.com/a" },
@@ -249,6 +249,7 @@ test("photo authors: all named authors, capped; avatars only from Google's image
     { name: "A", uri: "https://x.example/a", avatarUri: "https://lh3.googleusercontent.com/a" },
     { name: "B", uri: null, avatarUri: null },
     { name: "C", uri: null, avatarUri: null },
+    { name: "D", uri: null, avatarUri: null },
   ]);
   assert.deepEqual(photoAuthors({}), []);
   assert.deepEqual(photoAuthors({ authorAttributions: "nope" }), []);

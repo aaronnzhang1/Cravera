@@ -241,9 +241,6 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
 
 export type PhotoAuthor = { name: string; uri: string | null; avatarUri: string | null };
 
-/** At most this many authors are sent; a Places photo normally has one. */
-export const MAX_PHOTO_AUTHORS = 3;
-
 /** An https URL (Google sends some as "//host/..."), optionally only on [hosts] or their subdomains. */
 export function httpsUrl(value: unknown, hosts?: string[]): string | null {
   if (typeof value !== "string") return null;
@@ -257,7 +254,7 @@ export function httpsUrl(value: unknown, hosts?: string[]): string | null {
   }
 }
 
-/** Every author attribution of a photo that has a name: links only if https, avatars only from Google's image host. */
+/** Every author attribution of a photo that has a name (Google requires crediting all): links only if https, avatars only from Google's image host. */
 export function photoAuthors(photo: unknown): PhotoAuthor[] {
   const list = (photo as { authorAttributions?: unknown })?.authorAttributions;
   if (!Array.isArray(list)) return [];
@@ -266,7 +263,6 @@ export function photoAuthors(photo: unknown): PhotoAuthor[] {
     const name = typeof a?.displayName === "string" ? a.displayName.trim() : "";
     if (!name) continue;
     authors.push({ name, uri: httpsUrl(a.uri), avatarUri: httpsUrl(a.photoUri, ["googleusercontent.com"]) });
-    if (authors.length === MAX_PHOTO_AUTHORS) break;
   }
   return authors;
 }

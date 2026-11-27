@@ -308,7 +308,7 @@ class PlacesService {
     final list = item['photoAuthors'];
     final authors = <PhotoAuthor>[];
     if (list is List) {
-      for (final a in list.take(3)) {
+      for (final a in list) {
         if (a is! Map<String, dynamic>) continue;
         final name = _string(a['name'])?.trim();
         if (name == null) continue;

@@ -125,6 +125,8 @@ void main() {
               {'name': 'Test Photographer', 'uri': 'https://maps.google.com/maps/contrib/fake', 'avatarUri': 'https://lh3.googleusercontent.com/a/fake'},
               {'name': ' ', 'uri': 'https://x.example'},
               {'name': 'Second Tester', 'avatarUri': 'https://evil.example/avatar.png'},
+              {'name': 'Third Tester'},
+              {'name': 'Fourth Tester'},
             ],
             'photoMapsUri': 'https://www.google.com/maps/place//data=fake',
           }),
@@ -134,9 +136,10 @@ void main() {
           }),
         ],
       }));
-      expect(a.photoCredits.map((p) => p.name), ['Test Photographer', 'Second Tester']);
+      // Every named author is kept (Google requires crediting all of them).
+      expect(a.photoCredits.map((p) => p.name), ['Test Photographer', 'Second Tester', 'Third Tester', 'Fourth Tester']);
       expect(a.photoCredits.first.avatarUri, 'https://lh3.googleusercontent.com/a/fake');
-      expect(a.photoCredits.last.avatarUri, isNull);
+      expect(a.photoCredits[1].avatarUri, isNull);
       expect(a.photoMapsUri, 'https://www.google.com/maps/place//data=fake');
       // An older server sends one author; a non-Google Maps link is dropped.
       expect(b.photoCredits.map((p) => p.name), ['Old Server Tester']);

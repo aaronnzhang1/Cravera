@@ -567,19 +567,6 @@ class _PickView extends StatelessWidget {
                         fit: StackFit.expand,
                         children: [
                           _PhotoHeader(photo: photo),
-                          // Google requires crediting every photo author (avatar,
-                          // name, profile link) and a link to the photo on Maps.
-                          if (photo != null && (restaurant.photoCredits.isNotEmpty || restaurant.photoMapsUri != null))
-                            Positioned(
-                              left: 12,
-                              bottom: 12,
-                              right: 12,
-                              child: _PhotoCredit(
-                                authors: restaurant.photoCredits,
-                                avatar: session.search.avatar,
-                                mapsUri: restaurant.photoMapsUri,
-                              ),
-                            ),
                           Positioned(
                             top: 12,
                             left: 12,
@@ -607,6 +594,19 @@ class _PickView extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // Google requires crediting every photo author (avatar, name,
+                    // profile link) and a link to the photo on Maps. Directly under
+                    // the photo, so any number of credits can wrap without covering
+                    // the photo's controls.
+                    if (photo != null && (restaurant.photoCredits.isNotEmpty || restaurant.photoMapsUri != null))
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
+                        child: _PhotoCredit(
+                          authors: restaurant.photoCredits,
+                          avatar: session.search.avatar,
+                          mapsUri: restaurant.photoMapsUri,
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
                       child: Column(
@@ -1259,14 +1259,8 @@ class _PhotoCredit extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textPrimary);
     return Align(
-      alignment: Alignment.bottomLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: AppColors.background.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Wrap(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 4,
           children: [
@@ -1306,7 +1300,6 @@ class _PhotoCredit extends StatelessWidget {
               ),
           ],
         ),
-      ),
     );
   }
 }
@@ -1330,15 +1323,14 @@ class _CreditLink extends StatelessWidget {
       ),
     );
     if (link == null) return Semantics(label: label, excludeSemantics: true, child: body);
+    void open() => launchUrl(link, mode: LaunchMode.externalApplication);
+    // The tap action sits on this node: excludeSemantics hides the InkWell's.
     return Semantics(
       link: true,
       label: label,
       excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => launchUrl(link, mode: LaunchMode.externalApplication),
-        child: body,
-      ),
+      onTap: open,
+      child: InkWell(borderRadius: BorderRadius.circular(8), onTap: open, child: body),
     );
   }
 }

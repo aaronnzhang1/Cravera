@@ -534,6 +534,8 @@ void main() {
               avatarUri: 'https://lh3.googleusercontent.com/a/fake',
             ),
             PhotoAuthor(name: 'Second Tester'),
+            PhotoAuthor(name: 'Third Tester'),
+            PhotoAuthor(name: 'Fourth Tester'),
           ],
           photoMapsUri: 'https://www.google.com/maps/place//data=fake',
           latitude: 10.001,
@@ -547,8 +549,17 @@ void main() {
     expect(find.text('Photo: Test Photographer'), findsOneWidget);
     expect(find.text('Second Tester'), findsOneWidget);
     expect(find.text('View on Google Maps'), findsOneWidget);
-    expect(find.bySemanticsLabel('View photo on Google Maps'), findsOneWidget);
-    expect(find.text('T'), findsOneWidget, reason: 'initial until the avatar loads');
+    expect(find.text('Fourth Tester'), findsOneWidget);
+    // Screen readers can open each link, not just read it.
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('View photo on Google Maps')),
+      isSemantics(isLink: true, hasTapAction: true),
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Photo by Test Photographer')),
+      isSemantics(isLink: true, hasTapAction: true),
+    );
+    expect(find.text('T'), findsNWidgets(2), reason: 'initials until avatars load');
     expect(places.avatarRequests, ['https://lh3.googleusercontent.com/a/fake']);
   });
 
