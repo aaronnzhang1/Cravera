@@ -26,6 +26,7 @@ export const MIN_RADIUS_M = 500;
 export const MAX_RADIUS_M = 20000;
 export const MAX_QUERY_LENGTH = 200;
 const UPSTREAM_TIMEOUT_MS = 8000;
+const EARTH_RADIUS_M = 6_371_000;
 
 export type SearchInput = {
   query: string;
@@ -87,9 +88,13 @@ function wrapLongitude(lng: number): number {
  * the circle and then drop anything outside the circle in [mapPlaces].
  */
 export function buildRequestBody(input: SearchInput) {
-  const dLat = input.radiusMeters / 111_320;
-  const cosLat = Math.max(Math.cos((input.latitude * Math.PI) / 180), 0.01);
-  const dLng = Math.min(input.radiusMeters / (111_320 * cosLat), 179);
+  // Same sphere as distanceMeters, plus 1% margin, so the box always holds the
+  // whole circle; mapPlaces then drops the corners.
+  const angular = (input.radiusMeters * 1.01) / EARTH_RADIUS_M;
+  const toDeg = (r: number) => (r * 180) / Math.PI;
+  const dLat = toDeg(angular);
+  const cosLat = Math.cos((input.latitude * Math.PI) / 180);
+  const dLng = Math.sin(angular) >= cosLat ? 179 : Math.min(toDeg(Math.asin(Math.sin(angular) / cosLat)), 179);
   return {
     textQuery: input.query,
     includedType: "restaurant",
@@ -114,7 +119,7 @@ export function buildRequestBody(input: SearchInput) {
 
 /** Great-circle distance in meters. */
 export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const r = 6_371_000;
+  const r = EARTH_RADIUS_M;
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import {
   buildRequestBody,
   DEFAULT_RADIUS_M,
+  distanceMeters,
   handle,
   mapPlaces,
   MAX_RADIUS_M,
@@ -123,6 +124,23 @@ test("always asks Places for open-now restaurants inside a box around the user",
   const { low, high } = body.locationRestriction.rectangle;
   assert.ok(low.latitude < 37 && high.latitude > 37);
   assert.ok(low.longitude < -122 && high.longitude > -122);
+});
+
+test("the box always contains the whole search circle", () => {
+  // Codex's edge case: 20 km at 37°, a point 19,993 m due north.
+  const edge = { query: "ramen", latitude: 37, longitude: -122, radiusMeters: 20000 };
+  const { low, high } = buildRequestBody(edge).locationRestriction.rectangle;
+  assert.ok(distanceMeters(37, -122, 37.1798, -122) < 20000);
+  assert.ok(high.latitude > 37.1798);
+  // Due east and west edges, at a high latitude where longitude degrees are short.
+  const north = { query: "ramen", latitude: 69, longitude: 18, radiusMeters: 20000 };
+  const box = buildRequestBody(north).locationRestriction.rectangle;
+  for (let lng = 17; lng <= 19; lng += 0.001) {
+    if (distanceMeters(69, 18, 69, lng) <= 20000) {
+      assert.ok(lng >= box.low.longitude && lng <= box.high.longitude, `lng ${lng}`);
+    }
+  }
+  assert.ok(low.latitude < 36.8202);
 });
 
 test("sends the Places key only in the header to Google", async () => {
