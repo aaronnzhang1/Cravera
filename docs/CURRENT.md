@@ -18,4 +18,4 @@
   - `mobile/Cravera/cursorrules` duplicates AGENTS.md and PRODUCT.md: delete once the maintainer agrees.
   - The usage-limit handover PR was closed unmerged (maintainer, 2026-11-27); branch `feat/usage-limit-handover` is kept, behind `main`.
   - Windows PC: Flutter 3.41.9 (matches CI), `Pixel_10_Pro` emulator, `adb` and `emulator` under `%LOCALAPPDATA%\Android\Sdk` (not on PATH; in Git Bash set `MSYS_NO_PATHCONV=1` for `adb shell` paths), Supabase CLI 3.4.0 at `~/bin/supabase.exe`, logged in and linked.
-- **Next action:** the maintainer approves the TASK-002 spec in `docs/plans/v0.1-concierge.md`; meanwhile check TASK-001 criteria 2 and 8 in the app (and on the Mac's iPhone Simulator).
+- **Next action:** merge the plan PR (`docs/plan-concierge`) once cloud Codex passes, then get the TASK-002 spec in `docs/plans/v0.1-concierge.md` approved (left for the next session); meanwhile check TASK-001 criteria 2 and 8 in the app (and on the Mac's iPhone Simulator).
