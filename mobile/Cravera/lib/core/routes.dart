@@ -101,6 +101,11 @@ Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
     _direction = tab > _currentTab ? 1 : -1;
     _currentTab = tab;
   }
+  // Each page keeps the direction it arrived from, and picks its exit
+  // direction once when it starts leaving, so a quick second tap can't make
+  // a page that is still moving jump to the other side.
+  final enterFrom = _direction;
+  int? exitTo;
   return CustomTransitionPage<void>(
     key: state.pageKey,
     child: child,
@@ -115,7 +120,12 @@ Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
           // Incoming pages arrive from the direction of travel; a leaving page
           // (its animation running backwards) exits the opposite way.
           final leaving = animation.status == AnimationStatus.reverse;
-          final dx = (1 - t) * 0.25 * (leaving ? -_direction : _direction);
+          if (leaving) {
+            exitTo ??= -_direction;
+          } else {
+            exitTo = null;
+          }
+          final dx = (1 - t) * 0.25 * (leaving ? exitTo! : enterFrom);
           final blur = (1 - t) * 8;
           final moved = FractionalTranslation(
             translation: Offset(dx, 0),

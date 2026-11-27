@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       SearchStatus.idle => _buildIdle(context, session),
       SearchStatus.loading => _buildLoading(context),
       // An expired card is never drawn, even before the next check runs.
-      SearchStatus.showing => search.isFresh ? _buildResult(context, session) : _buildOutcome(context, search),
+      SearchStatus.showing => search.isFresh ? _buildResult(context, session) : _expiredNow(context, search),
       SearchStatus.exhausted || SearchStatus.failed || SearchStatus.expired => _buildOutcome(context, search),
     };
   }
@@ -178,6 +178,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       },
     );
+  }
+
+  /// Shows the out-of-date screen and records the expiry right after this
+  /// frame, so everything listening (the nav bar too) updates together.
+  Widget _expiredNow(BuildContext context, CravingSearch search) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => search.checkFresh());
+    return _buildOutcome(context, search);
   }
 
   Widget _buildLoading(BuildContext context) {

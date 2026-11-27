@@ -324,6 +324,28 @@ void main() {
     expect(places.queries, ['ramen', 'ramen']);
   });
 
+  testWidgets('a pick that goes stale on a redraw brings the nav bar back with the out-of-date screen', (tester) async {
+    var now = DateTime(2026, 1, 1, 12);
+    final session = AppSession(
+      locationService: const _FoundLocation(),
+      search: CravingSearch(places: FakePlaces((_) => [_place('a', 'Test Noodle House')]), clock: () => now),
+    );
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+    await tester.tap(find.text('Continue as guest'));
+    await _settle(tester);
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Saved'), findsNothing);
+
+    // Time passes with no tap; something else redraws Home.
+    now = now.add(const Duration(minutes: 20));
+    session.toggleBookmark(_place('z', 'Other'));
+    await _settle(tester);
+    expect(find.text('These results are out of date.'), findsOneWidget);
+    expect(session.search.status, SearchStatus.expired);
+    expect(find.text('Saved'), findsOneWidget, reason: 'nav bar is back');
+  });
+
   testWidgets('the directions sheet checks freshness again before opening Maps', (tester) async {
     var now = DateTime(2026, 1, 1, 12);
     final session = AppSession(
