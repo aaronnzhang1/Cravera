@@ -29,6 +29,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// field keeps focus and the keyboard stays up.
   final _outcomeInputKey = GlobalKey();
 
+  /// Cravera's newest reply in the chat, and the search it was last scrolled
+  /// into view for: each new answer is brought to the top of the view once.
+  final _replyKey = GlobalKey();
+  int? _replyShownFor;
+
+  /// Whether the chat uses its compact layout (header, thread and input in
+  /// one scroll view), set while building it.
+  bool _outcomeTight = false;
+
   /// The search ([CravingSearch.searchId]) the user hid "Narrow it down"
   /// for; any new search, even with the same words, can show it again.
   int? _narrowHiddenFor;
@@ -118,22 +127,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 520),
+                  // Fills the screen as before; scrolls instead of overflowing
+                  // when large text makes the page taller than a small phone.
+                  child: LayoutBuilder(
+                    builder: (context, area) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: area.maxWidth, minHeight: area.maxHeight),
+                        child: IntrinsicHeight(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                     child: Column(
                       children: [
-                        Row(
-                          children: [
-                            Text('Cravera', style: text.headlineSmall),
-                            const SizedBox(width: 12),
-                            // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
-                              ),
-                            ),
-                          ],
+                        _HomeHeader(
+                          // The column's width minus its 20 pt side padding.
+                          maxWidth: area.maxWidth - 40,
+                          title: Text('Cravera', style: text.headlineSmall),
+                          titleStyle: text.headlineSmall,
+                          chip: _LocationChip(session: session, onTap: () => _askForPlace(session)),
+                          chipLabel: _LocationChip.labelFor(session),
                         ),
                         const Spacer(),
                         if (!typing) ...[
@@ -174,6 +185,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           onSend: () => _startSearch(_promptController.text.trim()),
                         ),
                       ],
+                    ),
+                  ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -262,6 +277,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Out of results, nothing found, or a failed search: say which, and offer
   /// the next step (refine, try again, or start over).
   Widget _buildOutcome(BuildContext context, CravingSearch search) {
+    // A long thread (many messages, large text, small phone) could leave the
+    // newest reply out of view: scroll it to the top once per answer. Older
+    // messages stay above it, the suggestions below. In the compact layout
+    // "New search" scrolls too, so there scroll only as far as needed.
+    if (_replyShownFor != search.searchId) {
+      _replyShownFor = search.searchId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final reply = _replyKey.currentContext;
+        if (reply == null || !reply.mounted) return;
+        if (_outcomeTight) {
+          Scrollable.ensureVisible(reply, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+        } else {
+          Scrollable.ensureVisible(reply, alignment: 0);
+        }
+      });
+    }
     final text = Theme.of(context).textTheme;
     final failed = search.status == SearchStatus.failed;
     final expired = search.status == SearchStatus.expired || !search.isFresh;
@@ -272,7 +303,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             : failed
                 ? searchErrorText(search.error ?? PlacesSearchError.server)
                 : search.foundNothing
-                    ? ('Nothing open matched “${search.query}” nearby.', 'Try different words, or add more detail.')
+                    ? (search.messages.length > 1
+                        ? ('Nothing open matched that nearby.', 'Try different words, or add more detail.')
+                        : ('Nothing open matched “${search.query}” nearby.', 'Try different words, or add more detail.'))
                     : ("That's every open match for “${search.query}” nearby.", 'Add something to narrow or change it.');
     // Retrying only helps when the request itself was fine.
     final canRetry = expired || (failed && search.error != PlacesSearchError.rejected);
@@ -291,6 +324,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // Below this height (a short phone on its side with the keyboard up)
         // the whole screen scrolls instead, so the input is never squeezed.
         final tight = box.maxHeight < 300;
+        // Too little room for a fixed "New search" plus a usable thread (short
+        // sideways phone, keyboard up): everything scrolls together instead.
+        final cramped = box.maxHeight < 160;
+        _outcomeTight = tight;
         final header = Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
@@ -303,13 +340,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(height: typing ? 4 : 16),
-            if (search.query.trim().isNotEmpty && !search.queryTooLong)
-              Align(
-                alignment: Alignment.centerRight,
-                child: _Bubble(fromGuest: true, child: Text(search.query.trim(), style: text.bodyLarge)),
-              ),
+            // One bubble per message the guest sent, like a chat thread.
+            if (!search.queryTooLong)
+              for (final (i, message) in search.messages.indexed) ...[
+                if (i > 0) const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _Bubble(fromGuest: true, child: Text(message, style: text.bodyLarge)),
+                ),
+              ],
             const SizedBox(height: 12),
             Row(
+              key: _replyKey,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const CraveraLogo(size: 36),
@@ -368,12 +410,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               constraints: const BoxConstraints(maxWidth: 520),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: tight
+                // Compact (short screen or keyboard up): "New search" stays fixed
+                // above; the thread and the input scroll together below it.
+                child: cramped
                     ? SingleChildScrollView(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [header, conversation, const SizedBox(height: 8), ?footer],
                         ),
+                      )
+                    : tight
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          header,
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [conversation, const SizedBox(height: 8), ?footer],
+                              ),
+                            ),
+                          ),
+                        ],
                       )
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -691,17 +750,18 @@ class _PickView extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 8),
                         child: Row(
                           children: [
+                            // At least 56 dp, taller when large text needs it (never clipped).
                             Expanded(
-                              child: SizedBox(
-                                height: 56,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(minHeight: 56),
                                 child: OutlinedButton(onPressed: onNo, child: const Text('No')),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               flex: 2,
-                              child: SizedBox(
-                                height: 56,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(minHeight: 56),
                                 child: FilledButton(onPressed: onYes, child: const Text('Yes')),
                               ),
                             ),
@@ -748,23 +808,94 @@ String? priceLabel(int? level) => switch (level) {
 };
 
 /// A small glass pill showing where searches happen. Tap it to change.
+/// "Cravera" on the left and the location chip at the right edge, on one
+/// line when both fit at the guest's text size. When they don't (a narrow
+/// phone, large text, a long place name), the chip moves to its own line,
+/// still on the right, so the title never shrinks below the chosen size.
+class _HomeHeader extends StatelessWidget {
+  final Widget title;
+  final TextStyle? titleStyle;
+  final Widget chip;
+  final String chipLabel;
+
+  /// Width available to the header. Measured by Home's own layout builder:
+  /// Home fills the screen with IntrinsicHeight, which can't contain another.
+  final double maxWidth;
+  const _HomeHeader({
+    required this.maxWidth,
+    required this.title,
+    required this.titleStyle,
+    required this.chip,
+    required this.chipLabel,
+  });
+
+  double _textWidth(BuildContext context, String value, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: style),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final labelStyle = Theme.of(context).textTheme.labelLarge;
+    final needed = _textWidth(context, 'Cravera', titleStyle) +
+        12 +
+        _textWidth(context, chipLabel, labelStyle) +
+        _LocationChip.chromeWidth;
+    if (needed <= maxWidth) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [title, const SizedBox(width: 12), Flexible(child: chip)],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Only a title wider than the whole screen scales down.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: title),
+        ),
+        const SizedBox(height: 8),
+        Align(alignment: Alignment.centerRight, child: chip),
+      ],
+    );
+  }
+}
+
 class _LocationChip extends StatelessWidget {
   final AppSession session;
   final VoidCallback onTap;
   const _LocationChip({required this.session, required this.onTap});
 
+  /// The chip's text (also used to measure whether it fits beside the title).
+  static String labelFor(AppSession session) =>
+      session.isLocating ? 'Locating…' : (session.searchLocation?.label ?? 'Set location');
+
+  /// Width of everything in the chip except its label: padding, both icons, gaps.
+  static const chromeWidth = 14 + 16 + 6 + 2 + 18 + 14;
+
   @override
   Widget build(BuildContext context) {
     final location = session.searchLocation;
-    final label = session.isLocating ? 'Locating…' : (location?.label ?? 'Set location');
+    final label = labelFor(session);
     return Tooltip(
       message: 'Change location',
       child: Glass(
         radius: 999,
         child: InkWell(
           onTap: session.isLocating ? null : onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          // At least 48 dp tall so it is easy to tap, even with small system text.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -786,6 +917,7 @@ class _LocationChip extends StatelessWidget {
                 const Icon(Icons.expand_more_rounded, size: 18, color: AppColors.textMuted),
               ],
             ),
+          ),
           ),
         ),
       ),
@@ -1141,7 +1273,7 @@ class _QuickPicks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 44,
+      height: 48, // the minimum tap-target height
       child: ListView.separated(
         // Chips scroll out to the screen edge instead of being cut at the margin.
         clipBehavior: Clip.none,

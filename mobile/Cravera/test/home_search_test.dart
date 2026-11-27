@@ -235,6 +235,85 @@ void main() {
     expect(find.text('Test Noodle House'), findsOneWidget);
   });
 
+  testWidgets('each message the guest sends is its own bubble in the thread', (tester) async {
+    final places = FakePlaces((_) => [])..intent = {'textQuery': 'nice dinner'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'nice dinner');
+    for (final more in ['cheaper', 'something Asian fusion']) {
+      await tester.enterText(find.widgetWithText(TextField, 'Tell me more…'), more);
+      await tester.tap(find.byTooltip('Search again'));
+      await _settle(tester);
+    }
+    expect(places.queries, ['nice dinner', 'cheaper', 'something Asian fusion'], reason: 'each refine sends only its words');
+    for (final message in ['nice dinner', 'cheaper', 'something Asian fusion']) {
+      expect(find.text(message), findsOneWidget, reason: '"$message" is its own bubble');
+    }
+    expect(find.textContaining('nice dinner cheaper'), findsNothing, reason: 'no run-on bubble or answer');
+    expect(find.text('Nothing open matched that nearby.'), findsOneWidget);
+    // Oldest first, top to bottom.
+    final ys = ['nice dinner', 'cheaper', 'something Asian fusion'].map((m) => tester.getCenter(find.text(m)).dy).toList();
+    expect(ys[0] < ys[1] && ys[1] < ys[2], isTrue, reason: 'in the order sent');
+  });
+
+  testWidgets('a long thread on a small phone at large text keeps the newest reply in view', (tester) async {
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final places = FakePlaces((_) => [])..intent = {'textQuery': 'x'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'nice dinner');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    await _settle(tester);
+    for (final more in ['cheaper', 'something Asian fusion', 'quieter', 'open later', 'with a patio']) {
+      await tester.enterText(find.widgetWithText(TextField, 'Tell me more…'), more);
+      await tester.tap(find.byTooltip('Search again'));
+      await _settle(tester);
+    }
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    // The newest reply starts at the top of the view (read first); older messages are above, scrollable.
+    final reply = tester.getRect(find.text('Nothing open matched that nearby.'));
+    final top = tester.getRect(find.text('New search')).bottom;
+    expect(reply.top, greaterThanOrEqualTo(top), reason: 'newest reply starts in view');
+    expect(reply.top, lessThan(top + 60), reason: 'newest reply at the top of the thread view');
+    expect(find.text('nice dinner').hitTestable(), findsNothing, reason: 'the oldest scrolled up, still reachable');
+  });
+
+  testWidgets('a long thread on a short sideways phone keeps New search on screen', (tester) async {
+    addTearDown(tester.view.reset);
+    final places = FakePlaces((_) => [])..intent = {'textQuery': 'x'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'nice dinner');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320, sideways
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300); // keyboard up: the compact layout (< 300 pt)
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5; // tall suggestions below the reply
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _settle(tester);
+    for (final more in ['cheaper', 'something Asian fusion', 'quieter']) {
+      await tester.enterText(find.widgetWithText(TextField, 'Tell me more…'), more);
+      await tester.tap(find.byTooltip('Search again'));
+      await _settle(tester);
+    }
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    expect(find.text('New search').hitTestable(), findsOneWidget, reason: 'starting over stays one tap away');
+  });
+
+  testWidgets('with almost no room (sideways, keyboard up) the chat still scrolls to the input', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => [])..intent = {'textQuery': 'x'});
+    await _searchFor(tester, 'nice dinner');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320
+    tester.view.viewInsets = const FakeViewPadding(bottom: 520); // keyboard: ~60 pt left
+    await _settle(tester);
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    final input = find.widgetWithText(TextField, 'Tell me more…');
+    await tester.ensureVisible(input);
+    await _settle(tester);
+    expect(input.hitTestable(), findsOneWidget, reason: 'the input can be scrolled to');
+  });
+
   testWidgets('nothing matched on a short sideways phone with the keyboard up: the input stays usable', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => []));
