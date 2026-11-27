@@ -10,7 +10,6 @@ import '../services/craving_search.dart';
 import '../services/location_service.dart';
 import '../services/places_service.dart';
 import '../widgets/cravera_logo.dart';
-import '../widgets/floating_cards.dart';
 import '../widgets/glass.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -72,118 +71,83 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     };
   }
 
+  /// Home: one question, the location, and one input. Nothing else competes
+  /// with typing (concierge plan, TASK-UI-2).
   Widget _buildIdle(BuildContext context, AppSession session) {
     final text = Theme.of(context).textTheme;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        const FloatingCards(),
-        // Fade the drifting cards out toward the bottom, so the suggestions
-        // and the composer always sit on a calm background.
-        IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.background.withValues(alpha: 0),
-                  AppColors.background.withValues(alpha: 0.6),
-                  AppColors.background,
-                ],
-                stops: const [0.0, 0.55, 0.8],
-              ),
-            ),
-          ),
-        ),
-        SafeArea(
-          // The floating nav sits behind the keyboard while typing, so don't
-          // keep room for it then.
-          bottom: View.of(context).viewInsets.bottom == 0,
+    // LayoutBuilder reruns when the keyboard resizes the body, so [typing] stays current.
+    return LayoutBuilder(
+      builder: (context, _) {
+        // While typing, drop the headline so the input always fits above the
+        // keyboard. Read the keyboard from the view: Scaffold hides it from the body's MediaQuery.
+        final typing = View.of(context).viewInsets.bottom > 0;
+        return SafeArea(
+          // The floating nav sits behind the keyboard while typing, so don't keep room for it then.
+          bottom: !typing,
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                child: LayoutBuilder(
-                  builder: (context, box) {
-                    // Short screens (such as iPhone SE) get a smaller orb and no subtitle.
-                    final compact = box.maxHeight < 640;
-                    // While typing, drop the orb and greeting so the composer always
-                    // fits above the keyboard, even on short phones.
-                    // Read the keyboard from the view: Scaffold hides it from the body's MediaQuery.
-                    final typing = View.of(context).viewInsets.bottom > 0;
-                    return Column(
+                child: Column(
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Text('Cravera', style: text.headlineSmall),
-                            const SizedBox(width: 12),
-                            // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        if (!typing) ...[
-                        CraveraLogo(size: compact ? 56 : 88),
-                        SizedBox(height: compact ? 14 : 22),
-                        Text(
-                          '${_greeting()}, ${session.displayName}',
-                          textAlign: TextAlign.center,
-                          style: text.titleMedium?.copyWith(color: AppColors.textMuted),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'What are you\ncraving today?',
-                          textAlign: TextAlign.center,
-                          style: text.displaySmall?.copyWith(height: 1.05),
-                        ),
-                        if (!compact) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            "Say it your way. I'll find one spot that's open now.",
-                            textAlign: TextAlign.center,
-                            style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
+                        Text('Cravera', style: text.headlineSmall),
+                        const SizedBox(width: 12),
+                        // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
                           ),
-                        ],
-                        ],
-                        const Spacer(),
-                        _LocationProblemBanner(session: session, onFix: () => _askForPlace(session)),
-                        _QuickPicks(
-                          onPick: (craving) {
-                            _promptController.text = craving;
-                            _startSearch(craving);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _PromptInput(
-                          controller: _promptController,
-                          isBusy: false,
-                          onSend: () => _startSearch(_promptController.text.trim()),
-                          onManualFilter: _openFilterSheet,
                         ),
                       ],
-                    );
-                  },
+                    ),
+                    const Spacer(),
+                    if (!typing) ...[
+                      Text(
+                        'What are you craving?',
+                        textAlign: TextAlign.center,
+                        style: text.displaySmall?.copyWith(height: 1.05),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Say it your way. One open spot, right now.',
+                        textAlign: TextAlign.center,
+                        style: text.bodyLarge?.copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
+                    const Spacer(),
+                    _LocationProblemBanner(session: session, onFix: () => _askForPlace(session)),
+                    // Example cravings only before typing starts: they are a hint, not a menu.
+                    ListenableBuilder(
+                      listenable: _promptController,
+                      builder: (context, _) => _promptController.text.isNotEmpty || typing
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _QuickPicks(
+                                onPick: (craving) {
+                                  _promptController.text = craving;
+                                  _startSearch(craving);
+                                },
+                              ),
+                            ),
+                    ),
+                    _PromptInput(
+                      controller: _promptController,
+                      isBusy: false,
+                      onSend: () => _startSearch(_promptController.text.trim()),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        );
+      },
     );
-  }
-
-  static String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
   }
 
   Widget _buildLoading(BuildContext context) {
@@ -191,38 +155,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildResult(BuildContext context, AppSession session) {
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: _InlineRestaurantCard(
-                    restaurant: session.search.current!,
-                    prompt: session.search.query,
-                    onNo: session.search.next,
-                    onYes: _onYes,
-                    onClose: session.search.reset,
-                    photo: session.search.currentPhoto,
-                    session: session,
-                  ),
-                ),
-              ),
-              if (session.search.offerRefine && _narrowHiddenFor != session.search.searchId) ...[
-                const SizedBox(height: 6),
-                _NarrowDown(
-                  controller: _repromptController,
-                  onSubmit: _onReprompt,
-                  onHide: () => setState(() => _narrowHiddenFor = session.search.searchId),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+    final search = session.search;
+    return _PickView(
+      restaurant: search.current!,
+      photo: search.currentPhoto,
+      session: session,
+      onNo: search.next,
+      onYes: _onYes,
+      onNewCraving: search.reset,
+      onRefine: _onReprompt,
+      narrowDown: search.offerRefine && _narrowHiddenFor != search.searchId
+          ? _NarrowDown(
+              controller: _repromptController,
+              onSubmit: _onReprompt,
+              onHide: () => setState(() => _narrowHiddenFor = search.searchId),
+            )
+          : null,
     );
   }
 
@@ -366,14 +314,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return found;
   }
 
-  void _openFilterSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _FilterSheet(),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -456,167 +396,185 @@ class _LoadingViewState extends State<_LoadingView> {
 // Inline restaurant card (replaces the bottom sheet)
 // ---------------------------------------------------------------------------
 
-class _InlineRestaurantCard extends StatelessWidget {
+/// The pick, full screen: the photo as a hero, then the facts, refine chips
+/// and big No / Yes buttons in thumb reach. Every fact shown comes from
+/// Places; the reasons are built by the server from Places facts.
+class _PickView extends StatelessWidget {
   final Restaurant restaurant;
-  final String prompt;
-  final VoidCallback onNo;
-  final VoidCallback onYes;
-  final VoidCallback onClose;
   final Uint8List? photo;
   final AppSession session;
+  final VoidCallback onNo;
+  final VoidCallback onYes;
+  final VoidCallback onNewCraving;
+  final ValueChanged<String> onRefine;
 
-  const _InlineRestaurantCard({
+  /// "Narrow it down" (after several Nos), or null.
+  final Widget? narrowDown;
+
+  const _PickView({
     required this.restaurant,
-    required this.prompt,
-    required this.onNo,
-    required this.onYes,
-    required this.onClose,
     required this.photo,
     required this.session,
+    required this.onNo,
+    required this.onYes,
+    required this.onNewCraving,
+    required this.onRefine,
+    required this.narrowDown,
   });
+
+  /// One-tap refines: label, and the words sent to the server with the
+  /// current intent (TASK-002), so each one changes the search.
+  static const refines = [('Cheaper', 'cheaper'), ('Closer', 'closer'), ('Something else', 'something different')];
 
   @override
   Widget build(BuildContext context) {
-    final saved = session.isBookmarked(restaurant.placeId);
-
-    final distanceLabel = restaurant.distanceMeters == null
-        ? null
-        : '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km';
-
     final text = Theme.of(context).textTheme;
+    final saved = session.isBookmarked(restaurant.placeId);
+    final facts = [
+      if (restaurant.rating != null) '★ ${restaurant.rating!.toStringAsFixed(1)}',
+      if ((restaurant.cuisine ?? '').trim().isNotEmpty) restaurant.cuisine!.trim(),
+      ?priceLabel(restaurant.priceLevel),
+      if (restaurant.distanceMeters != null) '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km',
+    ];
     final hasAddress = (restaurant.address ?? '').trim().isNotEmpty;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, box) {
+        final photoHeight = (box.maxHeight * 0.42).clamp(160.0, 420.0);
+        return Column(
           children: [
-            const CraveraLogo(size: 28),
-            const SizedBox(width: 10),
-            Expanded(child: Text("Cravera's pick", style: text.titleMedium)),
-            IconButton(
-              onPressed: onClose,
-              icon: const Icon(Icons.close_rounded),
-              color: AppColors.textSecondary,
-              tooltip: 'Back to search',
-            ),
-          ],
-        ),
-        if (prompt.trim().isNotEmpty) ...[
-          _Pill(icon: Icons.auto_awesome_rounded, label: prompt.trim(), color: AppColors.accent),
-          const SizedBox(height: 14),
-        ],
-        Card(
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                children: [
-                  _PhotoHeader(photo: photo),
-                  // Google requires the photo author's credit with the photo.
-                  if (photo != null && restaurant.photoAuthor != null)
-                    Positioned(
-                      left: 10,
-                      bottom: 10,
-                      right: 70,
-                      child: _PhotoCredit(author: restaurant.photoAuthor!, uri: restaurant.photoAuthorUri),
-                    ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: _RoundIcon(
-                      icon: saved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
-                      color: saved ? AppColors.accent : AppColors.textPrimary,
-                      tooltip: saved ? 'Remove bookmark' : 'Bookmark',
-                      onPressed: () => session.toggleBookmark(restaurant),
-                    ),
-                  ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            Expanded(
+              child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(restaurant.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.headlineMedium),
-                    // Why this pick: reasons the server built from Places facts.
-                    if (restaurant.reasons.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        restaurant.reasons.join(' · '),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: text.bodyMedium?.copyWith(color: AppColors.accent),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        if (restaurant.rating != null)
-                          _Pill(
-                            icon: Icons.star_rounded,
-                            label: restaurant.rating!.toStringAsFixed(1),
-                            color: AppColors.gold,
-                          ),
-                        if ((restaurant.cuisine ?? '').trim().isNotEmpty)
-                          _Pill(icon: Icons.restaurant_rounded, label: restaurant.cuisine!.trim()),
-                        if (priceLabel(restaurant.priceLevel) case final price?) _Pill(label: price),
-                        if (distanceLabel != null)
-                          _Pill(icon: Icons.near_me_rounded, label: distanceLabel, color: AppColors.sage),
-                      ],
-                    ),
-                    if (hasAddress) ...[
-                      const SizedBox(height: 14),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    SizedBox(
+                      height: photoHeight,
+                      child: Stack(
+                        fit: StackFit.expand,
                         children: [
-                          const Icon(Icons.place_outlined, size: 18, color: AppColors.textMuted),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              restaurant.address!.trim(),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                          _PhotoHeader(photo: photo),
+                          // Google requires the photo author's credit with the photo.
+                          if (photo != null && restaurant.photoAuthor != null)
+                            Positioned(
+                              left: 12,
+                              bottom: 12,
+                              right: 70,
+                              child: _PhotoCredit(author: restaurant.photoAuthor!, uri: restaurant.photoAuthorUri),
+                            ),
+                          Positioned(
+                            top: 12,
+                            left: 12,
+                            child: TextButton.icon(
+                              onPressed: onNewCraving,
+                              icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                              label: const Text('New craving'),
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.scrim,
+                                foregroundColor: AppColors.textPrimary,
+                                minimumSize: const Size(48, 44),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: _RoundIcon(
+                              icon: saved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                              color: saved ? AppColors.accent : AppColors.textPrimary,
+                              tooltip: saved ? 'Remove bookmark' : 'Bookmark',
+                              onPressed: () => session.toggleBookmark(restaurant),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                    const SizedBox(height: 8),
-                    // Places data shown outside a Google map needs this credit.
-                    Text('Google Maps', style: text.labelSmall?.copyWith(color: AppColors.textMuted)),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: onNo,
-                            icon: const Icon(Icons.close_rounded),
-                            label: const Text('No'),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            restaurant.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.headlineMedium,
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: FilledButton.icon(
-                            onPressed: onYes,
-                            icon: const Icon(Icons.check_rounded),
-                            label: const Text('Yes'),
+                          // Why this pick: reasons the server built from Places facts.
+                          if (restaurant.reasons.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              restaurant.reasons.join(' · '),
+                              style: text.bodyLarge?.copyWith(color: AppColors.tomato, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                          if (facts.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(facts.join(' · '), style: text.bodyLarge?.copyWith(color: AppColors.textSecondary)),
+                          ],
+                          if (hasAddress) ...[
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.place_outlined, size: 18, color: AppColors.textMuted),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    restaurant.address!.trim(),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: text.bodyMedium?.copyWith(color: AppColors.textMuted),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          // Places data shown outside a Google map needs this credit.
+                          Text('Google Maps', style: text.labelSmall?.copyWith(color: AppColors.textMuted)),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final (label, words) in refines)
+                                ActionChip(label: Text(label), onPressed: () => onRefine(words)),
+                            ],
                           ),
-                        ),
-                      ],
+                          if (narrowDown != null) ...[const SizedBox(height: 4), narrowDown!],
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+            // No / Yes stay in thumb reach whatever the screen height.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: OutlinedButton(onPressed: onNo, child: const Text('No')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: SizedBox(
+                      height: 56,
+                      child: FilledButton(onPressed: onYes, child: const Text('Yes')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -915,109 +873,6 @@ class _RepromptBanner extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Filter sheet
-// ---------------------------------------------------------------------------
-
-class _FilterSheet extends StatefulWidget {
-  const _FilterSheet();
-  @override
-  State<_FilterSheet> createState() => _FilterSheetState();
-}
-
-class _FilterSheetState extends State<_FilterSheet> {
-  static const _cuisines = ['Italian', 'Japanese', 'Mexican', 'Indian', 'Mediterranean', 'American', 'Thai', 'Chinese'];
-  final Set<String> _selectedCuisines = {};
-  int _priceLevel = 0;
-  double _distanceKm = 5.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
-      decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.55)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 5,
-              decoration: BoxDecoration(
-                color: AppColors.border.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text('Filters', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 14),
-          Text('Cuisine', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _cuisines.map((c) {
-              final selected = _selectedCuisines.contains(c);
-              return FilterChip(
-                label: Text(c),
-                selected: selected,
-                onSelected: (v) => setState(() => v ? _selectedCuisines.add(c) : _selectedCuisines.remove(c)),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 14),
-          Text('Price', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              for (final level in [0, 1, 2, 3, 4])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(level == 0 ? 'Any' : '\$' * level),
-                    selected: _priceLevel == level,
-                    onSelected: (_) => setState(() => _priceLevel = level),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Text(
-                'Distance',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
-              ),
-              const Spacer(),
-              Text(
-                '${_distanceKm.toStringAsFixed(0)} km',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-              ),
-            ],
-          ),
-          Slider(value: _distanceKm, min: 1, max: 30, divisions: 29, onChanged: (v) => setState(() => _distanceKm = v)),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Apply Filters')),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Navigation options sheet (Yes path)
-// ---------------------------------------------------------------------------
-
 Future<void> _showNavOptions(BuildContext context, Restaurant restaurant, CravingSearch search) {
   return showModalBottomSheet<void>(
     context: context,
@@ -1078,15 +933,14 @@ Future<void> _openNavigation(BuildContext context, Restaurant restaurant) async 
 }
 
 // ---------------------------------------------------------------------------
-// Prompt input bar: one rounded composer with filter, mic and send
+// Prompt input bar: one rounded composer with mic and send
 // ---------------------------------------------------------------------------
 
 class _PromptInput extends StatelessWidget {
   final TextEditingController controller;
   final bool isBusy;
   final VoidCallback onSend;
-  final VoidCallback? onManualFilter;
-  const _PromptInput({required this.controller, required this.isBusy, required this.onSend, this.onManualFilter});
+  const _PromptInput({required this.controller, required this.isBusy, required this.onSend});
 
   @override
   Widget build(BuildContext context) {
@@ -1118,7 +972,6 @@ class _PromptInput extends StatelessWidget {
                 ),
               ),
             ),
-            _IconAction(icon: Icons.tune_rounded, tooltip: 'Filters', onPressed: onManualFilter ?? () {}),
             _IconAction(
               icon: Icons.mic_none_rounded,
               tooltip: 'Voice (coming soon)',
@@ -1221,36 +1074,6 @@ class _IconAction extends StatelessWidget {
           disabledBackgroundColor: AppColors.surface3,
         ),
         icon: Icon(icon),
-      ),
-    );
-  }
-}
-
-/// A small rounded label with an optional icon, used for restaurant facts.
-class _Pill extends StatelessWidget {
-  final IconData? icon;
-  final String label;
-  final Color color;
-  const _Pill({this.icon, required this.label, this.color = AppColors.textSecondary});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[Icon(icon, size: 16, color: color), const SizedBox(width: 6)],
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
-            ),
-          ),
-        ],
       ),
     );
   }

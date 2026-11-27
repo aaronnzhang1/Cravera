@@ -132,7 +132,7 @@ void main() {
 
     // A new search with the same words is a new search: the chip can come back,
     // without a draft typed for the old one.
-    await _tapVisible(tester, find.byTooltip('Back to search'));
+    await _tapVisible(tester, find.text('New craving'));
     await _settle(tester);
     await _searchFor(tester, 'ramen');
     for (var i = 0; i < CravingSearch.offerRefineAfter; i++) {
@@ -191,7 +191,7 @@ void main() {
 
     await tester.tap(find.text('New search'));
     await _settle(tester);
-    expect(find.textContaining('craving today?'), findsOneWidget);
+    expect(find.text('What are you craving?'), findsOneWidget);
   });
 
   testWidgets('the card\'s close button goes back to Home without another search', (tester) async {
@@ -200,10 +200,10 @@ void main() {
     await _searchFor(tester, 'ramen');
     expect(find.text('Test Noodle House'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Back to search'));
+    await tester.tap(find.text('New craving'));
     await _settle(tester);
 
-    expect(find.textContaining('craving today?'), findsOneWidget);
+    expect(find.text('What are you craving?'), findsOneWidget);
     expect(find.text('Sample Ramen Bar'), findsNothing, reason: 'close is not No');
     expect(places.queries, ['ramen']);
   });

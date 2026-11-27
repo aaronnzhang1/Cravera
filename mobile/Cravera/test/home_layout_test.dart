@@ -39,7 +39,7 @@ void main() {
 
     expect(tester.takeException(), isNull, reason: 'no layout overflow');
     expect(find.widgetWithText(TextField, 'Ask Cravera…').hitTestable(), findsOneWidget);
-    expect(find.text('What are you\ncraving today?'), findsNothing, reason: 'the hero steps aside while typing');
+    expect(find.text('What are you craving?'), findsNothing, reason: 'the hero steps aside while typing');
   });
 
   testWidgets('a guest who opens sign-up or sign-in keeps their session and place', (tester) async {

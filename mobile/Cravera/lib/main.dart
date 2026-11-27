@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'core/app_theme.dart';
@@ -27,8 +28,13 @@ class MyApp extends StatelessWidget {
       session: session,
       child: MaterialApp.router(
         title: 'Cravera',
-        theme: AppTheme.dark(),
+        theme: AppTheme.light(),
         routerConfig: AppRoutes.router(session: session),
+        // Light screens need dark status-bar icons (clock, battery) on every page.
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.dark,
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
     );
   }
