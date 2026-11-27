@@ -25,7 +25,7 @@ Tick a box only after checking it in the running app. Never delete or reword a c
 - [x] Curation returns only place IDs from the Places answer; every field shown still comes from Places.
 - [x] If Gemini fails, times out or returns invalid JSON, search still works with the raw text and Places order (tested).
 - [x] Prompt-injection attempts in the craving can't change open-now, the radius cap, the data source or the output shape (tested).
-- [ ] The Gemini key exists only in Supabase secrets; the built app contains no key (APK scan).
+- [x] The Gemini key exists only in Supabase secrets; the built app contains no key (APK scan).
 - [x] `flutter analyze`, `flutter test` and the function tests pass, with tests for intent validation, curation validation and the fallback (network faked).
 
 ## Out of scope
