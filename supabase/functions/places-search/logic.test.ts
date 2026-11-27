@@ -96,6 +96,9 @@ test("validates query and coordinates", () => {
   assert.equal(typeof parseInput({ query: "  ", ...here }), "string");
   assert.equal(typeof parseInput({ query: "x".repeat(201), ...here }), "string");
   assert.equal(typeof parseInput({ query: "ramen", latitude: 91, longitude: 0 }), "string");
+  assert.equal(typeof parseInput({ query: "ramen", latitude: 89.9, longitude: 0 }), "string");
+  assert.equal(typeof parseInput({ query: "ramen", latitude: -85.1, longitude: 0 }), "string");
+  assert.equal(typeof parseInput({ query: "ramen", latitude: 85, longitude: 0 }), "object");
   assert.equal(typeof parseInput({ query: "ramen", latitude: "37", longitude: 0 }), "string");
   assert.equal(typeof parseInput(null), "string");
 });
@@ -141,6 +144,18 @@ test("the box always contains the whole search circle", () => {
     }
   }
   assert.ok(low.latitude < 36.8202);
+});
+
+test("the box stays within Google's 180° width at every allowed latitude", () => {
+  for (const latitude of [-85, -60, 0, 60, 85]) {
+    const { low, high } = buildRequestBody({ query: "ramen", latitude, longitude: 0, radiusMeters: 20000 }).locationRestriction.rectangle;
+    assert.ok(high.longitude - low.longitude < 180, `lat ${latitude}`);
+  }
+});
+
+test("a box across the antimeridian wraps instead of breaking", () => {
+  const { low, high } = buildRequestBody({ query: "ramen", latitude: 0, longitude: 179.99, radiusMeters: 20000 }).locationRestriction.rectangle;
+  assert.ok(low.longitude > 179 && high.longitude < -179, `${low.longitude} .. ${high.longitude}`);
 });
 
 test("sends the Places key only in the header to Google", async () => {

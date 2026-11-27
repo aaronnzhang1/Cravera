@@ -25,6 +25,7 @@ export const DEFAULT_RADIUS_M = 5000;
 export const MIN_RADIUS_M = 500;
 export const MAX_RADIUS_M = 20000;
 export const MAX_QUERY_LENGTH = 200;
+export const MAX_ABS_LATITUDE = 85;
 const UPSTREAM_TIMEOUT_MS = 8000;
 const EARTH_RADIUS_M = 6_371_000;
 
@@ -63,8 +64,10 @@ export function parseInput(body: unknown): SearchInput | string {
   if (query.length === 0) return "query is required.";
   if (query.length > MAX_QUERY_LENGTH) return `query must be at most ${MAX_QUERY_LENGTH} characters.`;
   const { latitude, longitude } = b;
-  if (typeof latitude !== "number" || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-    return "latitude must be a number between -90 and 90.";
+  // Near a pole the search box would be wider than Google allows (180°), and
+  // there are no restaurants there, so those searches are refused.
+  if (typeof latitude !== "number" || !Number.isFinite(latitude) || Math.abs(latitude) > MAX_ABS_LATITUDE) {
+    return `latitude must be a number between -${MAX_ABS_LATITUDE} and ${MAX_ABS_LATITUDE}.`;
   }
   if (typeof longitude !== "number" || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
     return "longitude must be a number between -180 and 180.";
