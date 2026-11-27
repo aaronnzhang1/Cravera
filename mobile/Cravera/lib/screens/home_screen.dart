@@ -471,6 +471,10 @@ class _PickView extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final photoHeight = (box.maxHeight * 0.42).clamp(160.0, 420.0);
+        // While typing in "Narrow it down", the footer keeps only that field,
+        // so it fits above the keyboard even on a short or sideways phone.
+        // Read the keyboard from the view: Scaffold hides it from the body's MediaQuery.
+        final typing = View.of(context).viewInsets.bottom > 0;
         return Column(
           children: [
             Expanded(
@@ -580,36 +584,46 @@ class _PickView extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final (label, words) in refines) ...[
-                            ActionChip(label: Text(label), onPressed: () => onRefine(words)),
-                            const SizedBox(width: 8),
+                    // Offstage (not `if`) keeps every footer child in its place,
+                    // so "Narrow it down" keeps its open state when the keyboard opens.
+                    Offstage(
+                      offstage: typing,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final (label, words) in refines) ...[
+                              ActionChip(label: Text(label), onPressed: () => onRefine(words)),
+                              const SizedBox(width: 8),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                    ?narrowDown,
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 56,
-                            child: OutlinedButton(onPressed: onNo, child: const Text('No')),
-                          ),
+                    narrowDown ?? const SizedBox.shrink(),
+                    Offstage(
+                      offstage: typing,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                height: 56,
+                                child: OutlinedButton(onPressed: onNo, child: const Text('No')),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: SizedBox(
+                                height: 56,
+                                child: FilledButton(onPressed: onYes, child: const Text('Yes')),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: SizedBox(
-                            height: 56,
-                            child: FilledButton(onPressed: onYes, child: const Text('Yes')),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),

@@ -27,7 +27,9 @@ class AppShellScaffold extends StatelessWidget {
           backgroundColor: Colors.transparent,
           extendBody: true,
           body: SafeArea(bottom: false, child: child),
-          bottomNavigationBar: search.status == SearchStatus.showing && index == 0
+          // Same test as Home uses to draw the pick, so an expired pick
+          // (shown as "out of date") gets the nav bar back.
+          bottomNavigationBar: search.status == SearchStatus.showing && search.isFresh && index == 0
               ? null
               : GlassNav(
                   currentIndex: index,

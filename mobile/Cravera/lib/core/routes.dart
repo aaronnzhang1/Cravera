@@ -121,10 +121,13 @@ Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
             translation: Offset(dx, 0),
             child: Opacity(opacity: t, child: child),
           );
-          // No filter once settled, so a resting page costs nothing extra.
-          return blur < 0.1
-              ? moved
-              : ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur), child: moved);
+          // The same wrapper every frame (only switched off once settled), so the
+          // page underneath is never remounted and keeps typed text and focus.
+          return ImageFiltered(
+            enabled: blur >= 0.1,
+            imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+            child: moved,
+          );
         },
       );
     },

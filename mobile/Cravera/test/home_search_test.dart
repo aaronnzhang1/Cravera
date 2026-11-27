@@ -177,6 +177,25 @@ void main() {
     expect(yesBottom, lessThanOrEqualTo(568 - 34), reason: 'above the home indicator');
   });
 
+  testWidgets('"Narrow it down" fits with the keyboard open on a short sideways phone', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => [for (var i = 0; i < 8; i++) _place('$i', 'Test Place $i')]));
+    await _searchFor(tester, 'ramen');
+    for (var i = 0; i < CravingSearch.offerRefineAfter; i++) {
+      await _tapVisible(tester, find.text('No'));
+      await _settle(tester);
+    }
+    await _tapVisible(tester, find.text('Narrow it down'));
+    await _settle(tester);
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320, sideways
+    tester.view.viewInsets = const FakeViewPadding(bottom: 400); // 200 pt keyboard
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    expect(find.widgetWithText(TextField, 'e.g. cheaper, no seafood').hitTestable(), findsOneWidget);
+  });
+
   testWidgets('the nav bar hides while a pick is showing and comes back after', (tester) async {
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     expect(find.text('Saved'), findsOneWidget, reason: 'nav bar on Home');
