@@ -82,6 +82,69 @@ void main() {
     expect(find.text('Example Spicy Ramen'), findsOneWidget);
   });
 
+  testWidgets('the card shows the server reasons for the pick, only when there are some', (tester) async {
+    final matched = Restaurant(
+      placeId: 'm',
+      name: 'Test Bowl Bar',
+      latitude: 10.001,
+      longitude: 20.001,
+      reasons: const ['In your price range', 'Close by'],
+    );
+    await _homeWith(tester, FakePlaces((_) => [matched, _place('b', 'Sample Ramen Bar')]));
+    await _searchFor(tester, 'gym food');
+    expect(find.text('In your price range · Close by'), findsOneWidget);
+
+    await _tapVisible(tester, find.text('No'));
+    await _settle(tester);
+    expect(find.textContaining('price range'), findsNothing);
+  });
+
+  testWidgets('"Narrow it down" waits for the 5th No, stays small, and can be closed or hidden', (tester) async {
+    await _homeWith(tester, FakePlaces((_) => [for (var i = 0; i < 8; i++) _place('$i', 'Test Place $i')]));
+    await _searchFor(tester, 'ramen');
+    for (var i = 0; i < CravingSearch.offerRefineAfter - 1; i++) {
+      await _tapVisible(tester, find.text('No'));
+      await _settle(tester);
+    }
+    expect(find.text('Narrow it down'), findsNothing, reason: 'not before the 5th No');
+    expect(find.textContaining('Want to narrow'), findsNothing);
+
+    await _tapVisible(tester, find.text('No'));
+    await _settle(tester);
+    expect(find.text('Narrow it down'), findsOneWidget);
+    expect(find.byType(TextField).hitTestable(), findsNothing, reason: 'no input until asked');
+
+    await _tapVisible(tester, find.text('Narrow it down'));
+    await _settle(tester);
+    expect(find.widgetWithText(TextField, 'e.g. cheaper, no seafood'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'e.g. cheaper, no seafood'), 'no seafood');
+    await _tapVisible(tester, find.byTooltip('Close'));
+    await _settle(tester);
+    expect(find.widgetWithText(TextField, 'e.g. cheaper, no seafood'), findsNothing);
+    expect(find.text('Narrow it down'), findsOneWidget);
+
+    await _tapVisible(tester, find.byTooltip('Hide'));
+    await _settle(tester);
+    expect(find.text('Narrow it down'), findsNothing);
+    await _tapVisible(tester, find.text('No'));
+    await _settle(tester);
+    expect(find.text('Narrow it down'), findsNothing, reason: 'stays hidden for this search');
+
+    // A new search with the same words is a new search: the chip can come back,
+    // without a draft typed for the old one.
+    await _tapVisible(tester, find.byTooltip('Back to search'));
+    await _settle(tester);
+    await _searchFor(tester, 'ramen');
+    for (var i = 0; i < CravingSearch.offerRefineAfter; i++) {
+      await _tapVisible(tester, find.text('No'));
+      await _settle(tester);
+    }
+    expect(find.text('Narrow it down'), findsOneWidget);
+    await _tapVisible(tester, find.text('Narrow it down'));
+    await _settle(tester);
+    expect(find.text('no seafood'), findsNothing, reason: 'the old draft is gone');
+  });
+
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));

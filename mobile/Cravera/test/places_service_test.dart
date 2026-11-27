@@ -68,6 +68,25 @@ void main() {
       await serviceWith(client).search(query: 'ramen', near: near);
       expect((jsonDecode(sent.body) as Map).containsKey('radiusMeters'), isFalse);
     });
+
+    test('sends the previous intent and local hour when given', () async {
+      late http.Request sent;
+      final client = MockClient((request) async {
+        sent = request;
+        return http.Response(jsonEncode({'results': [], 'intent': {'textQuery': 'cheap tacos'}}), 200);
+      });
+      final answer = await serviceWith(client).search(
+        query: 'cheaper',
+        near: near,
+        previousIntent: {'textQuery': 'tacos'},
+        localHour: 22,
+      );
+      final body = jsonDecode(sent.body) as Map;
+      expect(body['query'], 'cheaper');
+      expect(body['previousIntent'], {'textQuery': 'tacos'});
+      expect(body['localHour'], 22);
+      expect(answer.intent, {'textQuery': 'cheap tacos'});
+    });
   });
 
   group('parsing', () {
@@ -96,6 +115,23 @@ void main() {
       expect(a.photoAuthor, 'Test Photographer');
       expect(a.photoAuthorUri, 'https://maps.google.com/maps/contrib/fake');
       expect(b.photoAuthorUri, isNull);
+    });
+
+    test('keeps only short plain reasons; none by default', () {
+      final [a, b] = PlacesService.parseResults(jsonEncode({
+        'results': [
+          result(placeId: 'a', overrides: {'reasons': ['In your price range', 42, '', 'x' * 31, 'Close by', 'a', 'b', 'c']}),
+          result(placeId: 'b'),
+        ],
+      }));
+      expect(a.reasons, ['In your price range', 'Close by', 'a', 'b']);
+      expect(b.reasons, isEmpty);
+    });
+
+    test('reads the intent object, or null', () {
+      expect(PlacesService.parseIntent(jsonEncode({'results': [], 'intent': {'textQuery': 'tacos'}})), {'textQuery': 'tacos'});
+      expect(PlacesService.parseIntent(jsonEncode({'results': [], 'intent': 'tacos'})), isNull);
+      expect(PlacesService.parseIntent(jsonEncode({'results': []})), isNull);
     });
 
     test('keeps the server order', () {
@@ -149,7 +185,7 @@ void main() {
 
     test('an empty result list is not an error', () async {
       final client = MockClient((_) async => http.Response(jsonEncode({'results': []}), 200));
-      expect(await serviceWith(client).search(query: 'ramen', near: near), isEmpty);
+      expect((await serviceWith(client).search(query: 'ramen', near: near)).results, isEmpty);
     });
 
     test('broken UTF-8 in a 200 answer is a server error', () async {

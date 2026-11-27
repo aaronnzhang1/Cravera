@@ -20,6 +20,11 @@ class FakePlaces extends PlacesService {
   /// Returns results for a query, or throws a [PlacesSearchException].
   FutureOr<List<Restaurant>> Function(String query) answer;
 
+  /// The intent each answer carries; none by default.
+  Map<String, Object?>? intent;
+  final previousIntents = <Map<String, Object?>?>[];
+  final localHours = <int?>[];
+
   /// Returns photo bytes for a photo name; no photo when not set.
   FutureOr<Uint8List?> Function(String name)? photo;
   final queries = <String>[];
@@ -27,10 +32,18 @@ class FakePlaces extends PlacesService {
   final photoRequests = <String>[];
 
   @override
-  Future<List<Restaurant>> search({required String query, required SearchLocation near, int? radiusMeters}) async {
+  Future<SearchAnswer> search({
+    required String query,
+    required SearchLocation near,
+    int? radiusMeters,
+    Map<String, Object?>? previousIntent,
+    int? localHour,
+  }) async {
     queries.add(query);
     locations.add(near);
-    return answer(query);
+    previousIntents.add(previousIntent);
+    localHours.add(localHour);
+    return SearchAnswer(await answer(query), intent: intent);
   }
 
   @override
@@ -247,5 +260,33 @@ void main() {
     await search.start('   ', here);
     expect(search.status, SearchStatus.idle);
     expect(places.queries, isEmpty);
+  });
+
+  test('refine sends only the added text with the current intent, so the server changes the search', () async {
+    final places = FakePlaces((_) => [place('a')])..intent = {'textQuery': 'tacos', 'priceLevels': <int>[]};
+    final search = CravingSearch(places: places, clock: () => DateTime(2026, 11, 26, 21, 30));
+    await search.start('cheap late-night tacos', here);
+    await search.refine(' cheaper ');
+
+    expect(places.queries, ['cheap late-night tacos', 'cheaper']);
+    expect(places.previousIntents, [null, {'textQuery': 'tacos', 'priceLevels': <int>[]}]);
+    expect(places.localHours, [21, 21]);
+    expect(search.query, 'cheap late-night tacos cheaper', reason: 'the screen still shows the whole craving');
+  });
+
+  test('retry after a failed refine resends the same refine', () async {
+    var fail = false;
+    final places = FakePlaces((_) => fail ? throw const PlacesSearchException(PlacesSearchError.network) : [place('a')])
+      ..intent = {'textQuery': 'tacos'};
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    fail = true;
+    await search.refine('no seafood');
+    expect(search.status, SearchStatus.failed);
+    fail = false;
+    await search.retry();
+
+    expect(places.queries, ['tacos', 'no seafood', 'no seafood']);
+    expect(places.previousIntents.last, {'textQuery': 'tacos'});
   });
 }

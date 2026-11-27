@@ -24,6 +24,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _promptController = TextEditingController();
   final _repromptController = TextEditingController();
 
+  /// The search ([CravingSearch.searchId]) the user hid "Narrow it down"
+  /// for; any new search, even with the same words, can show it again.
+  int? _narrowHiddenFor;
+
   @override
   void initState() {
     super.initState();
@@ -207,9 +211,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-              if (session.search.rejections >= 3) ...[
-                const SizedBox(height: 8),
-                _RepromptBanner(controller: _repromptController, onSubmit: _onReprompt),
+              if (session.search.offerRefine && _narrowHiddenFor != session.search.searchId) ...[
+                const SizedBox(height: 6),
+                _NarrowDown(
+                  controller: _repromptController,
+                  onSubmit: _onReprompt,
+                  onHide: () => setState(() => _narrowHiddenFor = session.search.searchId),
+                ),
               ],
             ],
           ),
@@ -235,6 +243,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     final near = session.searchLocation;
     if (near == null) return;
+    // A refine draft belongs to the search it was typed for.
+    _repromptController.clear();
     await session.search.start(prompt, near);
   }
 
@@ -530,6 +540,16 @@ class _InlineRestaurantCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(restaurant.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.headlineMedium),
+                    // Why this pick: reasons the server built from Places facts.
+                    if (restaurant.reasons.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        restaurant.reasons.join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.bodyMedium?.copyWith(color: AppColors.accent),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
@@ -771,7 +791,79 @@ class _PlaceDialogState extends State<_PlaceDialog> {
 }
 
 // ---------------------------------------------------------------------------
-// Reprompt banner — appears after 3 rejections
+// Narrow it down — a small option under the card after several Nos
+// ---------------------------------------------------------------------------
+
+/// A small "Narrow it down" chip that opens a one-line input when tapped.
+/// ✕ hides it (closed: for this search; open: back to the chip).
+class _NarrowDown extends StatefulWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onSubmit;
+  final VoidCallback onHide;
+  const _NarrowDown({required this.controller, required this.onSubmit, required this.onHide});
+
+  @override
+  State<_NarrowDown> createState() => _NarrowDownState();
+}
+
+class _NarrowDownState extends State<_NarrowDown> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_open) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          TextButton.icon(
+            onPressed: () => setState(() => _open = true),
+            icon: const Icon(Icons.tune_rounded, size: 18),
+            label: const Text('Narrow it down'),
+          ),
+          IconButton(
+            tooltip: 'Hide',
+            iconSize: 18,
+            color: AppColors.textMuted,
+            onPressed: widget.onHide,
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: widget.controller,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            decoration: const InputDecoration(
+              hintText: 'e.g. cheaper, no seafood',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            onSubmitted: widget.onSubmit,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Search again',
+          color: AppColors.accent,
+          onPressed: () => widget.onSubmit(widget.controller.text),
+          icon: const Icon(Icons.arrow_upward_rounded),
+        ),
+        IconButton(
+          tooltip: 'Close',
+          color: AppColors.textMuted,
+          onPressed: () => setState(() => _open = false),
+          icon: const Icon(Icons.close_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reprompt banner — on the out-of-results screen
 // ---------------------------------------------------------------------------
 
 class _RepromptBanner extends StatelessWidget {

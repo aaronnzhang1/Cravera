@@ -1,0 +1,76 @@
+{
+  "_note": "Intents recorded from the live places-search function (gemini-3.5-flash-lite) on 2026-11-26 around a test location. Gemini's reading of each craving only; no restaurant data.",
+  "intents": {
+    "something warm for a rainy night": {
+      "textQuery": "warm comfort food soup noodles",
+      "includedType": null,
+      "priceLevels": [],
+      "distance": "any",
+      "wants": [
+        "warm"
+      ],
+      "avoids": []
+    },
+    "cheap late-night tacos": {
+      "textQuery": "cheap late-night tacos",
+      "includedType": "mexican_restaurant",
+      "priceLevels": [
+        1,
+        2
+      ],
+      "distance": "near",
+      "wants": [
+        "cheap",
+        "late-night",
+        "tacos"
+      ],
+      "avoids": []
+    },
+    "quiet date spot, not too pricey": {
+      "textQuery": "romantic date spot restaurant",
+      "includedType": null,
+      "priceLevels": [
+        1,
+        2
+      ],
+      "distance": "any",
+      "wants": [
+        "quiet",
+        "date spot",
+        "not too pricey"
+      ],
+      "avoids": []
+    },
+    "tacos + cheaper": {
+      "textQuery": "tacos",
+      "includedType": "mexican_restaurant",
+      "priceLevels": [
+        1,
+        2
+      ],
+      "distance": "any",
+      "wants": [
+        "cheaper"
+      ],
+      "avoids": []
+    },
+    "tacos + no seafood": {
+      "textQuery": "tacos",
+      "includedType": "mexican_restaurant",
+      "priceLevels": [],
+      "distance": "any",
+      "wants": [],
+      "avoids": [
+        "seafood"
+      ]
+    },
+    "tacos": {
+      "textQuery": "tacos",
+      "includedType": "mexican_restaurant",
+      "priceLevels": [],
+      "distance": "any",
+      "wants": [],
+      "avoids": []
+    }
+  }
+}

@@ -237,7 +237,10 @@ test("no places is an empty list, not an error", async () => {
   const { fn } = fakeFetch(new Response("{}"));
   const res = await handle(request({ query: "ramen", ...here }), env, fn);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { results: [] });
+  assert.deepEqual(await res.json(), {
+    results: [],
+    intent: { textQuery: "ramen", includedType: null, priceLevels: [], distance: "any", wants: [], avoids: [] },
+  });
 });
 
 // --- failures ---

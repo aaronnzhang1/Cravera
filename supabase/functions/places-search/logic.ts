@@ -4,6 +4,19 @@
 //
 // Rules (AGENTS.md): every restaurant field comes from Google Places, the
 // search is always open-now, and the Places key never leaves the server.
+// Gemini (gemini.ts) only shapes the search text and the order; open-now, the
+// radius and the restaurant check are set here, after it, in code.
+
+import {
+  type Candidate,
+  curate,
+  DEFAULT_GEMINI_MODEL,
+  fallbackIntent,
+  type GeminiConfig,
+  type Intent,
+  understand,
+  validateIntent,
+} from "./gemini.ts";
 
 export const PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
 
@@ -27,6 +40,16 @@ export const MAX_RADIUS_M = 20000;
 export const MAX_QUERY_LENGTH = 200;
 export const MAX_ABS_LATITUDE = 85;
 const UPSTREAM_TIMEOUT_MS = 8000;
+/**
+ * The whole request must answer within this, below the app's 15 s timeout:
+ * a step that wouldn't fit is skipped (curation, the relaxed retry), so a
+ * slow Gemini never costs the guest a result Places already gave.
+ */
+export const REQUEST_BUDGET_MS = 11_000;
+const MIN_CURATE_MS = 1500;
+/** "Close by" when the place is within this. */
+const NEAR_M = 1500;
+const HIGHLY_RATED = 4.5;
 const EARTH_RADIUS_M = 6_371_000;
 
 export type SearchInput = {
@@ -34,6 +57,10 @@ export type SearchInput = {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  /** The intent of the search being refined, from the app. Untrusted: validated. */
+  previousIntent: Intent | null;
+  /** The guest's local hour (0-23), so "late-night" or "breakfast" make sense. */
+  localHour: number | null;
 };
 
 export type RestaurantResult = {
@@ -50,11 +77,21 @@ export type RestaurantResult = {
   photoAuthorUri: string | null;
   latitude: number;
   longitude: number;
+  /**
+   * Why this pick, built in code from this result's Places facts and the
+   * intent (price, distance, rating). Never text from the model.
+   */
+  reasons: string[];
 };
 
 export type Env = {
   placesKey: string | undefined;
   publishableKeys: string | undefined;
+  /** Optional: without it, search uses the raw text and Places order. */
+  geminiKey?: string | undefined;
+  geminiModel?: string | undefined;
+  /** Milliseconds clock; tests replace it. */
+  now?: () => number;
 };
 
 type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
@@ -82,7 +119,12 @@ export function parseInput(body: unknown): SearchInput | string {
     }
     radiusMeters = Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, b.radiusMeters));
   }
-  return { query, latitude, longitude, radiusMeters };
+  // Both are optional hints: a bad value is ignored, not an error.
+  const previousIntent = b.previousIntent === undefined ? null : validateIntent(b.previousIntent);
+  const localHour = Number.isInteger(b.localHour) && (b.localHour as number) >= 0 && (b.localHour as number) <= 23
+    ? b.localHour as number
+    : null;
+  return { query, latitude, longitude, radiusMeters, previousIntent, localHour };
 }
 
 function wrapLongitude(lng: number): number {
@@ -93,7 +135,12 @@ function wrapLongitude(lng: number): number {
  * Text Search (New) only *restricts* to a rectangle, so we send the box around
  * the circle and then drop anything outside the circle in [mapPlaces].
  */
-export function buildRequestBody(input: SearchInput) {
+/**
+ * Only the intent's search text goes to Places. Its type, price and distance
+ * steer curation instead of filtering here, so a filter can never turn a
+ * match into "nothing open", and each search stays one Places call.
+ */
+export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIntent(input.query)) {
   // Same sphere as distanceMeters, plus 1% margin, so the box always holds the
   // whole circle; mapPlaces then drops the corners.
   const angular = (input.radiusMeters * 1.01) / EARTH_RADIUS_M;
@@ -102,7 +149,7 @@ export function buildRequestBody(input: SearchInput) {
   const cosLat = Math.cos((input.latitude * Math.PI) / 180);
   const dLng = Math.sin(angular) >= cosLat ? 179 : Math.min(toDeg(Math.asin(Math.sin(angular) / cosLat)), 179);
   return {
-    textQuery: input.query,
+    textQuery: intent.textQuery,
     includedType: "restaurant",
     // Without this, Google may skip the type filter (e.g. for an address query).
     strictTypeFiltering: true,
@@ -180,6 +227,7 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
       ...photoAuthor(p.photos?.[0]),
       latitude: lat,
       longitude: lng,
+      reasons: [],
     });
   }
   return results;
@@ -245,36 +293,110 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const input = parseInput(body);
   if (typeof input === "string") return json(400, { error: input });
 
+  const now = env.now ?? Date.now;
+  const deadline = now() + REQUEST_BUDGET_MS;
+  const left = () => deadline - now();
+  const gemini: GeminiConfig | null = env.geminiKey
+    ? { key: env.geminiKey, model: env.geminiModel || DEFAULT_GEMINI_MODEL, fetchFn }
+    : null;
+
+  // 1. Understand. Without Gemini, or if it fails, use the raw text; when
+  //    refining, the new words always fit and the previous text is shortened.
+  const understood = gemini ? await understand(gemini, input.query, input.previousIntent, input.localHour, left()) : null;
+  // A refine that falls back keeps the previous (validated) filters.
+  const intent = understood ??
+    (input.previousIntent ? { ...input.previousIntent, textQuery: fallbackText(input) } : fallbackIntent(input.query));
+
+  // 2. Search: one Places call, with only the intent's text.
+  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
+  if (results === null) return json(502, { error: "Search failed. Try again." });
+
+  let curation = "skipped";
+  // 3. Curate, only if Gemini understood the craving and there is time. It
+  //    sees only Places data under refs we choose and returns an order; if
+  //    it fails, Places order stays.
+  if (gemini && understood && results.length > 1 && left() >= MIN_CURATE_MS) {
+    const candidates: Candidate[] = results.map((r, i) => ({
+      ref: `c${i + 1}`,
+      name: r.name,
+      cuisine: r.cuisine,
+      priceLevel: r.priceLevel,
+      rating: r.rating,
+      distanceMeters: r.distanceMeters,
+    }));
+    const order = await curate(gemini, intent, candidates, left() - 500);
+    curation = order ? "ok" : "fallback";
+    if (order) {
+      const byRef = new Map(candidates.map((c, i) => [c.ref, results![i]]));
+      results = order.map((ref) => byRef.get(ref)!);
+    }
+  }
+
+  // Outcomes only (no craving, intent or places), to see how Gemini is doing.
+  console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "curate", curation, "results", results.length);
+
+  // 4. Explain, from Places facts only.
+  results = results.map((r) => ({ ...r, reasons: reasonsFor(r) }));
+  return json(200, { results, intent });
+}
+
+/** The search text when Gemini didn't answer: the craving, or the previous text plus the refinement. */
+export function fallbackText(input: SearchInput): string {
+  if (!input.previousIntent) return input.query;
+  const room = MAX_QUERY_LENGTH - input.query.length - 1;
+  if (room <= 0) return input.query;
+  return `${input.previousIntent.textQuery.slice(0, room).trim()} ${input.query}`;
+}
+
+/**
+ * "Why this pick", from facts Places gave for this place only. Fixed labels
+ * in code: the model can't add, word or influence them (it never decides
+ * what the guest "asked for" on the card).
+ */
+export function reasonsFor(r: RestaurantResult): string[] {
+  const reasons: string[] = [];
+  if (r.priceLevel !== null && r.priceLevel <= 1) reasons.push("Budget-friendly");
+  if (r.distanceMeters <= NEAR_M) reasons.push("Close by");
+  if (r.rating !== null && r.rating >= HIGHLY_RATED) reasons.push("Highly rated");
+  return reasons;
+}
+
+/** One Places call. Returns null on any upstream failure. */
+async function searchPlaces(
+  input: SearchInput,
+  intent: Intent,
+  placesKey: string,
+  fetchFn: FetchFn,
+  timeoutMs: number,
+): Promise<RestaurantResult[] | null> {
+  if (timeoutMs <= 0) return null;
   let upstream: Response;
   try {
     upstream = await fetchFn(PLACES_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": env.placesKey,
+        "X-Goog-Api-Key": placesKey,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify(buildRequestBody(input)),
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      body: JSON.stringify(buildRequestBody(input, intent)),
+      signal: AbortSignal.timeout(timeoutMs),
       // A redirect could replay the craving and location elsewhere: fail instead.
       redirect: "error",
     });
   } catch (e) {
     // Never log the query or location: they are the user's data.
     console.error("places-search: upstream request failed", (e as Error)?.name);
-    return json(502, { error: "Search failed. Try again." });
+    return null;
   }
   if (!upstream.ok) {
     console.error("places-search: upstream status", upstream.status);
-    return json(502, { error: "Search failed. Try again." });
+    return null;
   }
-
-  let data: unknown;
   try {
-    data = await upstream.json();
+    return mapPlaces(await upstream.json(), input);
   } catch {
     console.error("places-search: upstream returned invalid JSON");
-    return json(502, { error: "Search failed. Try again." });
+    return null;
   }
-  return json(200, { results: mapPlaces(data, input) });
 }

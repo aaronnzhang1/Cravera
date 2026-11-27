@@ -13,7 +13,8 @@ enum SearchStatus { idle, loading, showing, exhausted, failed, expired }
 /// A search asks the server once. "No" moves to the next result from the
 /// same answer without a new request. When the results run out the status is
 /// [SearchStatus.exhausted] and the screen asks the user to refine, which
-/// runs a new search with the added text.
+/// runs a new search that changes the previous one (the server gets the added
+/// text and the previous search's intent).
 class CravingSearch extends ChangeNotifier {
   CravingSearch({this.places, DateTime Function()? clock}) : _now = clock ?? DateTime.now;
 
@@ -34,6 +35,14 @@ class CravingSearch extends ChangeNotifier {
   SearchStatus _status = SearchStatus.idle;
   String _query = '';
   SearchLocation? _near;
+
+  /// What was actually sent, so [retry] repeats it exactly. When refining,
+  /// [_sentQuery] is only the added text and [_sentIntent] the previous intent.
+  String _sentQuery = '';
+  Map<String, Object?>? _sentIntent;
+
+  /// The intent of the current answer, sent back when the user refines.
+  Map<String, Object?>? _intent;
   List<Restaurant> _results = const [];
   int _index = 0;
   int _rejections = 0;
@@ -44,11 +53,22 @@ class CravingSearch extends ChangeNotifier {
   int _request = 0;
 
   SearchStatus get status => _status;
+
+  /// Changes with every search (including refines and retries), so a screen
+  /// can remember something for one search only.
+  int get searchId => _request;
   String get query => _query;
   PlacesSearchError? get error => _error;
 
   /// How many places the user has said No to in this search.
   int get rejections => _rejections;
+
+  /// After this many Nos, the screen offers a small "Narrow it down" option.
+  /// Earlier felt pushy (maintainer, 2026-11-26).
+  static const offerRefineAfter = 5;
+
+  /// Whether to offer narrowing the search, under the current card.
+  bool get offerRefine => _status == SearchStatus.showing && _rejections >= offerRefineAfter;
 
   /// Photo bytes by place ID, fetched only for places actually shown. A key
   /// with a null value means "asked, no photo (yet)".
@@ -83,7 +103,7 @@ class CravingSearch extends ChangeNotifier {
   }
 
   /// True when the craving is longer than the server accepts.
-  bool get queryTooLong => _query.length > maxQueryLength;
+  bool get queryTooLong => _sentQuery.length > maxQueryLength;
 
   /// True when the server found nothing at all (rather than the user
   /// rejecting every result).
@@ -93,8 +113,20 @@ class CravingSearch extends ChangeNotifier {
   Future<void> start(String query, SearchLocation near) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
+    await _run(display: trimmed, send: trimmed, previous: null, near: near);
+  }
+
+  Future<void> _run({
+    required String display,
+    required String send,
+    required Map<String, Object?>? previous,
+    required SearchLocation near,
+  }) async {
     final request = ++_request;
-    _query = trimmed;
+    _query = display;
+    _sentQuery = send;
+    _sentIntent = previous;
+    _intent = null;
     _near = near;
     _results = const [];
     _index = 0;
@@ -102,7 +134,7 @@ class CravingSearch extends ChangeNotifier {
     _error = null;
     _searchedAt = null;
     _photos.clear(); // photo links are short-lived; each search starts fresh
-    if (trimmed.length > maxQueryLength) {
+    if (send.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
       return;
@@ -116,9 +148,16 @@ class CravingSearch extends ChangeNotifier {
       return;
     }
     try {
-      final results = await service.search(query: trimmed, near: near);
+      final answer = await service.search(
+        query: send,
+        near: near,
+        previousIntent: previous,
+        localHour: _now().hour,
+      );
       if (request != _request) return; // a newer search or a reset won
+      final results = answer.results;
       _results = List.unmodifiable(results);
+      _intent = answer.intent;
       _searchedAt = _now();
       _status = results.isEmpty ? SearchStatus.exhausted : SearchStatus.showing;
     } on PlacesSearchException catch (e) {
@@ -162,19 +201,27 @@ class CravingSearch extends ChangeNotifier {
     return false;
   }
 
-  /// Runs a new search with [extra] added to the current craving.
+  /// Refines the current search with [extra] ("cheaper", "no seafood"). The
+  /// server gets [extra] and the current intent, so it changes the search
+  /// instead of restarting. Without an intent (the server sent none), the
+  /// text is added to the craving as before.
   Future<void> refine(String extra) async {
     final near = _near;
     final added = extra.trim();
     if (near == null || added.isEmpty) return;
-    await start('$_query $added', near);
+    final intent = _intent;
+    if (intent == null) {
+      await start('$_query $added', near);
+    } else {
+      await _run(display: '$_query $added', send: added, previous: intent, near: near);
+    }
   }
 
   /// Runs the same search again, for example after a network error.
   Future<void> retry() async {
     final near = _near;
-    if (near == null || _query.isEmpty) return;
-    await start(_query, near);
+    if (near == null || _sentQuery.isEmpty) return;
+    await _run(display: _query, send: _sentQuery, previous: _sentIntent, near: near);
   }
 
   /// Back to no search. A search still in flight is dropped.
@@ -182,6 +229,9 @@ class CravingSearch extends ChangeNotifier {
     _request++;
     _status = SearchStatus.idle;
     _query = '';
+    _sentQuery = '';
+    _sentIntent = null;
+    _intent = null;
     _near = null;
     _results = const [];
     _index = 0;

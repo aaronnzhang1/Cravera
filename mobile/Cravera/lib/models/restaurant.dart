@@ -20,6 +20,11 @@ class Restaurant {
   final double? latitude;
   final double? longitude;
 
+  /// Why this pick (for example "In your price range"). The server builds
+  /// these in code from this place's Places facts and the guest's request;
+  /// they are never text from the AI model.
+  final List<String> reasons;
+
   const Restaurant({
     required this.placeId,
     required this.name,
@@ -34,5 +39,6 @@ class Restaurant {
     this.rating,
     this.latitude,
     this.longitude,
+    this.reasons = const [],
   });
 }
