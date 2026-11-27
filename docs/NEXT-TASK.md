@@ -21,7 +21,7 @@ Tick a box only after checking it in the running app. Never delete or reword a c
 
 - [ ] "I just finished at the gym, I want something healthy and high protein but not too expensive and quick, something fast food like Chipotle" returns a fitting open place near the test location (healthy fast casual, $–$$), checked on the emulator.
 - [x] Varied phrasings give sensible intents (for example "something warm for a rainy night", "cheap late-night tacos", "quiet date spot, not too pricey"), covered by recorded fixtures in tests and spot-checked live.
-- [ ] Refining from a result changes the intent instead of restarting: "cheaper" lowers the price, "no seafood" avoids seafood places.
+- [x] Refining from a result changes the intent instead of restarting: "cheaper" lowers the price, "no seafood" avoids seafood places.
 - [x] Curation returns only place IDs from the Places answer; every field shown still comes from Places.
 - [x] If Gemini fails, times out or returns invalid JSON, search still works with the raw text and Places order (tested).
 - [x] Prompt-injection attempts in the craving can't change open-now, the radius cap, the data source or the output shape (tested).
