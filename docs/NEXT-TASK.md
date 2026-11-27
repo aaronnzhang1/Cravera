@@ -20,13 +20,13 @@ Inside `places-search`, still one call from the app:
 Tick a box only after checking it in the running app. Never delete or reword a criterion. Propose any change to the maintainer instead.
 
 - [ ] "I just finished at the gym, I want something healthy and high protein but not too expensive and quick, something fast food like Chipotle" returns a fitting open place near the test location (healthy fast casual, $–$$), checked on the emulator.
-- [ ] Varied phrasings give sensible intents (for example "something warm for a rainy night", "cheap late-night tacos", "quiet date spot, not too pricey"), covered by recorded fixtures in tests and spot-checked live.
+- [x] Varied phrasings give sensible intents (for example "something warm for a rainy night", "cheap late-night tacos", "quiet date spot, not too pricey"), covered by recorded fixtures in tests and spot-checked live.
 - [ ] Refining from a result changes the intent instead of restarting: "cheaper" lowers the price, "no seafood" avoids seafood places.
-- [ ] Curation returns only place IDs from the Places answer; every field shown still comes from Places.
-- [ ] If Gemini fails, times out or returns invalid JSON, search still works with the raw text and Places order (tested).
-- [ ] Prompt-injection attempts in the craving can't change open-now, the radius cap, the data source or the output shape (tested).
+- [x] Curation returns only place IDs from the Places answer; every field shown still comes from Places.
+- [x] If Gemini fails, times out or returns invalid JSON, search still works with the raw text and Places order (tested).
+- [x] Prompt-injection attempts in the craving can't change open-now, the radius cap, the data source or the output shape (tested).
 - [ ] The Gemini key exists only in Supabase secrets; the built app contains no key (APK scan).
-- [ ] `flutter analyze`, `flutter test` and the function tests pass, with tests for intent validation, curation validation and the fallback (network faked).
+- [x] `flutter analyze`, `flutter test` and the function tests pass, with tests for intent validation, curation validation and the fallback (network faked).
 
 ## Out of scope
 

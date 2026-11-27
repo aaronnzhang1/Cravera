@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -92,8 +94,8 @@ int _currentTab = 0;
 int _direction = 1;
 
 /// A tab page that slides in from the side you are moving toward, while the
-/// old page slides out the other way, with a fade instead of the platform's
-/// dimmed overlay (which looked like a blur, and always came from the right).
+/// old page slides out the other way. Both fade and blur while moving (the
+/// maintainer liked the blur; 2026-11-27) and are sharp once they settle.
 Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
   if (tab != _currentTab) {
     _direction = tab > _currentTab ? 1 : -1;
@@ -114,10 +116,15 @@ Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
           // (its animation running backwards) exits the opposite way.
           final leaving = animation.status == AnimationStatus.reverse;
           final dx = (1 - t) * 0.25 * (leaving ? -_direction : _direction);
-          return FractionalTranslation(
+          final blur = (1 - t) * 8;
+          final moved = FractionalTranslation(
             translation: Offset(dx, 0),
             child: Opacity(opacity: t, child: child),
           );
+          // No filter once settled, so a resting page costs nothing extra.
+          return blur < 0.1
+              ? moved
+              : ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur), child: moved);
         },
       );
     },
