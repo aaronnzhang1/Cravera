@@ -92,6 +92,12 @@ class AppSession extends ChangeNotifier {
   LocationProblem? get locationProblem => _locationProblem;
   bool get isLocating => _locating;
 
+  /// True while the search area may be about to change (device fix or typed
+  /// place still being looked up). Searching and directions wait for it, so
+  /// nothing runs against the area the user is leaving.
+  bool get locationChanging => _locating || _lookingUpPlace;
+  bool _lookingUpPlace = false;
+
   /// Uses the device location. On failure, keeps any typed place already set.
   Future<void> useDeviceLocation() async {
     if (_locating) return;
@@ -118,9 +124,20 @@ class AppSession extends ChangeNotifier {
       _locating = false;
       notifyListeners();
     }
-    final found = await locationService.lookUp(place);
+    _lookingUpPlace = true;
+    notifyListeners();
+    final SearchLocation? found;
+    try {
+      found = await locationService.lookUp(place);
+    } finally {
+      // Only the newest lookup clears the flag; sign out clears it too.
+      if (request == _locationRequest) _lookingUpPlace = false;
+    }
     if (request != _locationRequest) return false; // a newer choice or sign out won
-    if (found == null) return false;
+    if (found == null) {
+      notifyListeners();
+      return false;
+    }
     _setSearchLocation(found);
     notifyListeners();
     return true;
@@ -152,6 +169,7 @@ class AppSession extends ChangeNotifier {
     _searchLocation = null;
     _locationProblem = null;
     _locating = false;
+    _lookingUpPlace = false;
     _locationRequest++;
     search.reset(); // the next user must not see this search
     // Bookmarks are real places now and aren't tied to an account yet, so

@@ -18,13 +18,14 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _promptController = TextEditingController();
   final _repromptController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Ask for the device location once, after the first frame (the session
     // isn't reachable from context before then).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -40,9 +41,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _promptController.dispose();
     _repromptController.dispose();
     super.dispose();
+  }
+
+  /// Back from the background: results that may have closed are dropped.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) AppSessionScope.of(context).search.checkFresh();
   }
 
   @override
@@ -52,7 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return switch (search.status) {
       SearchStatus.idle => _buildIdle(context, session),
       SearchStatus.loading => _buildLoading(context),
-      SearchStatus.showing => _buildResult(context, session),
+      // An expired card is never drawn, even before the next check runs.
+      SearchStatus.showing => search.isFresh ? _buildResult(context, session) : _buildOutcome(context, search),
       SearchStatus.exhausted || SearchStatus.failed || SearchStatus.expired => _buildOutcome(context, search),
     };
   }
@@ -209,6 +218,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _startSearch(String prompt) async {
     if (prompt.isEmpty || AppSessionScope.of(context).search.status == SearchStatus.loading) return;
     final session = AppSessionScope.of(context);
+    if (session.locationChanging) {
+      // Searching now would use the area the user is leaving.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Still finding your location. Try again in a moment.')),
+      );
+      return;
+    }
     if (session.searchLocation == null) {
       final gotPlace = await _askForPlace(session);
       if (!gotPlace || !mounted) return;
@@ -230,9 +246,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onYes() {
-    final search = AppSessionScope.of(context).search;
-    // Never send someone to a place based on an old "open now".
-    if (!search.checkFresh()) return;
+    final session = AppSessionScope.of(context);
+    final search = session.search;
+    // Never send someone to a place based on an old "open now", or while
+    // the search area is changing.
+    if (session.locationChanging || !search.checkFresh()) return;
     final current = search.current;
     if (current == null) return;
     _showNavOptions(context, current, search);
@@ -243,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildOutcome(BuildContext context, CravingSearch search) {
     final text = Theme.of(context).textTheme;
     final failed = search.status == SearchStatus.failed;
-    final expired = search.status == SearchStatus.expired;
+    final expired = search.status == SearchStatus.expired || !search.isFresh;
     final (title, detail) = expired
         ? ('These results are out of date.', 'Places may have closed since. Search again to see what is open now.')
         : search.queryTooLong

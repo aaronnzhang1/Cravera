@@ -113,6 +113,13 @@ class CravingSearch extends ChangeNotifier {
 
   /// False (and [SearchStatus.expired]) when the results are older than
   /// [freshFor]. Call before showing or acting on a result.
+  /// Whether the results are still within [freshFor]. Doesn't change state,
+  /// so a screen can read it while building.
+  bool get isFresh {
+    final at = _searchedAt;
+    return at == null || _now().difference(at) <= freshFor;
+  }
+
   bool checkFresh() {
     final at = _searchedAt;
     if (at == null || _now().difference(at) <= freshFor) return true;

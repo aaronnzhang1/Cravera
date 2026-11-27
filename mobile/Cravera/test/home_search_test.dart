@@ -203,6 +203,51 @@ void main() {
     expect(find.text('These results are out of date.'), findsOneWidget);
   });
 
+  testWidgets('coming back to the app after the results expire hides the card', (tester) async {
+    var now = DateTime(2026, 1, 1, 12);
+    final session = AppSession(
+      locationService: const _FoundLocation(),
+      search: CravingSearch(places: FakePlaces((_) => [_place('a', 'Test Noodle House')]), clock: () => now),
+    );
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+    await tester.tap(find.text('Continue as guest'));
+    await _settle(tester);
+    await _searchFor(tester, 'ramen');
+    expect(find.text('Test Noodle House'), findsOneWidget);
+
+    now = now.add(const Duration(minutes: 20));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _settle(tester);
+
+    expect(find.text('Test Noodle House'), findsNothing);
+    expect(find.text('These results are out of date.'), findsOneWidget);
+  });
+
+  testWidgets('no search runs while a typed place is still being looked up', (tester) async {
+    final lookup = Completer<SearchLocation?>();
+    final places = FakePlaces((_) => [_place('a', 'Test Noodle House')]);
+    final session = AppSession(locationService: _SlowLookup(lookup), search: CravingSearch(places: places));
+    await tester.pumpWidget(MyApp(session: session));
+    await tester.pump();
+    await tester.tap(find.text('Continue as guest'));
+    await _settle(tester);
+
+    final changing = session.useTypedPlace('Elsewhere Example');
+    await _searchFor(tester, 'ramen');
+    expect(find.textContaining('Still finding your location'), findsOneWidget);
+    expect(places.queries, isEmpty, reason: 'it would have used the area being left');
+
+    lookup.complete(const SearchLocation(latitude: 30, longitude: 40, label: 'Elsewhere Example'));
+    await changing;
+    await tester.pump(const Duration(seconds: 5)); // let the message bar go away
+    await _settle(tester);
+    await tester.tap(find.byTooltip('Search'));
+    await _settle(tester);
+    expect(places.locations.single.label, 'Elsewhere Example');
+  });
+
   test('a new search area drops the search, including one still waiting', () async {
     final slow = Completer<List<Restaurant>>();
     final session = AppSession(
@@ -248,4 +293,14 @@ class _MovableLocation extends LocationService {
   @override
   Future<SearchLocation?> lookUp(String place) async =>
       SearchLocation(latitude: 30, longitude: 40, label: place.trim());
+}
+
+/// Device location near 10,20; a typed place resolves only when the test says.
+class _SlowLookup extends LocationService {
+  const _SlowLookup(this.lookup);
+  final Completer<SearchLocation?> lookup;
+  @override
+  Future<LocationResult> current() async => const LocationResult.found(_nearby);
+  @override
+  Future<SearchLocation?> lookUp(String place) => lookup.future;
 }
