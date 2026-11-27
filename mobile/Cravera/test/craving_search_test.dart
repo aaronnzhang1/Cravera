@@ -27,6 +27,16 @@ class FakePlaces extends PlacesService {
 
   /// Returns photo bytes for a photo name; no photo when not set.
   FutureOr<Uint8List?> Function(String name)? photo;
+
+  /// Avatar links asked for; none loads (the initial shows).
+  final avatarRequests = <String>[];
+
+  @override
+  Future<Uint8List?> avatarBytes(String avatarUri) async {
+    avatarRequests.add(avatarUri);
+    return null;
+  }
+
   final queries = <String>[];
   final locations = <SearchLocation>[];
   final photoRequests = <String>[];

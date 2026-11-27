@@ -74,6 +74,12 @@ class CravingSearch extends ChangeNotifier {
   /// with a null value means "asked, no photo (yet)".
   final Map<String, Uint8List?> _photos = {};
 
+  /// Avatar bytes by avatar link, for the authors of photos that loaded.
+  final Map<String, Uint8List?> _avatars = {};
+
+  /// The avatar at [avatarUri], once it has loaded; null shows an initial.
+  Uint8List? avatar(String? avatarUri) => avatarUri == null ? null : _avatars[avatarUri];
+
   /// The place to show, while [status] is [SearchStatus.showing].
   Restaurant? get current => _status == SearchStatus.showing ? _results[_index] : null;
 
@@ -99,7 +105,23 @@ class CravingSearch extends ChangeNotifier {
       if (request != _request || bytes == null) return;
       _photos[place.placeId] = bytes;
       notifyListeners();
+      _loadAvatars(place, service, request);
     });
+  }
+
+  /// Fetches the avatars of the photo's authors, once the photo is shown
+  /// (their credit only appears with it).
+  void _loadAvatars(Restaurant place, PlacesService service, int request) {
+    for (final author in place.photoAuthors) {
+      final link = author.avatarUri;
+      if (link == null || _avatars.containsKey(link)) continue;
+      _avatars[link] = null;
+      service.avatarBytes(link).then((bytes) {
+        if (request != _request || bytes == null) return;
+        _avatars[link] = bytes;
+        notifyListeners();
+      });
+    }
   }
 
   /// True when the craving is longer than the server accepts.
@@ -134,6 +156,7 @@ class CravingSearch extends ChangeNotifier {
     _error = null;
     _searchedAt = null;
     _photos.clear(); // photo links are short-lived; each search starts fresh
+    _avatars.clear();
     if (send.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
@@ -239,6 +262,7 @@ class CravingSearch extends ChangeNotifier {
     _error = null;
     _searchedAt = null;
     _photos.clear();
+    _avatars.clear();
     notifyListeners();
   }
 

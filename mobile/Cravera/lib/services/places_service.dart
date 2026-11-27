@@ -97,14 +97,31 @@ class PlacesService {
   Future<Uint8List?> photoBytes(String photoName) async {
     final link = await photoUrl(photoName);
     if (link == null) return null;
-    final request = http.Request('GET', Uri.parse(link))..followRedirects = false;
+    return _downloadImage(Uri.parse(link), maxPhotoBytes);
+  }
+
+  /// Largest avatar we accept; Google's avatars are a few KB.
+  static const maxAvatarBytes = 512 * 1024;
+
+  /// A photo author's avatar as image bytes, or null. Only Google's image
+  /// host, downloaded the same careful way as the photo. Avatars aren't
+  /// Places requests, so they cost nothing.
+  Future<Uint8List?> avatarBytes(String avatarUri) async {
+    if (!isSafePhotoUri(avatarUri)) return null;
+    return _downloadImage(Uri.parse(avatarUri), maxAvatarBytes);
+  }
+
+  /// Downloads an image from [link] without following redirects, reading at
+  /// most [maxBytes]. Any failure is null.
+  Future<Uint8List?> _downloadImage(Uri link, int maxBytes) async {
+    final request = http.Request('GET', link)..followRedirects = false;
     StreamSubscription<List<int>>? reading;
     try {
       final response = await _client.send(request).timeout(timeout);
       // Decide from the headers before reading any of the body.
       final type = response.headers['content-type'] ?? '';
       final declared = response.contentLength;
-      if (response.statusCode != 200 || !type.startsWith('image/') || (declared != null && declared > maxPhotoBytes)) {
+      if (response.statusCode != 200 || !type.startsWith('image/') || (declared != null && declared > maxBytes)) {
         unawaited(response.stream.listen(null).cancel());
         return null;
       }
@@ -115,7 +132,7 @@ class PlacesService {
       reading = response.stream.listen(
         (chunk) {
           bytes.add(chunk);
-          if (bytes.length > maxPhotoBytes && !done.isCompleted) done.complete(null);
+          if (bytes.length > maxBytes && !done.isCompleted) done.complete(null);
         },
         onError: (Object _) {
           if (!done.isCompleted) done.complete(null);
@@ -255,6 +272,8 @@ class PlacesService {
         photoName: _string(item['photoName']),
         photoAuthor: _string(item['photoAuthor']),
         photoAuthorUri: _httpsUrl(item['photoAuthorUri']),
+        photoAuthors: _authors(item),
+        photoMapsUri: _mapsUrl(item['photoMapsUri']),
         latitude: latitude,
         longitude: longitude,
         reasons: _reasons(item['reasons']),
@@ -282,6 +301,35 @@ class PlacesService {
   static List<String> _reasons(Object? v) => v is List
       ? List.unmodifiable(v.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty && s.length <= 30).take(4))
       : const [];
+
+  /// The photo's authors (older servers send only `photoAuthor`; see
+  /// [Restaurant.photoCredits]). Avatars load only from Google's image host.
+  static List<PhotoAuthor> _authors(Map<String, dynamic> item) {
+    final list = item['photoAuthors'];
+    final authors = <PhotoAuthor>[];
+    if (list is List) {
+      for (final a in list) {
+        if (a is! Map<String, dynamic>) continue;
+        final name = _string(a['name'])?.trim();
+        if (name == null) continue;
+        final avatar = _httpsUrl(a['avatarUri']);
+        authors.add(PhotoAuthor(
+          name: name,
+          uri: _httpsUrl(a['uri']),
+          avatarUri: avatar != null && isSafePhotoUri(avatar) ? avatar : null,
+        ));
+      }
+    }
+    return List.unmodifiable(authors);
+  }
+
+  /// A Google Maps link (https, google.com or maps.app.goo.gl), or null.
+  static String? _mapsUrl(Object? v) {
+    final s = _httpsUrl(v);
+    final host = s == null ? '' : Uri.parse(s).host;
+    final ok = host == 'google.com' || host.endsWith('.google.com') || host == 'maps.app.goo.gl';
+    return ok ? s : null;
+  }
 
   static String? _httpsUrl(Object? v) {
     final s = _string(v);

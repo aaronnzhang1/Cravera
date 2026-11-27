@@ -567,14 +567,6 @@ class _PickView extends StatelessWidget {
                         fit: StackFit.expand,
                         children: [
                           _PhotoHeader(photo: photo),
-                          // Google requires the photo author's credit with the photo.
-                          if (photo != null && restaurant.photoAuthor != null)
-                            Positioned(
-                              left: 12,
-                              bottom: 12,
-                              right: 70,
-                              child: _PhotoCredit(author: restaurant.photoAuthor!, uri: restaurant.photoAuthorUri),
-                            ),
                           Positioned(
                             top: 12,
                             left: 12,
@@ -602,6 +594,19 @@ class _PickView extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // Google requires crediting every photo author (avatar, name,
+                    // profile link) and a link to the photo on Maps. Directly under
+                    // the photo, so any number of credits can wrap without covering
+                    // the photo's controls.
+                    if (photo != null && (restaurant.photoCredits.isNotEmpty || restaurant.photoMapsUri != null))
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
+                        child: _PhotoCredit(
+                          authors: restaurant.photoCredits,
+                          avatar: session.search.avatar,
+                          mapsUri: restaurant.photoMapsUri,
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
                       child: Column(
@@ -643,9 +648,9 @@ class _PickView extends StatelessWidget {
                               ],
                             ),
                           ],
-                          const SizedBox(height: 6),
-                          // Places data shown outside a Google map needs this credit.
-                          Text('Google Maps', style: text.labelSmall?.copyWith(color: AppColors.textMuted)),
+                          // Places data shown outside a Google map needs this credit,
+                          // styled per Google's text-attribution rules.
+                          const _GoogleMapsCredit(),
                         ],
                       ),
                     ),
@@ -1240,41 +1245,139 @@ class _PhotoHeader extends StatelessWidget {
   }
 }
 
-/// "Photo: [author]" over the photo, linking to the author's page when Google
-/// gives one (https only).
+/// The photo's credit, over the photo: each author's avatar and name (linking
+/// to their page when Google gives one, https only), and a link to the photo
+/// on Google Maps, as Google's Places policies require.
 class _PhotoCredit extends StatelessWidget {
-  final String author;
+  final List<PhotoAuthor> authors;
+  final Uint8List? Function(String? avatarUri) avatar;
+  final String? mapsUri;
+  const _PhotoCredit({required this.authors, required this.avatar, required this.mapsUri});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textPrimary);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          children: [
+            for (final (i, a) in authors.indexed)
+              _CreditLink(
+                uri: a.uri,
+                label: 'Photo by ${a.name}',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _AuthorAvatar(name: a.name, bytes: avatar(a.avatarUri)),
+                    const SizedBox(width: 6),
+                    // The full name, wrapping if long: Google requires the whole credit.
+                    Flexible(
+                      child: Text(
+                        i == 0 ? 'Photo: ${a.name}' : a.name,
+                        style: style?.copyWith(decoration: a.uri == null ? null : TextDecoration.underline),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (mapsUri != null)
+              _CreditLink(
+                uri: mapsUri,
+                label: 'View photo on Google Maps',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Wraps at large text sizes instead of being clipped.
+                    Flexible(
+                      child: Text('View on Google Maps', style: style?.copyWith(decoration: TextDecoration.underline)),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.open_in_new_rounded, size: 14, color: AppColors.textPrimary),
+                  ],
+                ),
+              ),
+          ],
+        ),
+    );
+  }
+}
+
+/// One credit, at least 48 x 48 dp so it is easy to tap, opening [uri] outside the
+/// app; plain text when there is no link.
+class _CreditLink extends StatelessWidget {
   final String? uri;
-  const _PhotoCredit({required this.author, required this.uri});
+  final String label;
+  final Widget child;
+  const _CreditLink({required this.uri, required this.label, required this.child});
 
   @override
   Widget build(BuildContext context) {
     final link = uri == null ? null : Uri.tryParse(uri!);
-    final label = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.background.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        'Photo: $author',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textPrimary,
-              decoration: link == null ? null : TextDecoration.underline,
-            ),
+    final body = ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Center(widthFactor: 1, child: child),
       ),
     );
-    if (link == null) return Align(alignment: Alignment.bottomLeft, child: label);
-    return Align(
-      alignment: Alignment.bottomLeft,
+    if (link == null) return Semantics(label: label, excludeSemantics: true, child: body);
+    void open() => launchUrl(link, mode: LaunchMode.externalApplication);
+    // The tap action sits on this node: excludeSemantics hides the InkWell's.
+    return Semantics(
+      link: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: open,
+      child: InkWell(borderRadius: BorderRadius.circular(8), onTap: open, child: body),
+    );
+  }
+}
+
+/// The author's avatar (already downloaded by [PlacesService.avatarBytes]),
+/// or their initial until it loads or when there is none.
+class _AuthorAvatar extends StatelessWidget {
+  final String name;
+  final Uint8List? bytes;
+  const _AuthorAvatar({required this.name, required this.bytes});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = Text(
+      name.characters.first.toUpperCase(),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textPrimary),
+    );
+    final data = bytes;
+    return ClipOval(
+      child: Container(
+        width: 22,
+        height: 22,
+        color: AppColors.surface2,
+        alignment: Alignment.center,
+        child: data == null
+            ? initial
+            : Image.memory(data, width: 22, height: 22, fit: BoxFit.cover, errorBuilder: (_, _, _) => initial),
+      ),
+    );
+  }
+}
+
+/// The official Google Maps logo (unmodified, non-outlined on the plain
+/// background), as Google's Places policies prefer: 18 dp tall (16–19), with
+/// at least 10 dp clear space above and 5 dp below, labelled for screen readers.
+class _GoogleMapsCredit extends StatelessWidget {
+  const _GoogleMapsCredit();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 5),
       child: Semantics(
-        link: true,
-        child: InkWell(
-          onTap: () => launchUrl(link, mode: LaunchMode.externalApplication),
-          child: label,
-        ),
+        label: 'Google Maps',
+        image: true,
+        excludeSemantics: true,
+        child: Image.asset('assets/images/google_maps_logo.png', height: 18, fit: BoxFit.contain),
       ),
     );
   }
