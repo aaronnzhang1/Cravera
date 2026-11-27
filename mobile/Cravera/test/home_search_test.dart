@@ -235,6 +235,21 @@ void main() {
     expect(find.text('Test Noodle House'), findsOneWidget);
   });
 
+  testWidgets('nothing matched on a short sideways phone with the keyboard up: the input stays usable', (tester) async {
+    addTearDown(tester.view.reset);
+    await _homeWith(tester, FakePlaces((_) => []));
+    await _searchFor(tester, 'qzxv');
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320
+    tester.view.viewInsets = const FakeViewPadding(bottom: 400); // 200 pt keyboard
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    await tester.ensureVisible(find.byTooltip('Search again'));
+    await tester.pump();
+    expect(find.byTooltip('Search again').hitTestable(), findsOneWidget);
+  });
+
   testWidgets('the out-of-results screen fits a short phone with the keyboard open', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));

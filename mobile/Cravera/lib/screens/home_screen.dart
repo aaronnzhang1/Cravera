@@ -280,9 +280,81 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // (maintainer, 2026-11-27), with one-tap ways forward and the input
     // pinned at the bottom like Home's.
     return LayoutBuilder(
-      builder: (context, _) {
+      builder: (context, box) {
         // Read the keyboard from the view: Scaffold hides it from the body's MediaQuery.
         final typing = View.of(context).viewInsets.bottom > 0;
+        // Below this height (a short phone on its side with the keyboard up)
+        // the whole screen scrolls instead, so the input is never squeezed.
+        final tight = box.maxHeight < 300;
+        final header = Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: search.reset,
+            icon: const Icon(Icons.arrow_back_rounded, size: 20),
+            label: const Text('New search'),
+          ),
+        );
+        final conversation = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: typing ? 4 : 16),
+            if (search.query.trim().isNotEmpty && !search.queryTooLong)
+              Align(
+                alignment: Alignment.centerRight,
+                child: _Bubble(fromGuest: true, child: Text(search.query.trim(), style: text.bodyLarge)),
+              ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const CraveraLogo(size: 36),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: _Bubble(
+                    fromGuest: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: text.titleMedium),
+                        const SizedBox(height: 4),
+                        Text(detail, style: text.bodyMedium?.copyWith(color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (canRefine) ...[
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.only(left: 46),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final (label, words) in suggestions)
+                      ActionChip(label: Text(label), onPressed: () => _onReprompt(words)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+        final Widget? footer = canRetry
+            ? FilledButton.icon(
+                onPressed: search.retry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(expired ? 'Search again' : 'Try again'),
+              )
+            : canRefine
+                ? _PromptInput(
+                    controller: _repromptController,
+                    isBusy: false,
+                    hint: 'Tell me more…',
+                    sendTooltip: 'Search again',
+                    onSend: () => _onReprompt(_repromptController.text),
+                  )
+                : null;
         return SafeArea(
           bottom: !typing,
           child: Center(
@@ -290,84 +362,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               constraints: const BoxConstraints(maxWidth: 520),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: search.reset,
-                        icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                        label: const Text('New search'),
-                      ),
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
+                child: tight
+                    ? SingleChildScrollView(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(height: typing ? 4 : 16),
-                            if (search.query.trim().isNotEmpty && !search.queryTooLong)
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: _Bubble(fromGuest: true, child: Text(search.query.trim(), style: text.bodyLarge)),
-                              ),
-                            const SizedBox(height: 12),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const CraveraLogo(size: 36),
-                                const SizedBox(width: 10),
-                                Flexible(
-                                  child: _Bubble(
-                                    fromGuest: false,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(title, style: text.titleMedium),
-                                        const SizedBox(height: 4),
-                                        Text(detail, style: text.bodyMedium?.copyWith(color: AppColors.textSecondary)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (canRefine) ...[
-                              const SizedBox(height: 14),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 46),
-                                child: Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    for (final (label, words) in suggestions)
-                                      ActionChip(label: Text(label), onPressed: () => _onReprompt(words)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
+                          children: [header, conversation, const SizedBox(height: 8), ?footer],
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (canRetry)
-                      FilledButton.icon(
-                        onPressed: search.retry,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: Text(expired ? 'Search again' : 'Try again'),
                       )
-                    else if (canRefine)
-                      _PromptInput(
-                        controller: _repromptController,
-                        isBusy: false,
-                        hint: 'Tell me more…',
-                        sendTooltip: 'Search again',
-                        onSend: () => _onReprompt(_repromptController.text),
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          header,
+                          Expanded(child: SingleChildScrollView(child: conversation)),
+                          const SizedBox(height: 8),
+                          ?footer,
+                        ],
                       ),
-                  ],
-                ),
               ),
             ),
           ),
