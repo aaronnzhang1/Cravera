@@ -17,6 +17,7 @@
 - **Open problems:**
   - **Before v0.1.0:** TASK-002 criteria 1 and 3 in the app in the daytime; then the v0.1.0 exit criteria on Android and iPhone.
   - Seen 2026-11-27 (minor, not fixed): a refine can drop part of the old search text ("restaurants near the wharf" + "no seafood" → "restaurants"); "nice dinner" ranked an Event Venue with no price first.
+  - Follow-up from PR #30 (Codex adversarial round 3, medium; maintainer chose to defer): a delete whose answer is lost and whose token then expires stays "unknown" (the app shows the error and stays signed in) instead of being re-checked later. Retrying Delete or restarting the app re-checks the account. Fix: remember an unconfirmed delete and reconcile it on the next launch.
   - Follow-up from PR #27 (Codex round 6, P2; maintainer chose to merge after round 6): in the compact chat (short screen, keyboard up) a reply taller than the viewport is scrolled to its end, hiding its first line. Fix: align a tall reply's start (keep the minimal scroll when it fits); test with a long craving at large text.
   - Done 2026-11-27: price tie-break when curation is skipped or fails (PR #28, merged; `places-search` v17 deployed from `main` 761147d with the maintainer's approval). Gemini 503s were seen 01:49–01:51 PST; if they persist, consider one retry within the budget.
   - Gemini free tier: Google may use the content (craving, candidate names and distances) to improve its products; per-model free limits unconfirmed (sign-in page). Maintainer to decide free vs paid.

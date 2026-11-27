@@ -3,11 +3,16 @@
 import 'dart:async';
 
 import 'package:cravera/core/session.dart';
+import 'package:cravera/services/craving_search.dart';
+import 'package:cravera/services/location_service.dart';
 import 'package:cravera/main.dart';
 import 'package:cravera/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, AuthRetryableFetchException;
+
+import 'craving_search_test.dart' show FakePlaces;
+import 'location_test.dart' show FakeLocationService;
 
 /// One fictional account; sign-up answers [signUpAnswer].
 class FakeAuth implements AuthService {
@@ -216,6 +221,28 @@ void main() {
     auth.switchTo('other-tester@example.test');
     await _settle(tester);
     expect(find.text('a private craving'), findsNothing);
+  });
+
+  testWidgets('a place dialog open across an account switch closes and searches nothing', (tester) async {
+    final auth = FakeAuth();
+    final places = FakePlaces((_) => []);
+    final session = AppSession(
+      auth: auth,
+      locationService: FakeLocationService(const LocationResult.failed(LocationProblem.denied)),
+      search: CravingSearch(places: places),
+    );
+    await _start(tester, session);
+    await _signIn(tester, FakeAuth.knownEmail, FakeAuth.knownPassword);
+    await tester.enterText(find.widgetWithText(TextField, 'Ask Cravera…'), 'a private craving');
+    await tester.tap(find.byTooltip('Search'));
+    await _settle(tester);
+    expect(find.text('Where should I search?'), findsOneWidget);
+
+    auth.switchTo('other-tester@example.test');
+    await _settle(tester);
+    expect(find.text('Where should I search?'), findsNothing, reason: 'the old dialog is closed');
+    expect(places.queries, isEmpty, reason: 'no search with the craving the previous person typed');
+    expect(session.searchLocation, isNull);
   });
 
   testWidgets('a failed delete keeps the account and says so', (tester) async {
