@@ -50,6 +50,38 @@ class PlacesService {
   /// follow redirects for POST.
   static final endpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/places-search');
 
+  /// The function that turns a photo name into an image link without the key.
+  static final photoEndpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/place-photo');
+
+  /// Only Places photo names are sent, matching what the function accepts.
+  static final _photoName = RegExp(r'^places/[A-Za-z0-9_-]{1,300}/photos/[A-Za-z0-9_-]{1,1000}$');
+
+  /// An image link for [photoName], or null if there isn't one. A photo is
+  /// optional, so every failure is just "no photo", never an error.
+  Future<String?> photoUrl(String photoName) async {
+    if (!_photoName.hasMatch(photoName)) return null;
+    final request = http.Request('POST', photoEndpoint)
+      ..followRedirects = false
+      ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
+      ..body = jsonEncode({'photoName': photoName});
+    try {
+      final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
+      if (response.statusCode != 200) return null;
+      final uri = (jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>)['photoUri'];
+      return uri is String && isSafePhotoUri(uri) ? uri : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Images load only from Google's photo host over HTTPS.
+  static bool isSafePhotoUri(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null &&
+        uri.scheme == 'https' &&
+        (uri.host == 'googleusercontent.com' || uri.host.endsWith('.googleusercontent.com'));
+  }
+
   /// Reads `SUPABASE_PUBLISHABLE_KEY` from `.env`. Returns null when it is
   /// missing, so callers can show [PlacesSearchError.notConfigured].
   static PlacesService? fromEnv({http.Client? client}) {

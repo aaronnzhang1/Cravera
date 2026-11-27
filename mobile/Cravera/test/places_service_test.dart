@@ -189,6 +189,45 @@ void main() {
     });
   });
 
+  group('photos', () {
+    const name = 'places/fake-1/photos/AbC_123';
+
+    test('asks the photo function and returns a Google image link', () async {
+      late http.Request sent;
+      final client = MockClient((request) async {
+        sent = request;
+        return http.Response(jsonEncode({'photoUri': 'https://lh3.googleusercontent.com/p/fake=s800'}), 200);
+      });
+      final url = await serviceWith(client).photoUrl(name);
+      expect(url, 'https://lh3.googleusercontent.com/p/fake=s800');
+      expect(sent.url, PlacesService.photoEndpoint);
+      expect(sent.headers['apikey'], 'sb_publishable_test');
+      expect(jsonDecode(sent.body), {'photoName': name});
+      expect(sent.followRedirects, isFalse);
+    });
+
+    test('anything unexpected is just "no photo"', () async {
+      Future<String?> answer(http.Response response) =>
+          serviceWith(MockClient((_) async => response)).photoUrl(name);
+      expect(await answer(http.Response(jsonEncode({'photoUri': 'https://evil.example/x'}), 200)), isNull);
+      expect(await answer(http.Response(jsonEncode({'photoUri': 'http://lh3.googleusercontent.com/x'}), 200)), isNull);
+      expect(await answer(http.Response('{"error":"x"}', 502)), isNull);
+      expect(await answer(http.Response('not json', 200)), isNull);
+      expect(await serviceWith(MockClient((_) async => throw http.ClientException('offline'))).photoUrl(name), isNull);
+    });
+
+    test('a name that is not a Places photo name is never sent', () async {
+      var calls = 0;
+      final service = serviceWith(MockClient((_) async {
+        calls++;
+        return http.Response('{}', 200);
+      }));
+      expect(await service.photoUrl('places/x/reviews/y'), isNull);
+      expect(await service.photoUrl('https://evil.example/places/x/photos/y'), isNull);
+      expect(calls, 0);
+    });
+  });
+
   group('configuration', () {
     test('the endpoint is fixed to Cravera\'s project over HTTPS', () {
       expect(PlacesService.endpoint.scheme, 'https');

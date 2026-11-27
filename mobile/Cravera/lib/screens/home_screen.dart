@@ -1154,22 +1154,31 @@ class _PhotoHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = photoUrl != null && photoUrl!.trim().isNotEmpty;
+    final url = photoUrl;
+    // Only Google's photo host is ever loaded; anything else shows the placeholder.
+    final hasPhoto = url != null && PlacesService.isSafePhotoUri(url);
+    final placeholder = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.accentSoft, AppColors.surface2],
+        ),
+      ),
+      child: const Center(child: Icon(Icons.restaurant_rounded, color: AppColors.textMuted, size: 56)),
+    );
     return SizedBox(
       height: 210,
       width: double.infinity,
       child: hasPhoto
-          ? Image.network(photoUrl!, fit: BoxFit.cover)
-          : DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.accentSoft, AppColors.surface2],
-                ),
-              ),
-              child: const Center(child: Icon(Icons.restaurant_rounded, color: AppColors.textMuted, size: 56)),
-            ),
+          ? Image.network(
+              url,
+              fit: BoxFit.cover,
+              // The placeholder shows while loading and if the image fails.
+              loadingBuilder: (context, child, progress) => progress == null ? child : placeholder,
+              errorBuilder: (context, error, stack) => placeholder,
+            )
+          : placeholder,
     );
   }
 }

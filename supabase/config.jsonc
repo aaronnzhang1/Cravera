@@ -454,6 +454,9 @@
     // the function checks the apikey header itself and fails closed.
     "places-search": {
       "verify_jwt": false
+    },
+    "place-photo": {
+      "verify_jwt": false
     }
   },
 

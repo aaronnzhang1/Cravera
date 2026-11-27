@@ -29,4 +29,19 @@ class Restaurant {
     this.latitude,
     this.longitude,
   });
+
+  /// The same place with an image link from Google's photo host.
+  Restaurant withPhotoUrl(String? url) => Restaurant(
+        placeId: placeId,
+        name: name,
+        photoUrl: url,
+        photoName: photoName,
+        cuisine: cuisine,
+        address: address,
+        priceLevel: priceLevel,
+        distanceMeters: distanceMeters,
+        rating: rating,
+        latitude: latitude,
+        longitude: longitude,
+      );
 }

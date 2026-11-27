@@ -50,8 +50,35 @@ class CravingSearch extends ChangeNotifier {
   /// How many places the user has said No to in this search.
   int get rejections => _rejections;
 
-  /// The place to show, while [status] is [SearchStatus.showing].
-  Restaurant? get current => _status == SearchStatus.showing ? _results[_index] : null;
+  /// Image links by place ID, fetched only for places actually shown. A key
+  /// with a null value means "asked, no photo".
+  final Map<String, String?> _photos = {};
+
+  /// The place to show, while [status] is [SearchStatus.showing], with its
+  /// photo once it has loaded.
+  Restaurant? get current {
+    if (_status != SearchStatus.showing) return null;
+    final place = _results[_index];
+    final url = _photos[place.placeId];
+    return url == null ? place : place.withPhotoUrl(url);
+  }
+
+  /// Fetches the photo for the place on screen, once. A late answer from an
+  /// older search is dropped.
+  void _loadPhoto() {
+    final service = places;
+    if (_status != SearchStatus.showing || service == null) return;
+    final place = _results[_index];
+    final name = place.photoName;
+    if (name == null || _photos.containsKey(place.placeId)) return;
+    _photos[place.placeId] = null;
+    final request = _request;
+    service.photoUrl(name).then((url) {
+      if (request != _request || url == null) return;
+      _photos[place.placeId] = url;
+      notifyListeners();
+    });
+  }
 
   /// True when the craving is longer than the server accepts.
   bool get queryTooLong => _query.length > maxQueryLength;
@@ -72,6 +99,7 @@ class CravingSearch extends ChangeNotifier {
     _rejections = 0;
     _error = null;
     _searchedAt = null;
+    _photos.clear(); // photo links are short-lived; each search starts fresh
     if (trimmed.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
@@ -97,6 +125,7 @@ class CravingSearch extends ChangeNotifier {
       _status = SearchStatus.failed;
     }
     notifyListeners();
+    _loadPhoto();
   }
 
   /// "No": shows the next result from the same answer, without a request.
@@ -109,6 +138,7 @@ class CravingSearch extends ChangeNotifier {
       _status = SearchStatus.exhausted;
     }
     notifyListeners();
+    _loadPhoto();
   }
 
   /// False (and [SearchStatus.expired]) when the results are older than
@@ -157,6 +187,7 @@ class CravingSearch extends ChangeNotifier {
     _rejections = 0;
     _error = null;
     _searchedAt = null;
+    _photos.clear();
     notifyListeners();
   }
 
