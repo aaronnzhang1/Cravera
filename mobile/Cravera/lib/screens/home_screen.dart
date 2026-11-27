@@ -419,12 +419,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               constraints: const BoxConstraints(maxWidth: 520),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                // Compact (short screen or keyboard up): "New search" stays fixed
+                // above; the thread and the input scroll together below it.
                 child: tight
-                    ? SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [header, conversation, const SizedBox(height: 8), ?footer],
-                        ),
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          header,
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [conversation, const SizedBox(height: 8), ?footer],
+                              ),
+                            ),
+                          ),
+                        ],
                       )
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,

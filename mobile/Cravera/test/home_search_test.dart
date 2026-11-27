@@ -285,7 +285,8 @@ void main() {
     await _homeWith(tester, places);
     await _searchFor(tester, 'nice dinner');
     tester.view.devicePixelRatio = 2;
-    tester.view.physicalSize = const Size(1136, 640); // 568 x 320, sideways: the compact layout
+    tester.view.physicalSize = const Size(1136, 640); // 568 x 320, sideways
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300); // keyboard up: the compact layout (< 300 pt)
     tester.platformDispatcher.textScaleFactorTestValue = 1.5; // tall suggestions below the reply
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await _settle(tester);
