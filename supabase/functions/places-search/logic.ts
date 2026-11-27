@@ -47,7 +47,6 @@ const UPSTREAM_TIMEOUT_MS = 8000;
  */
 export const REQUEST_BUDGET_MS = 11_000;
 const MIN_CURATE_MS = 1500;
-const MIN_RETRY_MS = 2500;
 /** "Close by" when the place is within this. */
 const NEAR_M = 1500;
 const HIGHLY_RATED = 4.5;
@@ -136,8 +135,11 @@ function wrapLongitude(lng: number): number {
  * Text Search (New) only *restricts* to a rectangle, so we send the box around
  * the circle and then drop anything outside the circle in [mapPlaces].
  */
-const PRICE_LEVEL_NAMES = ["", "PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE", "PRICE_LEVEL_VERY_EXPENSIVE"];
-
+/**
+ * Only the intent's search text goes to Places. Its type, price and distance
+ * steer curation instead of filtering here, so a filter can never turn a
+ * match into "nothing open", and each search stays one Places call.
+ */
 export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIntent(input.query)) {
   // Same sphere as distanceMeters, plus 1% margin, so the box always holds the
   // whole circle; mapPlaces then drops the corners.
@@ -148,9 +150,7 @@ export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIn
   const dLng = Math.sin(angular) >= cosLat ? 179 : Math.min(toDeg(Math.asin(Math.sin(angular) / cosLat)), 179);
   return {
     textQuery: intent.textQuery,
-    // Only an allow-listed restaurant type (validateIntent), else "restaurant".
-    includedType: intent.includedType ?? "restaurant",
-    ...(intent.priceLevels.length > 0 ? { priceLevels: intent.priceLevels.map((p) => PRICE_LEVEL_NAMES[p]) } : {}),
+    includedType: "restaurant",
     // Without this, Google may skip the type filter (e.g. for an address query).
     strictTypeFiltering: true,
     openNow: true,
@@ -307,15 +307,9 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const intent = understood ??
     (input.previousIntent ? { ...input.previousIntent, textQuery: fallbackText(input) } : fallbackIntent(input.query));
 
-  // 2. Search. If the narrowed search finds nothing, try once more with only
-  //    the search text, so filters never turn a match into "nothing open".
+  // 2. Search: one Places call, with only the intent's text.
   let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
   if (results === null) return json(502, { error: "Search failed. Try again." });
-  if (results.length === 0 && (intent.includedType !== null || intent.priceLevels.length > 0) && left() >= MIN_RETRY_MS) {
-    const relaxed = { ...intent, includedType: null, priceLevels: [] };
-    results = await searchPlaces(input, relaxed, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
-    if (results === null) return json(502, { error: "Search failed. Try again." });
-  }
 
   // 3. Curate, only if Gemini understood the craving and there is time. It
   //    sees only Places data under refs we choose and returns an order; if

@@ -156,10 +156,9 @@ test("a wrong model reading of the price can't put a price claim on the card", a
 });
 
 test("a refine that falls back keeps the previous filters", async () => {
-  const g = fakeGoogle([new Response(JSON.stringify({ places: [] })), new Response("{}")], [new Error("offline")]);
+  const g = fakeGoogle([new Response(JSON.stringify({ places: [] }))], [new Error("offline")]);
   const previousIntent = { ...gymIntent, textQuery: "tacos", priceLevels: [1] };
   const body = await (await handle(request({ query: "closer", previousIntent, ...here }), env, g.fn)).json();
-  assert.deepEqual(g.placesCalls()[0].body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE"]);
   assert.equal(g.placesCalls()[0].body.textQuery, "tacos closer");
   assert.deepEqual(body.intent.priceLevels, [1], "later refines keep it too");
 });
@@ -172,8 +171,9 @@ test("understand shapes the Places request; open-now, restaurants and the box st
   assert.equal(res.status, 200);
   const body = g.placesCalls()[0].body;
   assert.equal(body.textQuery, "healthy protein bowls");
-  assert.equal(body.includedType, "fast_food_restaurant");
-  assert.deepEqual(body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE"]);
+  // Type and price steer curation; they never narrow the Places call.
+  assert.equal(body.includedType, "restaurant");
+  assert.equal(body.priceLevels, undefined);
   assert.equal(body.openNow, true);
   assert.equal(body.strictTypeFiltering, true);
   assert.ok(body.locationRestriction);
@@ -196,17 +196,24 @@ test("curation reorders results; every field and reason still comes from Places"
   assert.ok(!sent.includes('"a"') && !sent.includes("37.001"), sent);
 });
 
-test("a narrowed search that finds nothing retries once with only the text", async () => {
-  const g = fakeGoogle(
-    [new Response("{}"), new Response(JSON.stringify({ places: [place("a")] }))],
-    [geminiAnswer(gymIntent)],
-  );
-  const { results } = await (await handle(request({ query: "gym food", ...here }), env, g.fn)).json();
-  assert.equal(results.length, 1);
-  const retry = g.placesCalls()[1].body;
-  assert.equal(retry.includedType, "restaurant");
-  assert.equal(retry.priceLevels, undefined);
-  assert.equal(retry.openNow, true);
+test("every search is exactly one Places call, even when it finds nothing", async () => {
+  for (const previousIntent of [undefined, { ...gymIntent, textQuery: "tacos", priceLevels: [1] }]) {
+    const g = fakeGoogle([new Response("{}")], [geminiAnswer(gymIntent)]);
+    const res = await handle(request({ query: "gym food", previousIntent, ...here }), env, g.fn);
+    assert.equal(res.status, 200);
+    assert.equal(g.placesCalls().length, 1);
+  }
+  const noGemini = fakeGoogle([new Response("{}")], []);
+  await handle(request({ query: "x", previousIntent: { ...gymIntent, priceLevels: [1] }, ...here }), { ...env, geminiKey: undefined }, noGemini.fn);
+  assert.equal(noGemini.placesCalls().length, 1);
+});
+
+test("curation is told the price and cuisine the guest wants", async () => {
+  const g = fakeGoogle([new Response(JSON.stringify({ places: [place("a"), place("b")] }))], [geminiAnswer(gymIntent), geminiAnswer({ order: [] })]);
+  await handle(request({ query: "gym food", ...here }), env, g.fn);
+  const sent = JSON.parse(String(g.geminiCalls()[1].body.input));
+  assert.deepEqual(sent.intent.priceLevels, [1, 2]);
+  assert.equal(sent.intent.includedType, "fast_food_restaurant");
 });
 
 test("the Gemini key goes only in its header, to Gemini only", async () => {
@@ -297,10 +304,11 @@ test("a Places failure is still a 502 with Gemini on", async () => {
 test("refining sends the previous intent to Gemini and uses the new intent", async () => {
   const cheaper = { ...gymIntent, priceLevels: [1] };
   const g = fakeGoogle([new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer(cheaper), geminiAnswer({ order: [] })]);
-  await handle(request({ query: "cheaper", previousIntent: gymIntent, localHour: 21, ...here }), env, g.fn);
+  const res = await handle(request({ query: "cheaper", previousIntent: gymIntent, localHour: 21, ...here }), env, g.fn);
   const sent = JSON.parse(String(g.geminiCalls()[0].body.input));
   assert.deepEqual(sent, { craving: "cheaper", previousIntent: gymIntent, localHour: 21 });
-  assert.deepEqual(g.placesCalls()[0].body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE"]);
+  // "cheaper" lowers the price in the intent the app gets back for later refines.
+  assert.deepEqual((await res.json()).intent.priceLevels, [1]);
 });
 
 test("refining without Gemini adds the text to the previous search text", async () => {
