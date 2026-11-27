@@ -648,7 +648,6 @@ class _PickView extends StatelessWidget {
                               ],
                             ),
                           ],
-                          const SizedBox(height: 6),
                           // Places data shown outside a Google map needs this credit,
                           // styled per Google's text-attribution rules.
                           const _GoogleMapsCredit(),
@@ -1273,12 +1272,10 @@ class _PhotoCredit extends StatelessWidget {
                   children: [
                     _AuthorAvatar(name: a.name, bytes: avatar(a.avatarUri)),
                     const SizedBox(width: 6),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 180),
+                    // The full name, wrapping if long: Google requires the whole credit.
+                    Flexible(
                       child: Text(
                         i == 0 ? 'Photo: ${a.name}' : a.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: style?.copyWith(decoration: a.uri == null ? null : TextDecoration.underline),
                       ),
                     ),
@@ -1363,25 +1360,21 @@ class _AuthorAvatar extends StatelessWidget {
   }
 }
 
-/// "Google Maps" text attribution as Google specifies it: Roboto (or the
-/// system sans-serif), regular weight, #5E5E5E, 12 sp, one line, never
-/// translated or recapitalised.
+/// The official Google Maps logo (unmodified, non-outlined on the plain
+/// background), as Google's Places policies prefer: 18 dp tall (16–19), with
+/// at least 10 dp clear space above and 5 dp below, labelled for screen readers.
 class _GoogleMapsCredit extends StatelessWidget {
   const _GoogleMapsCredit();
 
   @override
   Widget build(BuildContext context) {
-    return const Text(
-      'Google Maps',
-      maxLines: 1,
-      softWrap: false,
-      style: TextStyle(
-        fontFamily: 'Roboto',
-        fontFamilyFallback: ['sans-serif'],
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-        letterSpacing: 0,
-        color: Color(0xFF5E5E5E),
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 5),
+      child: Semantics(
+        label: 'Google Maps',
+        image: true,
+        excludeSemantics: true,
+        child: Image.asset('assets/images/google_maps_logo.png', height: 18, fit: BoxFit.contain),
       ),
     );
   }

@@ -517,7 +517,7 @@ void main() {
     await _homeWith(tester, places);
     await _searchFor(tester, 'ramen');
     expect(find.text('Photo: Test Photographer'), findsOneWidget);
-    expect(find.text('Google Maps'), findsOneWidget);
+    expect(find.bySemanticsLabel('Google Maps'), findsOneWidget);
   });
 
   testWidgets('the credit names every author and links to the photo on Google Maps', (tester) async {
@@ -535,7 +535,7 @@ void main() {
             ),
             PhotoAuthor(name: 'Second Tester'),
             PhotoAuthor(name: 'Third Tester'),
-            PhotoAuthor(name: 'Fourth Tester'),
+            PhotoAuthor(name: 'Fourth Tester With A Much Longer Fictional Name Than Fits On One Line'),
           ],
           photoMapsUri: 'https://www.google.com/maps/place//data=fake',
           latitude: 10.001,
@@ -549,7 +549,7 @@ void main() {
     expect(find.text('Photo: Test Photographer'), findsOneWidget);
     expect(find.text('Second Tester'), findsOneWidget);
     expect(find.text('View on Google Maps'), findsOneWidget);
-    expect(find.text('Fourth Tester'), findsOneWidget);
+    expect(find.text('Fourth Tester With A Much Longer Fictional Name Than Fits On One Line'), findsOneWidget);
     // Screen readers can open each link, not just read it.
     expect(
       tester.getSemantics(find.bySemanticsLabel('View photo on Google Maps')),
@@ -567,7 +567,7 @@ void main() {
     await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     await _searchFor(tester, 'ramen');
     expect(find.textContaining('Photo:'), findsNothing);
-    expect(find.text('Google Maps'), findsOneWidget);
+    expect(find.bySemanticsLabel('Google Maps'), findsOneWidget);
   });
 
   test('prices: 0 is Free, 1–4 are dollar signs, anything else is hidden', () {
