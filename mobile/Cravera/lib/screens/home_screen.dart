@@ -123,15 +123,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: LayoutBuilder(
                     builder: (context, area) => SingleChildScrollView(
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: area.maxHeight),
+                        constraints: BoxConstraints(minWidth: area.maxWidth, minHeight: area.maxHeight),
                         child: IntrinsicHeight(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                     child: Column(
                       children: [
+                        // Title left, chip pinned to the right edge on every screen size.
+                        // Both size to their content; under large text the title scales
+                        // down and the chip (up to 2/3 of the row) ellipsizes.
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // Shrinks only when large text leaves no room beside the chip.
                             Flexible(
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
@@ -140,12 +143,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // The chip takes what's left, so a long place or large text ellipsizes instead of overflowing.
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
-                              ),
+                            Flexible(
+                              flex: 2,
+                              child: _LocationChip(session: session, onTap: () => _askForPlace(session)),
                             ),
                           ],
                         ),
@@ -290,7 +290,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             : failed
                 ? searchErrorText(search.error ?? PlacesSearchError.server)
                 : search.foundNothing
-                    ? ('Nothing open matched “${search.query}” nearby.', 'Try different words, or add more detail.')
+                    ? (search.messages.length > 1
+                        ? ('Nothing open matched that nearby.', 'Try different words, or add more detail.')
+                        : ('Nothing open matched “${search.query}” nearby.', 'Try different words, or add more detail.'))
                     : ("That's every open match for “${search.query}” nearby.", 'Add something to narrow or change it.');
     // Retrying only helps when the request itself was fine.
     final canRetry = expired || (failed && search.error != PlacesSearchError.rejected);
@@ -321,11 +323,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(height: typing ? 4 : 16),
-            if (search.query.trim().isNotEmpty && !search.queryTooLong)
-              Align(
-                alignment: Alignment.centerRight,
-                child: _Bubble(fromGuest: true, child: Text(search.query.trim(), style: text.bodyLarge)),
-              ),
+            // One bubble per message the guest sent, like a chat thread.
+            if (!search.queryTooLong)
+              for (final (i, message) in search.messages.indexed) ...[
+                if (i > 0) const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _Bubble(fromGuest: true, child: Text(message, style: text.bodyLarge)),
+                ),
+              ],
             const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

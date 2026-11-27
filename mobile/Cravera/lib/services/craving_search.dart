@@ -34,6 +34,10 @@ class CravingSearch extends ChangeNotifier {
 
   SearchStatus _status = SearchStatus.idle;
   String _query = '';
+
+  /// What the guest typed, one entry per message: the craving, then each
+  /// refine. The chat shows each as its own bubble.
+  List<String> _messages = const [];
   SearchLocation? _near;
 
   /// What was actually sent, so [retry] repeats it exactly. When refining,
@@ -58,6 +62,9 @@ class CravingSearch extends ChangeNotifier {
   /// can remember something for one search only.
   int get searchId => _request;
   String get query => _query;
+
+  /// The guest's messages in this search, oldest first.
+  List<String> get messages => _messages;
   PlacesSearchError? get error => _error;
 
   /// How many places the user has said No to in this search.
@@ -135,6 +142,7 @@ class CravingSearch extends ChangeNotifier {
   Future<void> start(String query, SearchLocation near) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
+    _messages = List.unmodifiable([trimmed]);
     await _run(display: trimmed, send: trimmed, previous: null, near: near);
   }
 
@@ -233,8 +241,10 @@ class CravingSearch extends ChangeNotifier {
     final added = extra.trim();
     if (near == null || added.isEmpty) return;
     final intent = _intent;
+    _messages = List.unmodifiable([..._messages, added]);
     if (intent == null) {
-      await start('$_query $added', near);
+      final combined = '$_query $added';
+      await _run(display: combined, send: combined, previous: null, near: near);
     } else {
       await _run(display: '$_query $added', send: added, previous: intent, near: near);
     }
@@ -252,6 +262,7 @@ class CravingSearch extends ChangeNotifier {
     _request++;
     _status = SearchStatus.idle;
     _query = '';
+    _messages = const [];
     _sentQuery = '';
     _sentIntent = null;
     _intent = null;

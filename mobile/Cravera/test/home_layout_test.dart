@@ -29,6 +29,8 @@ Future<void> _enterAsGuest(WidgetTester tester, AppSession session) async {
 }
 
 void main() {
+  layoutAcrossScreens();
+
   testWidgets('on a short phone with the keyboard open, the composer still fits', (tester) async {
     await _enterAsGuest(tester, AppSession(locationService: _FixedLocation()));
 
@@ -71,4 +73,39 @@ void main() {
     expect(session.isGuest, isTrue);
     expect(session.searchLocation?.label, '1 Example Street');
   });
+}
+
+/// Phones and a tablet, in logical points, with their safe-area insets:
+/// iPhones have a notch or island at the top and a home indicator at the
+/// bottom; Android phones a status bar and a gesture bar.
+const _screens = <(String, Size, EdgeInsets)>[
+  ('iPhone SE', Size(320, 568), EdgeInsets.only(top: 20)),
+  ('iPhone 16', Size(393, 852), EdgeInsets.only(top: 59, bottom: 34)),
+  ('Pixel 10 Pro', Size(412, 915), EdgeInsets.only(top: 40, bottom: 24)),
+  ('small Android', Size(360, 640), EdgeInsets.only(top: 24, bottom: 48)),
+  ('tablet', Size(820, 1180), EdgeInsets.only(top: 24, bottom: 20)),
+];
+
+void layoutAcrossScreens() {
+  for (final (name, size, insets) in _screens) {
+    testWidgets('Home on $name: location chip at the top right, nothing overflows', (tester) async {
+      await _enterAsGuest(tester, AppSession(locationService: _FixedLocation()));
+      tester.view.devicePixelRatio = 2;
+      tester.view.physicalSize = size * 2;
+      tester.view.padding = FakeViewPadding(top: insets.top * 2, bottom: insets.bottom * 2);
+      tester.view.viewPadding = FakeViewPadding(top: insets.top * 2, bottom: insets.bottom * 2);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(tester.takeException(), isNull, reason: 'no overflow on $name');
+
+      final chip = tester.getRect(find.byTooltip('Change location'));
+      final title = tester.getRect(find.text('Cravera'));
+      // Content is at most 520 wide, centred: the chip ends at that column's right edge (20 pt margin).
+      final column = size.width > 520 ? (size.width - 520) / 2 + 520 : size.width;
+      expect(chip.right, moreOrLessEquals(column - 20, epsilon: 1), reason: 'chip at the right edge on $name');
+      expect(chip.top, greaterThanOrEqualTo(insets.top), reason: 'chip below the notch/status bar on $name');
+      expect((chip.center.dy - title.center.dy).abs(), lessThan(4), reason: 'chip on the title line on $name');
+    });
+  }
 }

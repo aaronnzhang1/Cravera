@@ -235,6 +235,26 @@ void main() {
     expect(find.text('Test Noodle House'), findsOneWidget);
   });
 
+  testWidgets('each message the guest sends is its own bubble in the thread', (tester) async {
+    final places = FakePlaces((_) => [])..intent = {'textQuery': 'nice dinner'};
+    await _homeWith(tester, places);
+    await _searchFor(tester, 'nice dinner');
+    for (final more in ['cheaper', 'something Asian fusion']) {
+      await tester.enterText(find.widgetWithText(TextField, 'Tell me more…'), more);
+      await tester.tap(find.byTooltip('Search again'));
+      await _settle(tester);
+    }
+    expect(places.queries, ['nice dinner', 'cheaper', 'something Asian fusion'], reason: 'each refine sends only its words');
+    for (final message in ['nice dinner', 'cheaper', 'something Asian fusion']) {
+      expect(find.text(message), findsOneWidget, reason: '"$message" is its own bubble');
+    }
+    expect(find.textContaining('nice dinner cheaper'), findsNothing, reason: 'no run-on bubble or answer');
+    expect(find.text('Nothing open matched that nearby.'), findsOneWidget);
+    // Oldest first, top to bottom.
+    final ys = ['nice dinner', 'cheaper', 'something Asian fusion'].map((m) => tester.getCenter(find.text(m)).dy).toList();
+    expect(ys[0] < ys[1] && ys[1] < ys[2], isTrue, reason: 'in the order sent');
+  });
+
   testWidgets('nothing matched on a short sideways phone with the keyboard up: the input stays usable', (tester) async {
     addTearDown(tester.view.reset);
     await _homeWith(tester, FakePlaces((_) => []));
