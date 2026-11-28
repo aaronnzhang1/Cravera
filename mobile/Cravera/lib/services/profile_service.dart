@@ -39,30 +39,6 @@ class Profile {
   /// Default search distances the app offers, in meters.
   static const radiusChoices = [1000, 2000, 5000, 10000];
 
-  Profile copyWith({String? displayName, String? homeCity, bool clearHomeCity = false, List<String>? dietaryPreferences, int? defaultRadiusMeters}) =>
-      Profile(
-        displayName: displayName ?? this.displayName,
-        homeCity: clearHomeCity ? null : (homeCity ?? this.homeCity),
-        dietaryPreferences: dietaryPreferences ?? this.dietaryPreferences,
-        defaultRadiusMeters: defaultRadiusMeters ?? this.defaultRadiusMeters,
-      );
-
-  /// The profile with trimmed text, or null if it breaks a table rule.
-  Profile? validated() {
-    final name = displayName.trim();
-    final city = homeCity?.trim();
-    if (name.isEmpty || name.length > maxNameLength) return null;
-    if (city != null && city.length > maxCityLength) return null;
-    if (dietaryPreferences.any((d) => !dietaryChoices.contains(d))) return null;
-    if (defaultRadiusMeters < 500 || defaultRadiusMeters > 20000) return null;
-    return Profile(
-      displayName: name,
-      homeCity: (city == null || city.isEmpty) ? null : city,
-      dietaryPreferences: [for (final d in dietaryChoices) if (dietaryPreferences.contains(d)) d],
-      defaultRadiusMeters: defaultRadiusMeters,
-    );
-  }
-
   @override
   bool operator ==(Object other) =>
       other is Profile &&
@@ -73,6 +49,44 @@ class Profile {
 
   @override
   int get hashCode => Object.hash(displayName, homeCity, defaultRadiusMeters, dietaryPreferences.join('|'));
+}
+
+/// One edit to a profile: only the fields set here are sent, so a save from
+/// a phone with an older copy can't overwrite the other settings.
+class ProfileChange {
+  const ProfileChange({this.displayName, this.homeCity, this.dietaryPreferences, this.defaultRadiusMeters});
+
+  final String? displayName;
+
+  /// An empty string clears the home city.
+  final String? homeCity;
+  final List<String>? dietaryPreferences;
+  final int? defaultRadiusMeters;
+
+  /// The columns to update, checked against the table rules; null if a value
+  /// breaks a rule or nothing is set.
+  Map<String, Object?>? toColumns() {
+    final out = <String, Object?>{};
+    if (displayName != null) {
+      final name = displayName!.trim();
+      if (name.isEmpty || name.length > Profile.maxNameLength) return null;
+      out['display_name'] = name;
+    }
+    if (homeCity != null) {
+      final city = homeCity!.trim();
+      if (city.length > Profile.maxCityLength) return null;
+      out['home_city'] = city.isEmpty ? null : city;
+    }
+    if (dietaryPreferences != null) {
+      if (dietaryPreferences!.any((d) => !Profile.dietaryChoices.contains(d))) return null;
+      out['dietary_preferences'] = [for (final d in Profile.dietaryChoices) if (dietaryPreferences!.contains(d)) d];
+    }
+    if (defaultRadiusMeters != null) {
+      if (defaultRadiusMeters! < 500 || defaultRadiusMeters! > 20000) return null;
+      out['default_radius_m'] = defaultRadiusMeters;
+    }
+    return out.isEmpty ? null : out;
+  }
 }
 
 enum ProfileSaveOutcome { ok, invalid, network, failed }
@@ -91,9 +105,10 @@ abstract class ProfileService {
   /// The profile of [userId], or null if it can't be read.
   Future<Profile?> load(String userId);
 
-  /// Saves [profile] to [userId]'s row. RLS lets a person update only their
-  /// own row, so if another account is signed in by then nothing is written.
-  Future<ProfileSaveOutcome> save(String userId, Profile profile);
+  /// Saves [change] to [userId]'s row and returns the whole row as stored
+  /// (null unless ok). RLS lets a person update only their own row, so if
+  /// another account is signed in by then nothing is written.
+  Future<(ProfileSaveOutcome, Profile?)> save(String userId, ProfileChange change);
 }
 
 class SupabaseProfileService implements ProfileService {
@@ -102,54 +117,50 @@ class SupabaseProfileService implements ProfileService {
 
   static const _columns = 'display_name, home_city, dietary_preferences, default_radius_m';
 
+  /// A profile from a table row, or null if the row is unusable.
+  static Profile? _fromRow(Map<String, dynamic>? row) {
+    if (row == null) return null;
+    final name = row['display_name'];
+    final city = row['home_city'];
+    final diet = row['dietary_preferences'];
+    final radius = row['default_radius_m'];
+    if (name is! String) return null;
+    return Profile(
+      displayName: name,
+      homeCity: city is String ? city : null,
+      // Keep only choices this app knows.
+      dietaryPreferences: diet is List ? [for (final d in diet) if (d is String && Profile.dietaryChoices.contains(d)) d] : const [],
+      defaultRadiusMeters: radius is int ? radius : Profile.defaultRadius,
+    );
+  }
+
   @override
   Future<Profile?> load(String userId) async {
     try {
-      final row = await _client.from('profiles').select(_columns).eq('id', userId).maybeSingle();
-      if (row == null) return null;
-      final name = row['display_name'];
-      final city = row['home_city'];
-      final diet = row['dietary_preferences'];
-      final radius = row['default_radius_m'];
-      if (name is! String) return null;
-      return Profile(
-        displayName: name,
-        homeCity: city is String ? city : null,
-        // Keep only choices this app knows, so a save can't fail on old values.
-        dietaryPreferences: diet is List ? [for (final d in diet) if (d is String && Profile.dietaryChoices.contains(d)) d] : const [],
-        defaultRadiusMeters: radius is int ? radius : Profile.defaultRadius,
-      );
+      return _fromRow(await _client.from('profiles').select(_columns).eq('id', userId).maybeSingle());
     } catch (_) {
       return null;
     }
   }
 
   @override
-  Future<ProfileSaveOutcome> save(String userId, Profile profile) async {
-    final valid = profile.validated();
-    if (valid == null) return ProfileSaveOutcome.invalid;
+  Future<(ProfileSaveOutcome, Profile?)> save(String userId, ProfileChange change) async {
+    final columns = change.toColumns();
+    if (columns == null) return (ProfileSaveOutcome.invalid, null);
     try {
-      // Only the four columns the app may update (the table grants just these).
-      final rows = await _client
-          .from('profiles')
-          .update({
-            'display_name': valid.displayName,
-            'home_city': valid.homeCity,
-            'dietary_preferences': valid.dietaryPreferences,
-            'default_radius_m': valid.defaultRadiusMeters,
-          })
-          .eq('id', userId)
-          .select('id');
+      // Only the edited columns (the table grants update on just these four).
+      final rows = await _client.from('profiles').update(columns).eq('id', userId).select(_columns);
       // No row back: not this person's row (RLS) or it no longer exists.
-      return rows.isEmpty ? ProfileSaveOutcome.failed : ProfileSaveOutcome.ok;
+      final stored = rows.isEmpty ? null : _fromRow(rows.first);
+      return stored == null ? (ProfileSaveOutcome.failed, null) : (ProfileSaveOutcome.ok, stored);
     } on SocketException {
-      return ProfileSaveOutcome.network;
+      return (ProfileSaveOutcome.network, null);
     } on TimeoutException {
-      return ProfileSaveOutcome.network;
+      return (ProfileSaveOutcome.network, null);
     } on ClientException {
-      return ProfileSaveOutcome.network;
+      return (ProfileSaveOutcome.network, null);
     } catch (_) {
-      return ProfileSaveOutcome.failed;
+      return (ProfileSaveOutcome.failed, null);
     }
   }
 }

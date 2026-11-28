@@ -122,9 +122,21 @@ class ProfileScreen extends StatelessWidget {
         if (!canEdit)
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-            child: Text(
-              session.isGuest ? 'Create an account to save preferences.' : 'Loading your preferences…',
-              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    session.isGuest
+                        ? 'Create an account to save preferences.'
+                        : session.profileLoadFailed
+                            ? 'Couldn’t load your preferences.'
+                            : 'Loading your preferences…',
+                    style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                  ),
+                ),
+                if (session.isSignedIn && session.profileLoadFailed)
+                  TextButton(onPressed: session.retryProfileLoad, child: const Text('Try again')),
+              ],
             ),
           ),
         Glass(
@@ -236,23 +248,21 @@ String _dietSummary(List<String> diet) {
   return diet.length == 1 ? first : '$first +${diet.length - 1}';
 }
 
-/// Saves [updated] and tells the person how it went. Edits start from the
-/// profile the session holds now, and the session drops the answer if the
-/// account changed meanwhile.
-Future<void> _save(BuildContext context, AppSession session, Profile updated) async {
+/// Saves one edit and tells the person how it went. Only that field is
+/// sent; the session drops the answer if the account changed meanwhile.
+Future<void> _save(BuildContext context, AppSession session, ProfileChange change) async {
   final messenger = ScaffoldMessenger.of(context);
-  final outcome = await session.saveProfile(updated);
+  final outcome = await session.updateProfile(change);
   messenger
     ..clearSnackBars()
     ..showSnackBar(SnackBar(content: Text(profileSaveMessage(outcome))));
 }
 
-/// Runs [edit] on the profile that is current after a dialog closes, so an
-/// account change while it was open never saves onto the wrong person.
-Future<void> _saveEdit(BuildContext context, AppSession session, String? account, Profile Function(Profile) edit) async {
-  final now = session.profile;
-  if (!context.mounted || now == null || session.accountId != account) return;
-  await _save(context, session, edit(now));
+/// Saves [change] once an editor closes, unless the account changed while it
+/// was open (then nothing is saved onto the wrong person).
+Future<void> _saveEdit(BuildContext context, AppSession session, String? account, ProfileChange change) async {
+  if (!context.mounted || session.profile == null || session.accountId != account) return;
+  await _save(context, session, change);
 }
 
 Future<void> _editName(BuildContext context, AppSession session) async {
@@ -263,7 +273,7 @@ Future<void> _editName(BuildContext context, AppSession session) async {
   final account = session.accountId;
   final name = await _askText(context, title: 'Your name', initial: current.displayName, maxLength: Profile.maxNameLength);
   if (name == null || !context.mounted) return;
-  await _saveEdit(context, session, account, (p) => p.copyWith(displayName: name));
+  await _saveEdit(context, session, account, ProfileChange(displayName: name));
 }
 
 Future<void> _editCity(BuildContext context, AppSession session) async {
@@ -282,7 +292,7 @@ Future<void> _editCity(BuildContext context, AppSession session) async {
   );
   if (city == null || !context.mounted) return;
   final trimmed = city.trim();
-  await _saveEdit(context, session, account, (p) => p.copyWith(homeCity: trimmed, clearHomeCity: trimmed.isEmpty));
+  await _saveEdit(context, session, account, ProfileChange(homeCity: trimmed));
 }
 
 /// A one-field dialog. Returns the text, or null if cancelled.
@@ -408,7 +418,7 @@ Future<void> _editDiet(BuildContext context, AppSession session) async {
     },
   );
   if (chosen == null || !context.mounted) return;
-  await _saveEdit(context, session, account, (p) => p.copyWith(dietaryPreferences: chosen));
+  await _saveEdit(context, session, account, ProfileChange(dietaryPreferences: chosen));
 }
 
 Future<void> _editRadius(BuildContext context, AppSession session) async {
@@ -454,7 +464,7 @@ Future<void> _editRadius(BuildContext context, AppSession session) async {
     },
   );
   if (chosen == null || chosen == current.defaultRadiusMeters || !context.mounted) return;
-  await _saveEdit(context, session, account, (p) => p.copyWith(defaultRadiusMeters: chosen));
+  await _saveEdit(context, session, account, ProfileChange(defaultRadiusMeters: chosen));
 }
 
 void _showPrivacy(BuildContext context) {

@@ -273,6 +273,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (near == null || session.accountGeneration != generation) return;
     // A refine draft belongs to the search it was typed for.
     _repromptController.clear();
+    // Right after sign-in, wait for the profile so its distance is used.
+    await session.profileReady;
+    if (!mounted || session.accountGeneration != generation) return;
     await session.search.start(prompt, near);
   }
 

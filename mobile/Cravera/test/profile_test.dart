@@ -11,24 +11,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'auth_test.dart' show FakeAuth;
 import 'craving_search_test.dart' show FakePlaces;
 
-/// Profiles kept in memory, per account. Saves can be made to fail or wait.
+/// Profiles kept in memory, per account, like the table: a save changes only
+/// the columns it sends and returns the whole stored row. Loads and saves can
+/// be made to fail or wait.
 class FakeProfiles implements ProfileService {
   final rows = <String, Profile>{};
   ProfileSaveOutcome saveAnswer = ProfileSaveOutcome.ok;
+  bool loadFails = false;
   Completer<void>? saveGate;
-  final saves = <(String, Profile)>[];
+  Completer<void>? loadGate;
+  final saves = <(String, Map<String, Object?>)>[];
+
+  Profile _row(String userId) => rows[userId] ?? const Profile(displayName: 'Test Diner');
 
   @override
-  Future<Profile?> load(String userId) async => rows[userId] ?? const Profile(displayName: 'Test Diner');
+  Future<Profile?> load(String userId) async {
+    await loadGate?.future;
+    return loadFails ? null : _row(userId);
+  }
 
   @override
-  Future<ProfileSaveOutcome> save(String userId, Profile profile) async {
-    saves.add((userId, profile));
+  Future<(ProfileSaveOutcome, Profile?)> save(String userId, ProfileChange change) async {
+    final columns = change.toColumns();
+    if (columns == null) return (ProfileSaveOutcome.invalid, null);
+    saves.add((userId, columns));
     await saveGate?.future;
-    if (saveAnswer == ProfileSaveOutcome.ok) rows[userId] = profile;
-    return saveAnswer;
+    if (saveAnswer != ProfileSaveOutcome.ok) return (saveAnswer, null);
+    final old = _row(userId);
+    final stored = Profile(
+      displayName: columns.containsKey('display_name') ? columns['display_name']! as String : old.displayName,
+      homeCity: columns.containsKey('home_city') ? columns['home_city'] as String? : old.homeCity,
+      dietaryPreferences: columns.containsKey('dietary_preferences') ? columns['dietary_preferences']! as List<String> : old.dietaryPreferences,
+      defaultRadiusMeters: columns.containsKey('default_radius_m') ? columns['default_radius_m']! as int : old.defaultRadiusMeters,
+    );
+    rows[userId] = stored;
+    return (ProfileSaveOutcome.ok, stored);
   }
 }
+
+const _me = 'fake-user-${FakeAuth.knownEmail}';
 
 void main() {
   late FakeAuth auth;
@@ -51,8 +72,7 @@ void main() {
   });
 
   test('signing in loads the profile, and its default distance steers search', () async {
-    profiles.rows['fake-user-${FakeAuth.knownEmail}'] =
-        const Profile(displayName: 'Robin', homeCity: 'Oakland', dietaryPreferences: ['vegan'], defaultRadiusMeters: 2000);
+    profiles.rows[_me] = const Profile(displayName: 'Robin', homeCity: 'Oakland', dietaryPreferences: ['vegan'], defaultRadiusMeters: 2000);
     await signIn();
     expect(session.profile?.homeCity, 'Oakland');
     expect(session.displayName, 'Robin');
@@ -64,7 +84,7 @@ void main() {
     places.intent = {'textQuery': 'tacos'};
     session = AppSession(search: CravingSearch(places: places), auth: auth, profiles: profiles);
     const near = SearchLocation(latitude: 37.77, longitude: -122.42, label: 'Test City');
-    profiles.rows['fake-user-${FakeAuth.knownEmail}'] = const Profile(displayName: 'Robin', defaultRadiusMeters: 1000);
+    profiles.rows[_me] = const Profile(displayName: 'Robin', defaultRadiusMeters: 1000);
     await signIn();
     await session.search.start('tacos', near);
     await session.search.refine('cheaper');
@@ -74,14 +94,29 @@ void main() {
     expect(places.radii, [1000, 1000, null]);
   });
 
+  test('profileReady waits for the profile, so the first search uses its distance', () async {
+    profiles.rows[_me] = const Profile(displayName: 'Robin', defaultRadiusMeters: 1000);
+    profiles.loadGate = Completer<void>();
+    await session.signInWithEmail(email: FakeAuth.knownEmail, password: FakeAuth.knownPassword);
+    var ready = false;
+    unawaited(session.profileReady.then((_) => ready = true));
+    await pumpEventQueue();
+    expect(ready, isFalse, reason: 'still loading');
+    expect(session.search.radiusMeters, isNull);
+    profiles.loadGate!.complete();
+    await session.profileReady;
+    expect(session.search.radiusMeters, 1000);
+  });
+
   test('a saved change is kept and comes back on the next sign-in', () async {
     await signIn();
-    final changed = session.profile!.copyWith(displayName: '  Sam  ', dietaryPreferences: ['halal', 'vegetarian'], defaultRadiusMeters: 10000);
-    expect(await session.saveProfile(changed), ProfileSaveOutcome.ok);
+    expect(await session.updateProfile(const ProfileChange(displayName: '  Sam  ')), ProfileSaveOutcome.ok);
+    expect(await session.updateProfile(const ProfileChange(dietaryPreferences: ['halal', 'vegetarian'])), ProfileSaveOutcome.ok);
+    expect(await session.updateProfile(const ProfileChange(defaultRadiusMeters: 10000)), ProfileSaveOutcome.ok);
     expect(session.displayName, 'Sam');
     expect(session.search.radiusMeters, 10000);
     // Stored trimmed, with choices in the app's order.
-    expect(profiles.saves.single.$2.dietaryPreferences, ['vegetarian', 'halal']);
+    expect(profiles.rows[_me]?.dietaryPreferences, ['vegetarian', 'halal']);
 
     session.signOut();
     await signIn();
@@ -89,12 +124,23 @@ void main() {
     expect(session.profile?.defaultRadiusMeters, 10000);
   });
 
+  test('a save sends only the edited field, so an older copy elsewhere is not written back', () async {
+    await signIn();
+    // Another phone changes the name after this one loaded the profile.
+    profiles.rows[_me] = const Profile(displayName: 'Renamed Elsewhere');
+    expect(await session.updateProfile(const ProfileChange(defaultRadiusMeters: 2000)), ProfileSaveOutcome.ok);
+    expect(profiles.saves.single.$2, {'default_radius_m': 2000});
+    expect(profiles.rows[_me]?.displayName, 'Renamed Elsewhere');
+    // And this phone now shows the stored row, including the newer name.
+    expect(session.profile?.displayName, 'Renamed Elsewhere');
+  });
+
   test('a failed save says so and keeps the old values', () async {
     await signIn();
     final before = session.profile;
     for (final answer in [ProfileSaveOutcome.network, ProfileSaveOutcome.failed]) {
       profiles.saveAnswer = answer;
-      expect(await session.saveProfile(before!.copyWith(homeCity: 'Berkeley')), answer);
+      expect(await session.updateProfile(const ProfileChange(homeCity: 'Berkeley')), answer);
       expect(session.profile, before);
     }
     expect(profileSaveMessage(ProfileSaveOutcome.network), contains('old setting is kept'));
@@ -102,23 +148,34 @@ void main() {
 
   test('an invalid name is refused before anything is sent', () async {
     await signIn();
-    expect(await session.saveProfile(session.profile!.copyWith(displayName: '   ')), ProfileSaveOutcome.invalid);
-    expect(await session.saveProfile(session.profile!.copyWith(displayName: 'x' * 61)), ProfileSaveOutcome.invalid);
+    expect(await session.updateProfile(const ProfileChange(displayName: '   ')), ProfileSaveOutcome.invalid);
+    expect(await session.updateProfile(ProfileChange(displayName: 'x' * 61)), ProfileSaveOutcome.invalid);
     expect(profiles.saves, isEmpty);
   });
 
   test('a save still in flight when the account changes is not applied to the new account', () async {
     await signIn();
     profiles.saveGate = Completer<void>();
-    final pending = session.saveProfile(session.profile!.copyWith(displayName: 'First Person'));
+    final pending = session.updateProfile(const ProfileChange(displayName: 'First Person'));
     auth.switchTo('other@example.test');
     await pumpEventQueue();
     profiles.saveGate!.complete();
     expect(await pending, ProfileSaveOutcome.failed);
     // The save went to the first account's row only, and the new account's
     // profile on screen isn't replaced by it.
-    expect(profiles.saves.single.$1, 'fake-user-${FakeAuth.knownEmail}');
+    expect(profiles.saves.single.$1, _me);
     expect(session.profile?.displayName, isNot('First Person'));
+  });
+
+  test('a failed profile load can be retried', () async {
+    profiles.loadFails = true;
+    await signIn();
+    expect(session.profile, isNull);
+    expect(session.profileLoadFailed, isTrue);
+    profiles.loadFails = false;
+    await session.retryProfileLoad();
+    expect(session.profileLoadFailed, isFalse);
+    expect(session.profile?.displayName, 'Test Diner');
   });
 
   test('signing out forgets the profile and the default distance', () async {
@@ -131,17 +188,18 @@ void main() {
   test('guests have no profile and cannot save one', () async {
     session.continueAsGuest();
     expect(session.profile, isNull);
-    expect(await session.saveProfile(const Profile(displayName: 'Guest')), ProfileSaveOutcome.failed);
+    expect(await session.updateProfile(const ProfileChange(displayName: 'Guest')), ProfileSaveOutcome.failed);
     expect(profiles.saves, isEmpty);
   });
 
   profileScreenTests();
 
-  test('validation matches the table rules', () {
-    expect(const Profile(displayName: 'A', homeCity: '  ').validated()?.homeCity, isNull);
-    expect(Profile(displayName: 'A', homeCity: 'c' * 81).validated(), isNull);
-    expect(const Profile(displayName: 'A', dietaryPreferences: ['raw meat only']).validated(), isNull);
-    expect(const Profile(displayName: 'A', defaultRadiusMeters: 50000).validated(), isNull);
+  test('a change is checked against the table rules', () {
+    expect(const ProfileChange(homeCity: '  ').toColumns(), {'home_city': null});
+    expect(ProfileChange(homeCity: 'c' * 81).toColumns(), isNull);
+    expect(const ProfileChange(dietaryPreferences: ['raw meat only']).toColumns(), isNull);
+    expect(const ProfileChange(defaultRadiusMeters: 50000).toColumns(), isNull);
+    expect(const ProfileChange().toColumns(), isNull, reason: 'nothing to save');
   });
 }
 
@@ -230,6 +288,32 @@ void profileScreenTests() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
     expect(session.profile?.dietaryPreferences, ['vegan', 'halal']);
+  });
+
+  testWidgets('an open editor or sheet closes when another account takes over', (tester) async {
+    final profiles = FakeProfiles()..rows[_me] = const Profile(displayName: 'First Person', homeCity: 'Old Town');
+    final session = await _openProfile(tester, profiles);
+    final auth = session.auth! as FakeAuth;
+
+    // The home-city editor (a dialog on the app's navigator) shows A's city.
+    await tester.ensureVisible(find.text('Home city'));
+    await tester.tap(find.text('Home city'));
+    await _settle(tester);
+    expect(find.widgetWithText(TextField, 'Old Town'), findsOneWidget);
+    auth.switchTo('other@example.test');
+    await _settle(tester);
+    expect(find.byType(AlertDialog), findsNothing, reason: 'A\'s city is no longer on screen');
+    expect(find.text('Old Town'), findsNothing);
+
+    // The distance sheet (on the tabs' navigator) closes the same way.
+    await tester.ensureVisible(find.text('Search distance'));
+    await tester.tap(find.text('Search distance'));
+    await _settle(tester);
+    expect(find.text('10 km'), findsOneWidget);
+    auth.switchTo('third@example.test');
+    await _settle(tester);
+    expect(find.text('10 km'), findsNothing);
+    expect(profiles.saves, isEmpty, reason: 'nothing was saved by closing them');
   });
 
   testWidgets('a guest sees preferences off and an honest account prompt', (tester) async {

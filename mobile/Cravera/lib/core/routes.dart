@@ -27,7 +27,11 @@ class AppRoutes {
   static const appNavigate = '/app/navigate';
 
   static GoRouter router({required AppSession session}) {
+    final rootKey = GlobalKey<NavigatorState>();
+    final shellKey = GlobalKey<NavigatorState>();
+    closePopupsOnAccountChange(session, [rootKey, shellKey]);
     return GoRouter(
+      navigatorKey: rootKey,
       initialLocation: signIn,
       refreshListenable: session,
       redirect: (context, state) {
@@ -52,6 +56,7 @@ class AppRoutes {
           builder: (context, state) => const SignUpScreen(),
         ),
         ShellRoute(
+          navigatorKey: shellKey,
           builder: (context, state, child) => AppShellScaffold(child: child),
           routes: [
             GoRoute(
@@ -173,4 +178,21 @@ class TabSlide {
     _last = dx;
     return dx;
   }
+}
+
+/// When the account on this device is lost or replaced, closes every dialog
+/// and sheet on [navigators] (the app's and the tabs'), so nothing the
+/// previous person opened (a profile editor, a saved place) stays on screen.
+void closePopupsOnAccountChange(AppSession session, List<GlobalKey<NavigatorState>> navigators) {
+  var generation = session.accountGeneration;
+  session.addListener(() {
+    if (session.accountGeneration == generation) return;
+    generation = session.accountGeneration;
+    // After the current notification: never pop in the middle of a build.
+    Future.microtask(() {
+      for (final key in navigators) {
+        key.currentState?.popUntil((route) => route is! PopupRoute);
+      }
+    });
+  });
 }

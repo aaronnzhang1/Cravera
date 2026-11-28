@@ -76,35 +76,56 @@ class AppSession extends ChangeNotifier {
   Profile? _profile;
   Profile? get profile => _profile;
 
+  /// True when the profile couldn't be loaded; [retryProfileLoad] tries again.
+  bool _profileLoadFailed = false;
+  bool get profileLoadFailed => _profileLoadFailed;
+
+  /// Completes when the signed-in person's profile has loaded (or failed), so
+  /// a search right after sign-in uses their saved distance.
+  Future<void> get profileReady => _profileLoad ?? Future.value();
+  Future<void>? _profileLoad;
+
   /// Loads the signed-in person's profile (or just the display name without a
   /// profile service); dropped if the account changed or signed out meanwhile.
-  Future<void> _loadDisplayName(String accountId, int request) async {
-    final loaded = await profiles?.load(accountId);
-    final name = loaded?.displayName ?? await auth?.displayName();
-    if (request != _nameRequest || _accountId != accountId) return;
-    _profile = loaded;
-    search.radiusMeters = loaded?.defaultRadiusMeters;
-    _displayName = name ?? auth?.email?.split('@').first ?? 'there';
-    notifyListeners();
+  Future<void> _loadDisplayName(String accountId, int request) {
+    return _profileLoad = () async {
+      final loaded = await profiles?.load(accountId);
+      final name = loaded?.displayName ?? await auth?.displayName();
+      if (request != _nameRequest || _accountId != accountId) return;
+      _profile = loaded;
+      _profileLoadFailed = profiles != null && loaded == null;
+      search.radiusMeters = loaded?.defaultRadiusMeters;
+      _displayName = name ?? auth?.email?.split('@').first ?? 'there';
+      notifyListeners();
+    }();
   }
 
-  /// Saves [updated] as the signed-in person's profile. Bound to the account
-  /// signed in when it was called: if that changes before the answer, the
-  /// answer is dropped (and RLS stops a write to another person's row).
-  Future<ProfileSaveOutcome> saveProfile(Profile updated) async {
+  /// Tries loading the profile again after a failure.
+  Future<void> retryProfileLoad() async {
+    final account = _accountId;
+    if (account == null || !_profileLoadFailed) return;
+    _profileLoadFailed = false;
+    notifyListeners();
+    await _loadDisplayName(account, ++_nameRequest);
+  }
+
+  /// Saves one edit to the signed-in person's profile. Only the edited field
+  /// is sent, and the stored row the server returns replaces the copy here.
+  /// Bound to the account signed in when it was called: if that changes
+  /// before the answer, the answer is dropped (and RLS stops a write to
+  /// another person's row).
+  Future<ProfileSaveOutcome> updateProfile(ProfileChange change) async {
     final service = profiles;
     final account = _accountId;
     if (service == null || account == null || _profile == null) return ProfileSaveOutcome.failed;
-    final valid = updated.validated();
-    if (valid == null) return ProfileSaveOutcome.invalid;
+    if (change.toColumns() == null) return ProfileSaveOutcome.invalid;
     final generation = _accountGeneration;
-    final outcome = await service.save(account, valid);
-    if (outcome != ProfileSaveOutcome.ok || _accountId != account || _accountGeneration != generation) {
-      return outcome == ProfileSaveOutcome.ok ? ProfileSaveOutcome.failed : outcome;
-    }
-    _profile = valid;
-    _displayName = valid.displayName;
-    search.radiusMeters = valid.defaultRadiusMeters;
+    final (outcome, stored) = await service.save(account, change);
+    if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
+    if (outcome != ProfileSaveOutcome.ok || stored == null) return outcome == ProfileSaveOutcome.ok ? ProfileSaveOutcome.failed : outcome;
+    _profile = stored;
+    _displayName = stored.displayName;
+    search.radiusMeters = stored.defaultRadiusMeters;
     notifyListeners();
     return ProfileSaveOutcome.ok;
   }
@@ -313,6 +334,8 @@ class AppSession extends ChangeNotifier {
   void _clearUserData() {
     _displayName = null;
     _profile = null;
+    _profileLoadFailed = false;
+    _profileLoad = null;
     search.radiusMeters = null;
     _isGuest = false;
     _searchLocation = null;
