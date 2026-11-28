@@ -161,6 +161,11 @@ void main() {
       expect(PlacesService.parseIntent(jsonEncode({'results': [], 'intent': {'textQuery': 'tacos'}})), {'textQuery': 'tacos'});
       expect(PlacesService.parseIntent(jsonEncode({'results': [], 'intent': 'tacos'})), isNull);
       expect(PlacesService.parseIntent(jsonEncode({'results': []})), isNull);
+      // "No new places" only when the server says exactly true (TASK-005).
+      expect(PlacesService.parseNoNewPlaces(jsonEncode({'results': [], 'noNewPlaces': true})), isTrue);
+      expect(PlacesService.parseNoNewPlaces(jsonEncode({'results': [], 'noNewPlaces': 'yes'})), isFalse);
+      expect(PlacesService.parseNoNewPlaces(jsonEncode({'results': []})), isFalse);
+      expect(PlacesService.parseNoNewPlaces('not json'), isFalse);
     });
 
     test('keeps the server order', () {

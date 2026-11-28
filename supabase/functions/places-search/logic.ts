@@ -39,6 +39,10 @@ export const MIN_RADIUS_M = 500;
 export const MAX_RADIUS_M = 20000;
 export const MAX_QUERY_LENGTH = 200;
 export const MAX_ABS_LATITUDE = 85;
+/** At most this many place IDs to leave out (places already shown; TASK-005). */
+export const MAX_EXCLUDED = 100;
+/** Places IDs are short URL-safe strings; anything else is dropped. */
+const PLACE_ID = /^[A-Za-z0-9_-]{1,300}$/;
 const UPSTREAM_TIMEOUT_MS = 8000;
 /**
  * The whole request must answer within this, below the app's 15 s timeout:
@@ -47,6 +51,8 @@ const UPSTREAM_TIMEOUT_MS = 8000;
  */
 export const REQUEST_BUDGET_MS = 11_000;
 const MIN_CURATE_MS = 1500;
+/** Time kept for the relaxed Places retry after a priced search finds nothing. */
+const MIN_RETRY_MS = 2000;
 /** "Close by" when the place is within this. */
 const NEAR_M = 1500;
 const HIGHLY_RATED = 4.5;
@@ -57,6 +63,11 @@ export type SearchInput = {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  /**
+   * Places already shown in this search session, from the app; left out of
+   * the answer. Untrusted: only well-formed IDs, at most [MAX_EXCLUDED].
+   */
+  excludePlaceIds: string[];
   /** The intent of the search being refined, from the app. Untrusted: validated. */
   previousIntent: Intent | null;
   /** The guest's local hour (0-23), so "late-night" or "breakfast" make sense. */
@@ -86,6 +97,8 @@ export type RestaurantResult = {
    * intent (price, distance, rating). Never text from the model.
    */
   reasons: string[];
+  /** Places types, for curation only; removed before the answer is sent. */
+  types?: string[];
 };
 
 export type Env = {
@@ -128,7 +141,11 @@ export function parseInput(body: unknown): SearchInput | string {
   const localHour = Number.isInteger(b.localHour) && (b.localHour as number) >= 0 && (b.localHour as number) <= 23
     ? b.localHour as number
     : null;
-  return { query, latitude, longitude, radiusMeters, previousIntent, localHour };
+  // A hint too: malformed entries are dropped, the list is capped.
+  const excludePlaceIds = Array.isArray(b.excludePlaceIds)
+    ? [...new Set(b.excludePlaceIds.filter((id): id is string => typeof id === "string" && PLACE_ID.test(id)))].slice(-MAX_EXCLUDED)
+    : [];
+  return { query, latitude, longitude, radiusMeters, previousIntent, localHour, excludePlaceIds };
 }
 
 function wrapLongitude(lng: number): number {
@@ -139,12 +156,16 @@ function wrapLongitude(lng: number): number {
  * Text Search (New) only *restricts* to a rectangle, so we send the box around
  * the circle and then drop anything outside the circle in [mapPlaces].
  */
+/** Places price names for the intent's levels 1-4. */
+const PRICE_NAMES = ["", "PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE", "PRICE_LEVEL_VERY_EXPENSIVE"];
+
 /**
- * Only the intent's search text goes to Places. Its type, price and distance
- * steer curation instead of filtering here, so a filter can never turn a
- * match into "nothing open", and each search stays one Places call.
+ * The intent's search text goes to Places, and with [withPrice] its price
+ * levels too ("cheaper" must change what Google returns; TASK-005). Type and
+ * distance only steer curation. The caller retries without the price filter
+ * if it leaves nothing, so a filter never turns a match into "nothing open".
  */
-export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIntent(input.query)) {
+export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIntent(input.query), withPrice = false) {
   // Same sphere as distanceMeters, plus 1% margin, so the box always holds the
   // whole circle; mapPlaces then drops the corners.
   const angular = (input.radiusMeters * 1.01) / EARTH_RADIUS_M;
@@ -154,6 +175,7 @@ export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIn
   const dLng = Math.sin(angular) >= cosLat ? 179 : Math.min(toDeg(Math.asin(Math.sin(angular) / cosLat)), 179);
   return {
     textQuery: intent.textQuery,
+    ...(withPrice && intent.priceLevels.length > 0 ? { priceLevels: intent.priceLevels.map((l) => PRICE_NAMES[l]) } : {}),
     includedType: "restaurant",
     // Without this, Google may skip the type filter (e.g. for an address query).
     strictTypeFiltering: true,
@@ -234,6 +256,8 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
       latitude: lat,
       longitude: lng,
       reasons: [],
+      // For curation only (e.g. "seafood_restaurant"); not sent to the app.
+      types: (p.types as unknown[]).filter((t): t is string => typeof t === "string").slice(0, 12),
     });
   }
   return results;
@@ -332,11 +356,36 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const understood = gemini ? await understand(gemini, input.query, input.previousIntent, input.localHour, left()) : null;
   // A refine that falls back keeps the previous (validated) filters.
   const intent = understood ??
-    (input.previousIntent ? { ...input.previousIntent, textQuery: fallbackText(input) } : fallbackIntent(input.query));
+    (input.previousIntent ? fallbackRefine(input.previousIntent, input) : fallbackIntent(input.query));
 
-  // 2. Search: one Places call, with only the intent's text.
-  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
-  if (results === null) return json(502, { error: "Search failed. Try again." });
+  // 2. Search: the intent's text, with its price levels when it has any.
+  //    Places already shown in this session are left out. Only when Google
+  //    itself found nothing at that price is there one retry without it;
+  //    exclusions never cause a retry, so a caller can't turn one search
+  //    into two billable calls by excluding what it was shown.
+  const excluded = new Set(input.excludePlaceIds);
+  const fresh = (list: RestaurantResult[]) => list.filter((r) => !excluded.has(r.placeId));
+  const priced = intent.priceLevels.length > 0;
+  // A priced search leaves time for the relaxed retry it may need.
+  const firstTimeout = Math.min(UPSTREAM_TIMEOUT_MS, priced ? left() - MIN_RETRY_MS : left());
+  let answer = await searchPlaces(input, intent, env.placesKey, fetchFn, firstTimeout, priced);
+  if (answer === null) return json(502, { error: "Search failed. Try again." });
+  let price = priced ? "filter" : "none";
+  // Only Google's own empty answer counts, not places our filters dropped
+  // (closed, outside the circle): the caller controls those too.
+  if (priced && answer.googleEmpty) {
+    // No time left to try without the price: say "Try again", never "nothing open".
+    if (left() < MIN_RETRY_MS) return json(502, { error: "Search failed. Try again." });
+    answer = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
+    // A failed retry can't say "nothing open": let the app offer Try again.
+    if (answer === null) return json(502, { error: "Search failed. Try again." });
+    price = "relaxed";
+  }
+  const found = answer.results;
+  let results = fresh(found);
+  // Open places matched, but the guest has seen them all: say so, rather
+  // than "nothing open matched".
+  const noNewPlaces = results.length === 0 && found.length > 0;
 
   let curation = "skipped";
   // 3. Curate, only if Gemini understood the craving and there is time. It
@@ -350,6 +399,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
       priceLevel: r.priceLevel,
       rating: r.rating,
       distanceMeters: r.distanceMeters,
+      types: r.types ?? [],
     }));
     const order = await curate(gemini, intent, candidates, left() - 500);
     curation = order ? "ok" : "fallback";
@@ -361,26 +411,44 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
 
   // Without curation (skipped, or Gemini failed, e.g. 503 when overloaded),
   // the price the guest asked for still steers the order (never filters).
-  if (curation !== "ok") results = priceFirst(results, intent.priceLevels);
+  if (curation !== "ok") results = priceFirst(results, intent.priceLevels, intent.distance === "near");
 
   // Outcomes only (no craving, intent or places), to see how Gemini is doing.
-  console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "curate", curation, "results", results.length);
+  console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "price", price, "excluded", excluded.size, "curate", curation, "results", results.length);
 
   // 4. Explain, from Places facts only.
-  results = results.map((r) => ({ ...r, reasons: reasonsFor(r) }));
-  return json(200, { results, intent });
+  results = results.map(({ types: _types, ...r }) => ({ ...r, reasons: reasonsFor(r) }));
+  return json(200, noNewPlaces ? { results, intent, noNewPlaces } : { results, intent });
 }
 
 /**
  * Places in the wanted price levels first, then places with no price, then
  * the rest; Places order within each group. No levels wanted: unchanged.
  */
-export function priceFirst(results: RestaurantResult[], priceLevels: number[]): RestaurantResult[] {
-  if (priceLevels.length === 0) return results;
+export function priceFirst(results: RestaurantResult[], priceLevels: number[], nearFirst = false): RestaurantResult[] {
+  if (priceLevels.length === 0 && !nearFirst) return results;
   const rank = (r: RestaurantResult) =>
-    r.priceLevel === null ? 1 : priceLevels.includes(r.priceLevel) ? 0 : 2;
+    priceLevels.length === 0 ? 0 : r.priceLevel === null ? 1 : priceLevels.includes(r.priceLevel) ? 0 : 2;
   // Array.prototype.sort is stable, so Places order holds within a group.
+  // Closer: distance first, price only breaks ties.
+  if (nearFirst) return [...results].sort((a, b) => a.distanceMeters - b.distanceMeters || rank(a) - rank(b));
   return [...results].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * A refine when Gemini didn't answer: the previous filters, with the app's
+ * own chips applied in code ("cheaper" moves below the previous lowest
+ * price, "closer" means near), so they still work while Gemini is down.
+ */
+export function fallbackRefine(previous: Intent, input: SearchInput): Intent {
+  const word = input.query.trim().toLowerCase();
+  if (word === "cheaper") {
+    const lowest = previous.priceLevels.length > 0 ? Math.min(...previous.priceLevels) : null;
+    const priceLevels = lowest === null ? [1, 2] : lowest <= 1 ? [1] : Array.from({ length: lowest - 1 }, (_, i) => i + 1);
+    return { ...previous, priceLevels };
+  }
+  if (word === "closer") return { ...previous, distance: "near" };
+  return { ...previous, textQuery: fallbackText(input) };
 }
 
 /** The search text when Gemini didn't answer: the craving, or the previous text plus the refinement. */
@@ -411,7 +479,8 @@ async function searchPlaces(
   placesKey: string,
   fetchFn: FetchFn,
   timeoutMs: number,
-): Promise<RestaurantResult[] | null> {
+  withPrice: boolean,
+): Promise<{ results: RestaurantResult[]; googleEmpty: boolean } | null> {
   if (timeoutMs <= 0) return null;
   let upstream: Response;
   try {
@@ -422,7 +491,7 @@ async function searchPlaces(
         "X-Goog-Api-Key": placesKey,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify(buildRequestBody(input, intent)),
+      body: JSON.stringify(buildRequestBody(input, intent, withPrice)),
       signal: AbortSignal.timeout(timeoutMs),
       // A redirect could replay the craving and location elsewhere: fail instead.
       redirect: "error",
@@ -437,7 +506,21 @@ async function searchPlaces(
     return null;
   }
   try {
-    return mapPlaces(await upstream.json(), input);
+    const data = await upstream.json();
+    // Google's empty answer is {} or { places: [] }; anything else malformed
+    // is a failure, so it can't pass for "nothing found" or cause a retry.
+    if (typeof data !== "object" || data === null || Array.isArray(data)) throw new Error("not an object");
+    const raw = (data as { places?: unknown }).places;
+    // Empty is exactly {} or { places: [] }: an object with other keys and no
+    // places (an error envelope) is a failure, and so is any entry that isn't
+    // an object.
+    if ("error" in data) throw new Error("error envelope");
+    if ((raw === undefined || (Array.isArray(raw) && raw.length === 0)) && Object.keys(data).some((k) => k !== "places")) {
+      throw new Error("unexpected empty shape");
+    }
+    if (raw !== undefined && !Array.isArray(raw)) throw new Error("places is not a list");
+    if (Array.isArray(raw) && raw.some((p) => typeof p !== "object" || p === null || Array.isArray(p))) throw new Error("bad entry");
+    return { results: mapPlaces(data, input), googleEmpty: raw === undefined || raw.length === 0 };
   } catch {
     console.error("places-search: upstream returned invalid JSON");
     return null;
