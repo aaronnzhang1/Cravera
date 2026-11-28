@@ -11,3 +11,4 @@ To add one, copy the shape of 0001 (title, Status, Date, Context, Decision, Cons
 | [0003](0003-api-key-handling.md) | API key handling | Accepted | Google and Gemini keys live in Supabase Edge Functions, never in the app bundle |
 | [0004](0004-resume-and-releases.md) | Resume, approval and releases | Accepted | `/resume` is the entry point; `Approved:` line on tasks; releases are tagged PRODUCT.md rows |
 | [0005](0005-traceable-ai-summaries.md) | AI on the restaurant card | Accepted | Checked facts (Gemini picks fields, code words them) plus a labelled "Cravera's take" that may not state numbers, prices, links or hours (checked in code); details load for each place shown |
+| [0006](0006-maps-sdk-key-in-app.md) | A restricted Maps SDK key in the app | Accepted | One Google key on the device: Maps SDK only, restricted to the Cravera app; Places and Gemini keys stay server-side |
