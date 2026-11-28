@@ -138,8 +138,11 @@ class CravingSearch extends ChangeNotifier {
 
   /// Fetches the avatars of the photo's authors, once the photo is shown
   /// (their credit only appears with it).
-  void _loadAvatars(Restaurant place, PlacesService service, int request) {
-    for (final author in place.photoAuthors) {
+  void _loadAvatars(Restaurant place, PlacesService service, int request) =>
+      _loadAvatarsOf(place.photoAuthors, service, request);
+
+  void _loadAvatarsOf(List<PhotoAuthor> authors, PlacesService service, int request) {
+    for (final author in authors) {
       final link = author.avatarUri;
       if (link == null || _avatars.containsKey(link)) continue;
       _avatars[link] = null;
@@ -178,6 +181,39 @@ class CravingSearch extends ChangeNotifier {
       if (request != _request) return;
       _details[id] = details == null ? const DetailsLoad(DetailsStatus.failed) : DetailsLoad(DetailsStatus.loaded, details);
       notifyListeners();
+    });
+  }
+
+  /// Gallery photo bytes by photo name (TASK-UI-4), for the opened card.
+  /// A key with a null value means "asked, nothing (yet)".
+  final Map<String, Uint8List?> _gallery = {};
+
+  /// The gallery photo [name], once loaded. The first gallery photo is
+  /// usually the search photo, which is reused rather than fetched again.
+  Uint8List? galleryPhoto(String name) {
+    final place = current;
+    if (place != null && place.photoName == name && _photos[place.placeId] != null) return _photos[place.placeId];
+    return _gallery[name];
+  }
+
+  /// Fetches one gallery photo, when the guest swipes to it (never ahead),
+  /// and its authors' avatars. Never notifies synchronously, so a screen
+  /// may call it while building. A late answer from an older search is dropped.
+  void loadGalleryPhoto(DetailPhoto photo) {
+    final service = places;
+    if (service == null || current == null) return;
+    if (galleryPhoto(photo.name) != null) {
+      _loadAvatarsOf(photo.authors, service, _request);
+      return;
+    }
+    if (_gallery.containsKey(photo.name)) return;
+    _gallery[photo.name] = null;
+    final request = _request;
+    service.photoBytes(photo.name).then((bytes) {
+      if (request != _request || bytes == null) return;
+      _gallery[photo.name] = bytes;
+      notifyListeners();
+      _loadAvatarsOf(photo.authors, service, request);
     });
   }
 
@@ -237,6 +273,7 @@ class CravingSearch extends ChangeNotifier {
     _photos.clear(); // photo links are short-lived; each search starts fresh
     _avatars.clear();
     _details.clear();
+    _gallery.clear();
     if (send.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
@@ -361,6 +398,7 @@ class CravingSearch extends ChangeNotifier {
     _photos.clear();
     _avatars.clear();
     _details.clear();
+    _gallery.clear();
     notifyListeners();
   }
 

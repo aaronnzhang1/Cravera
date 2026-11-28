@@ -445,4 +445,41 @@ void main() {
       expect(search.currentDetails, isNull);
     });
   });
+
+  group('gallery (TASK-UI-4)', () {
+    DetailPhoto photo(String n) => DetailPhoto(name: n, authors: const [PhotoAuthor(name: 'Test Author')]);
+
+    test('a gallery photo is fetched only when asked, once; the search photo is reused', () async {
+      final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0');
+      final places = FakePlaces((_) => [first])..photo = (n) => Uint8List.fromList([n.length]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      await pumpEventQueue();
+      expect(places.photoRequests, ['places/a/photos/p0']);
+
+      search.loadGalleryPhoto(photo('places/a/photos/p0')); // already have it
+      expect(places.photoRequests, ['places/a/photos/p0']);
+      expect(search.galleryPhoto('places/a/photos/p0'), isNotNull);
+
+      expect(search.galleryPhoto('places/a/photos/p1'), isNull);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      await pumpEventQueue();
+      expect(places.photoRequests, ['places/a/photos/p0', 'places/a/photos/p1']);
+      expect(search.galleryPhoto('places/a/photos/p1'), isNotNull);
+    });
+
+    test('a gallery photo that arrives after a reset is dropped', () async {
+      final gate = Completer<Uint8List?>();
+      final places = FakePlaces((_) => [place('a')])..photo = (_) => gate.future;
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      search.reset();
+      await search.start('tacos', here);
+      gate.complete(Uint8List.fromList([1]));
+      await pumpEventQueue();
+      expect(search.galleryPhoto('places/a/photos/p1'), isNull);
+    });
+  });
 }

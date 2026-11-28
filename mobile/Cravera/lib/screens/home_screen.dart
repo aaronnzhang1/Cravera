@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_colors.dart';
 import '../core/session.dart';
+import '../models/place_details.dart';
 import '../models/restaurant.dart';
 import '../services/craving_search.dart';
 import '../services/location_service.dart';
@@ -668,12 +669,13 @@ class _PickView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
+                    _PhotoArea(
+                      key: ValueKey(restaurant.placeId),
                       height: photoHeight,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _PhotoHeader(photo: photo),
+                      restaurant: restaurant,
+                      photo: photo,
+                      search: session.search,
+                      overlays: [
                           Positioned(
                             top: 12,
                             left: 12,
@@ -698,22 +700,8 @@ class _PickView extends StatelessWidget {
                               onPressed: () => session.toggleBookmark(restaurant),
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
-                    // Google requires crediting every photo author (avatar, name,
-                    // profile link) and a link to the photo on Maps. Directly under
-                    // the photo, so any number of credits can wrap without covering
-                    // the photo's controls.
-                    if (photo != null && (restaurant.photoCredits.isNotEmpty || restaurant.photoMapsUri != null))
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
-                        child: _PhotoCredit(
-                          authors: restaurant.photoCredits,
-                          avatar: session.search.avatar,
-                          mapsUri: restaurant.photoMapsUri,
-                        ),
-                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
                       child: Column(
@@ -1423,6 +1411,106 @@ class _PhotoHeader extends StatelessWidget {
               // Bytes that aren't a valid image show the placeholder.
               errorBuilder: (context, error, stack) => placeholder,
             ),
+    );
+  }
+}
+
+/// The pick's photo, then its credit. Before details load it is the search
+/// photo. Once the guest opens the card (TASK-UI-4) it becomes a gallery of
+/// up to 5 Places photos: each is fetched only when swiped to, and the credit
+/// under it is always that photo's own authors, as Google requires.
+class _PhotoArea extends StatefulWidget {
+  final double height;
+  final Restaurant restaurant;
+  final Uint8List? photo;
+  final CravingSearch search;
+
+  /// Controls drawn over the photo (New craving, Bookmark).
+  final List<Widget> overlays;
+
+  const _PhotoArea({
+    super.key,
+    required this.height,
+    required this.restaurant,
+    required this.photo,
+    required this.search,
+    required this.overlays,
+  });
+
+  @override
+  State<_PhotoArea> createState() => _PhotoAreaState();
+}
+
+class _PhotoAreaState extends State<_PhotoArea> {
+  int _page = 0;
+
+  List<DetailPhoto> get _gallery => widget.search.currentDetails?.details?.photos ?? const [];
+
+  @override
+  Widget build(BuildContext context) {
+    final gallery = _gallery;
+    final search = widget.search;
+    final r = widget.restaurant;
+    final Widget image;
+    final Widget? credit;
+    if (gallery.isEmpty) {
+      image = _PhotoHeader(photo: widget.photo);
+      credit = widget.photo != null && (r.photoCredits.isNotEmpty || r.photoMapsUri != null)
+          ? _PhotoCredit(authors: r.photoCredits, avatar: search.avatar, mapsUri: r.photoMapsUri)
+          : null;
+    } else {
+      final page = _page.clamp(0, gallery.length - 1);
+      // The page in view is loaded here, and only it: swiping is what asks.
+      search.loadGalleryPhoto(gallery[page]);
+      image = PageView.builder(
+        itemCount: gallery.length,
+        onPageChanged: (i) => setState(() => _page = i),
+        itemBuilder: (context, i) => Semantics(
+          label: 'Photo ${i + 1} of ${gallery.length}',
+          image: true,
+          child: _PhotoHeader(photo: search.galleryPhoto(gallery[i].name)),
+        ),
+      );
+      final shown = gallery[page];
+      credit = search.galleryPhoto(shown.name) == null
+          ? null
+          : _PhotoCredit(authors: shown.authors, avatar: search.avatar, mapsUri: shown.mapsUri);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: widget.height,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              image,
+              ...widget.overlays,
+              if (gallery.length > 1)
+                Positioned(
+                  bottom: 10,
+                  right: 12,
+                  child: ExcludeSemantics(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(color: AppColors.scrim, borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        child: Text(
+                          '${_page.clamp(0, gallery.length - 1) + 1} / ${gallery.length}',
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textPrimary),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // Google requires crediting every photo author (avatar, name,
+        // profile link) and a link to the photo on Maps. Directly under the
+        // photo, so any number of credits can wrap without covering controls.
+        if (credit != null) Padding(padding: const EdgeInsets.fromLTRB(14, 2, 14, 0), child: credit),
+      ],
     );
   }
 }

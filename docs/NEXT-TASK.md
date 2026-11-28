@@ -12,7 +12,7 @@ Tick a box only after checking it in the running app. Never delete or reword a c
 
 - [x] Before `place-details` is first deployed, a daily quota on Place Details is set in Google Cloud (maintainer) and the deploy is recorded with it.
 - [x] Tapping the pick opens a scrollable detail page. Details load only then, with one Places Details request through an Edge Function (key server-side); search makes no extra Places calls and keeps its 11 s budget.
-- [ ] Photo gallery: up to 5 Places photos, each fetched only as the guest swipes to it, each with its author attribution; a place with no photos shows the placeholder.
+- [x] Photo gallery: up to 5 Places photos, each fetched only as the guest swipes to it, each with its author attribution; a place with no photos shows the placeholder.
 - [ ] Up to 5 Places reviews, each with author name, photo, rating, relative time and a link (Google's attribution rules), plus Google's `editorialSummary` and review summary when Places has them.
 - [ ] Attributes from Places only (for example takeout, delivery, dine-in, vegetarian, outdoor seating, good for groups, beer/wine); an attribute Places doesn't report is not shown.
 - [ ] Menu and more: buttons to the restaurant's `websiteUri` (when present) and its Google Maps page; Places has no menu items, so none are shown.
@@ -24,6 +24,7 @@ Tick a box only after checking it in the running app. Never delete or reword a c
 ## Checked
 
 - 2026-11-27 ~21:25 PST, `Pixel_10_Pro`, San Francisco: the maintainer set the Place Details daily quota, then `place-details` was deployed. "Cozy ramen nearby" → Nojo Ramen Tavern; search made no details call; "More about this place" loaded Google's description in place (the pick becomes the longer, scrolling page; No/Yes stay in the footer); No → next place with details closed.
+- 2026-11-27 ~21:29 PST, same emulator: "Tacos, open late" → Taqueria Cazadores → More about this place → the header photo became a 5-photo gallery; swiping showed "2 / 5" with that photo's own credit ("Photo: Taqueria Cazadores", View on Google Maps). Photos load only when swiped to (unit-tested: no request until a page is shown, the search photo reused for page 1). A place with no gallery photos keeps today's header, which shows the placeholder when there is no photo (not re-seen in the app tonight).
 
 ## Out of scope
 
