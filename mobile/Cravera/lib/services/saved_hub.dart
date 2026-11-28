@@ -56,6 +56,9 @@ class SavedHub extends ChangeNotifier {
   /// screen), so an older write can never land after a newer one.
   Future<void> _lastWrite = Future.value();
 
+  /// Writes whose answer timed out and that haven't settled yet.
+  int _unresolved = 0;
+
   String? _account;
   int _generation = 0;
 
@@ -87,6 +90,7 @@ class SavedHub extends ChangeNotifier {
     _account = accountId;
     _generation++;
     _lastWrite = Future.value();
+    _unresolved = 0;
     _items = const [];
     _basics.clear();
     _status = SavedLoadStatus.idle;
@@ -158,13 +162,17 @@ class SavedHub extends ChangeNotifier {
     if (s == null || account == null) return SavedOutcome.failed;
     if (_status != SavedLoadStatus.loaded) return SavedOutcome.notReady;
     final generation = _generation;
+    // A change whose answer was lost is still unconfirmed: don't queue more
+    // behind it (they could wait forever); ask the person to try again soon.
+    if (_unresolved > 0) return SavedOutcome.pending;
     final before = _lastWrite;
     final settled = Completer<void>();
     _lastWrite = settled.future;
-    await before;
-    if (!_current(generation, account)) {
+    var waitedTooLong = false;
+    await before.timeout(writeTimeout, onTimeout: () => waitedTooLong = true);
+    if (waitedTooLong || !_current(generation, account)) {
       settled.complete();
-      return SavedOutcome.failed;
+      return waitedTooLong ? SavedOutcome.pending : SavedOutcome.failed;
     }
     final write = call(s);
     unawaited(write.then((_) {}, onError: (_) {}).whenComplete(settled.complete));
@@ -176,6 +184,10 @@ class SavedHub extends ChangeNotifier {
       return SavedOutcome.network;
     });
     if (timedOut) {
+      _unresolved++;
+      unawaited(write.then((_) {}, onError: (_) {}).whenComplete(() {
+        if (_generation == generation) _unresolved--;
+      }));
       unawaited(write.then((_) {
         if (_current(generation, account)) {
           _changes++;

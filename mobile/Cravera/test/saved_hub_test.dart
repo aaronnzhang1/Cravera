@@ -210,11 +210,11 @@ void main() {
     hub.switchAccount('account-a');
     await pumpEventQueue();
     expect(await hub.setNote('p1', 'first'), SavedOutcome.network); // still on its way
-    final second = hub.setNote('p1', 'second');
-    await pumpEventQueue();
-    expect(service.sent, ['first'], reason: 'the second waits for the first to settle');
+    expect(await hub.setNote('p1', 'second'), SavedOutcome.pending, reason: 'not queued behind an unconfirmed write');
+    expect(service.sent, ['first']);
     service.release();
-    expect(await second, SavedOutcome.ok);
+    await pumpEventQueue();
+    expect(await hub.setNote('p1', 'second'), SavedOutcome.ok);
     expect(service.sent, ['first', 'second']);
     await pumpEventQueue();
     expect(hub.items.single.note, 'second');
