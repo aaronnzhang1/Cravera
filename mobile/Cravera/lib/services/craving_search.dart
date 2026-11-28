@@ -172,6 +172,10 @@ class CravingSearch extends ChangeNotifier {
     await _run(display: trimmed, send: trimmed, previous: null, near: near);
   }
 
+  /// The signed-in person's default search distance (from their profile), or
+  /// null for the server's default. Read when each search or refine is sent.
+  int? radiusMeters;
+
   /// The place IDs the last request left out, so [retry] repeats it exactly
   /// (an expired search shows its places again; a refine still skips them).
   List<String> _sentExcluded = const [];
@@ -218,6 +222,7 @@ class CravingSearch extends ChangeNotifier {
       final answer = await service.search(
         query: send,
         near: near,
+        radiusMeters: radiusMeters,
         previousIntent: previous,
         localHour: _now().hour,
         excludePlaceIds: exclude.isEmpty

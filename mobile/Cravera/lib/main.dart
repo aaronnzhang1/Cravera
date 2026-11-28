@@ -10,6 +10,7 @@ import 'core/session.dart';
 import 'services/auth_service.dart';
 import 'services/craving_search.dart';
 import 'services/places_service.dart';
+import 'services/profile_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +19,14 @@ Future<void> main() async {
   } catch (_) {
     // `.env` is treated as an asset; if a developer runs without it, we still want UI to boot.
   }
-  runApp(MyApp(session: AppSession(search: CravingSearch(places: PlacesService.fromEnv()), auth: await _startAuth())));
+  final auth = await _startAuth();
+  runApp(MyApp(
+    session: AppSession(
+      search: CravingSearch(places: PlacesService.fromEnv()),
+      auth: auth,
+      profiles: auth == null ? null : SupabaseProfileService(Supabase.instance.client),
+    ),
+  ));
 }
 
 /// Accounts need the project's publishable key (public; never a secret key).

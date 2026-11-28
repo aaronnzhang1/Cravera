@@ -1,37 +1,31 @@
-# TASK-002 · Craving intelligence
+# TASK-UI-3 · Profile and Friends
 
-**Goal.** The app understands what the guest is asking for, not just the words, and picks the open place that fits best. Nothing is hardcoded: no keyword tables, no canned answers. Gemini reads the craving and the candidates; Google Places stays the only source of restaurant facts (AGENTS.md).
+**Goal.** Profile becomes a real, tidy account page whose settings save to the person's own `profiles` row, and Friends stops looking like a ghost town: an inviting preview of what friends will do in Cravera, never a fake list. From [the v0.2 plan](plans/v0.2-hub.md) (task 3).
 
-**Release:** v0.1.0 · Guest MVP ([PRODUCT.md](PRODUCT.md#releases)). TASK-001 is done (all criteria checked in the app, 2026-11-26).
-**Approved:** 2026-11-26 (maintainer), as specified in [the concierge plan](plans/v0.1-concierge.md#task-002--craving-intelligence-spec-for-approval): Gemini inside `places-search`, two Gemini calls per search (understand, then curate). Claude may work any criterion below without asking again; anything outside this file's scope still needs approval, including deploying the Edge Function.
-**Review level:** L3. A new external AI integration fed with untrusted input.
-
-## How it works
-
-Inside `places-search`, still one call from the app:
-
-1. **Understand.** Gemini turns the craving (plus the previous intent when refining, and the local time of day) into a validated JSON intent: `textQuery` (short and Places-friendly), an optional `includedType` from an allowed list, `priceLevels`, a distance hint ("quick" means nearer, capped by the existing radius limits), `wants` and `avoids`.
-2. **Search.** Places Text Search (New) with that intent: always open now, inside the radius, restaurants only.
-3. **Curate.** Gemini ranks the candidates against the intent, using only what Places returned, and returns an ordered list of place IDs. IDs it didn't receive are dropped; missing ones are appended in Places order. It never writes restaurant facts.
-4. **Explain.** The card's "why this pick" line combines the intent's `wants` that the place matches with Places facts, never free text about the restaurant from the model.
+**Release:** v0.2.0 · Accounts. TASK-002 is done (all 8 criteria checked in the app, 2026-11-27; see git history of this file). TASK-003 is merged (#30).
+**Approved:** 2026-11-27 (maintainer), as written. Claude may work any criterion below without asking again; anything outside this file's scope still needs approval.
+**Review level:** L3 (raised from L2 after Codex round 3 on PR #35: CONTRIBUTING lists personal data and data isolation as L3). The app now reads and writes personal data (home city, dietary preferences) in the person's own `profiles` row, and closes popups when the account on the device changes. No migration, no Edge Function change: RLS and column grants are TASK-003's. One new dependency, `share_plus` (system share sheet for Invite; maintainer approved 2026-11-27).
 
 ## Acceptance criteria
 
 Tick a box only after checking it in the running app. Never delete or reword a criterion. Propose any change to the maintainer instead.
 
-- [x] "I just finished at the gym, I want something healthy and high protein but not too expensive and quick, something fast food like Chipotle" returns a fitting open place near the test location (healthy fast casual, $–$$), checked on the emulator.
-- [x] Varied phrasings give sensible intents (for example "something warm for a rainy night", "cheap late-night tacos", "quiet date spot, not too pricey"), covered by recorded fixtures in tests and spot-checked live.
-- [x] Refining from a result changes the intent instead of restarting: "cheaper" lowers the price, "no seafood" avoids seafood places.
-- [x] Curation returns only place IDs from the Places answer; every field shown still comes from Places.
-- [x] If Gemini fails, times out or returns invalid JSON, search still works with the raw text and Places order (tested).
-- [x] Prompt-injection attempts in the craving can't change open-now, the radius cap, the data source or the output shape (tested).
-- [x] The Gemini key exists only in Supabase secrets; the built app contains no key (APK scan).
-- [x] `flutter analyze`, `flutter test` and the function tests pass, with tests for intent validation, curation validation and the fallback (network faked).
+- [x] Profile is in sections: **Account** (name, email, edit display name, sign out, delete account), **Preferences** (dietary preferences, home city, default search distance), **About** (privacy, help). No "coming soon" rows: a row works or is removed.
+- [x] A signed-in person can change display name, home city, dietary preferences (pick from a short list) and default distance (e.g. 1, 2, 5, 10 km); changes save to their own `profiles` row, survive an app restart, and show on another sign-in. Invalid input (empty or over-long name) shows a clear message; a failed save says so and keeps the old value.
+- [x] The default distance is used as the search radius for new searches (within the server's existing cap). Dietary preferences are stored only; using them in search is a later task.
+- [x] A guest sees Preferences disabled with a "Create an account to save preferences" prompt that promises only what exists.
+- [x] Friends shows a designed preview (sharing picks, seeing where friends eat) with an **Invite** button that opens the system share sheet with a short invite text; the demo people list is gone.
+- [ ] Fast tab taps (Home → Saved → Friends) no longer make a page jump sides as it leaves (deferred P2 from PR #22): it starts its exit from its current offset.
+- [x] Profile and Friends pass the tap-target, label and contrast guideline tests, also at 2x text on a 320 x 568 phone.
+- [x] `flutter analyze` and `flutter test` pass, with tests for saving each preference (fake service), a failed save, and the guest state; checked on the Android emulator signed in and as a guest.
+
+## Checked
+
+- 2026-11-27, `Pixel_10_Pro`, guest: Profile shows Account/Preferences/About sections with Preferences off and "Create an account to save preferences."; Privacy & data and Help open; Friends shows the preview, no fake people; **Invite opens the Android share sheet** with the invite text (`share_plus`, approved by the maintainer).
+- Accessibility guideline tests pass for Profile (signed in, guest) and Friends, at the top and scrolled, also at 2x text on 320 x 568.
+- 2026-11-27 ~19:05 PST, `Pixel_10_Pro`, signed in with the maintainer's test account: Profile loads name, email and preferences from the server; search distance, dietary preferences (two choices), home city and name were each changed and "Saved."; after closing and reopening the app all four were kept, and a read-only query on that account's `profiles` row showed the same values. A search then found only places within the new, smaller distance. All four were set back to their earlier values afterwards (checked in the row). Found and fixed on the way: the sheets opened under the nav bar; the dietary sheet lost picks when it rebuilt.
+- Still to check in the app: the tab slide (criterion 6; unit-tested in `tab_slide_test.dart`).
 
 ## Out of scope
 
-- Reviews, embeddings, other data sources, voice, the redesign (TASK-UI-2).
-
-## Cost
-
-Two Gemini calls per search on a Flash-class model. Confirm the current model and its free tier when building. Places calls don't change.
+- Real friends, invites that create links between accounts, notifications settings, a profile photo, Saved hub (TASK-004), using dietary preferences in search.

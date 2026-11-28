@@ -24,6 +24,7 @@ class FakePlaces extends PlacesService {
   Map<String, Object?>? intent;
   final previousIntents = <Map<String, Object?>?>[];
   final localHours = <int?>[];
+  final radii = <int?>[];
   final excluded = <List<String>?>[];
 
   /// Returns photo bytes for a photo name; no photo when not set.
@@ -56,6 +57,7 @@ class FakePlaces extends PlacesService {
     locations.add(near);
     previousIntents.add(previousIntent);
     localHours.add(localHour);
+    radii.add(radiusMeters);
     return SearchAnswer(await answer(query), intent: intent);
   }
 

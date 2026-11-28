@@ -27,7 +27,11 @@ class AppRoutes {
   static const appNavigate = '/app/navigate';
 
   static GoRouter router({required AppSession session}) {
+    final rootKey = GlobalKey<NavigatorState>();
+    final shellKey = GlobalKey<NavigatorState>();
+    closePopupsOnAccountChange(session, [rootKey, shellKey]);
     return GoRouter(
+      navigatorKey: rootKey,
       initialLocation: signIn,
       refreshListenable: session,
       redirect: (context, state) {
@@ -52,6 +56,7 @@ class AppRoutes {
           builder: (context, state) => const SignUpScreen(),
         ),
         ShellRoute(
+          navigatorKey: shellKey,
           builder: (context, state, child) => AppShellScaffold(child: child),
           routes: [
             GoRoute(
@@ -102,10 +107,10 @@ Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
     _currentTab = tab;
   }
   // Each page keeps the direction it arrived from, and picks its exit
-  // direction once when it starts leaving, so a quick second tap can't make
-  // a page that is still moving jump to the other side.
-  final enterFrom = _direction;
-  int? exitTo;
+  // direction once when it starts leaving. A page tapped away while still
+  // sliding in leaves from where it is (not from its resting place), so it
+  // never jumps to the other side.
+  final slide = TabSlide(enterFrom: _direction);
   return CustomTransitionPage<void>(
     key: state.pageKey,
     child: child,
@@ -120,12 +125,7 @@ Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
           // Incoming pages arrive from the direction of travel; a leaving page
           // (its animation running backwards) exits the opposite way.
           final leaving = animation.status == AnimationStatus.reverse;
-          if (leaving) {
-            exitTo ??= -_direction;
-          } else {
-            exitTo = null;
-          }
-          final dx = (1 - t) * 0.25 * (leaving ? exitTo! : enterFrom);
+          final dx = slide.offset(t, leaving: leaving, exitTo: -_direction);
           final blur = (1 - t) * 8;
           final moved = FractionalTranslation(
             translation: Offset(dx, 0),
@@ -144,3 +144,55 @@ Page<void> _tabPage(GoRouterState state, int tab, Widget child) {
   );
 }
 
+
+/// The sideways offset (share of the page width) of one tab page as it moves.
+/// It arrives from [enterFrom] (+1 right, -1 left). When it starts leaving it
+/// picks its exit side once and leaves from where it is, so a page tapped
+/// away while still sliding in never jumps to the other side.
+class TabSlide {
+  TabSlide({required this.enterFrom});
+
+  final int enterFrom;
+  static const distance = 0.25;
+
+  int? _exitTo;
+  double _last = 0;
+  double _leaveFrom = 0;
+  double _leaveAtT = 1;
+
+  /// [t] is the eased progress, 1 when the page is in place, 0 when it's out.
+  double offset(double t, {required bool leaving, required int exitTo}) {
+    final double dx;
+    if (leaving) {
+      if (_exitTo == null) {
+        _exitTo = exitTo;
+        _leaveFrom = _last;
+        _leaveAtT = t;
+      }
+      final progress = _leaveAtT <= 0 ? 1.0 : (1 - t / _leaveAtT).clamp(0.0, 1.0);
+      dx = _leaveFrom + (distance * _exitTo! - _leaveFrom) * progress;
+    } else {
+      _exitTo = null;
+      dx = (1 - t) * distance * enterFrom;
+    }
+    _last = dx;
+    return dx;
+  }
+}
+
+/// When the account on this device is lost or replaced, closes every dialog
+/// and sheet on [navigators] (the app's and the tabs'), so nothing the
+/// previous person opened (a profile editor, a saved place) stays on screen.
+void closePopupsOnAccountChange(AppSession session, List<GlobalKey<NavigatorState>> navigators) {
+  var generation = session.accountGeneration;
+  session.addListener(() {
+    if (session.accountGeneration == generation) return;
+    generation = session.accountGeneration;
+    // After the current notification: never pop in the middle of a build.
+    Future.microtask(() {
+      for (final key in navigators) {
+        key.currentState?.popUntil((route) => route is! PopupRoute);
+      }
+    });
+  });
+}

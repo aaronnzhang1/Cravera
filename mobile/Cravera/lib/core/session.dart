@@ -4,11 +4,12 @@ import 'package:flutter/widgets.dart';
 
 import '../models/restaurant.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
 import '../services/craving_search.dart';
 import '../services/location_service.dart';
 
 class AppSession extends ChangeNotifier {
-  AppSession({this.locationService = const LocationService(), CravingSearch? search, this.auth})
+  AppSession({this.locationService = const LocationService(), CravingSearch? search, this.auth, this.profiles})
       : search = search ?? CravingSearch() {
     // Screens listen to the session, so pass search changes on.
     this.search.addListener(notifyListeners);
@@ -67,13 +68,119 @@ class AppSession extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Loads the display name from the signed-in person's profile; dropped if
-  /// the account changed or signed out meanwhile.
-  Future<void> _loadDisplayName(String accountId, int request) async {
-    final name = await auth?.displayName();
-    if (request != _nameRequest || _accountId != accountId) return;
-    _displayName = name ?? auth?.email?.split('@').first ?? 'there';
+  /// The signed-in person's settings (TASK-UI-3). Null when the app has no
+  /// Supabase key. Tests pass a fake.
+  final ProfileService? profiles;
+
+  /// The signed-in person's profile, once loaded; null for guests.
+  Profile? _profile;
+  Profile? get profile => _profile;
+
+  /// True when the profile couldn't be loaded; [retryProfileLoad] tries again.
+  bool _profileLoadFailed = false;
+  bool get profileLoadFailed => _profileLoadFailed;
+
+  /// Completes when the signed-in person's profile has loaded (or failed), so
+  /// a search right after sign-in uses their saved distance.
+  /// Waits at most [profileWait]: a stalled load never blocks search (it
+  /// then uses the server's default distance).
+  Future<void> get profileReady =>
+      (_profileLoad ?? Future.value()).timeout(profileWait, onTimeout: () {});
+  static const profileWait = Duration(seconds: 5);
+  Future<void>? _profileLoad;
+
+  /// Loads the signed-in person's profile (or just the display name without a
+  /// profile service); dropped if the account changed or signed out meanwhile.
+  Future<void> _loadDisplayName(String accountId, int request) {
+    return _profileLoad = () async {
+      // Bounded: a read that never answers shows "Try again", not "Loading…".
+      final loaded = await profiles?.load(accountId).timeout(profileWait, onTimeout: () => null);
+      final name = loaded?.displayName ?? await auth?.displayName().timeout(profileWait, onTimeout: () => null);
+      if (request != _nameRequest || _accountId != accountId) return;
+      _profile = loaded;
+      _profileLoadFailed = profiles != null && loaded == null;
+      search.radiusMeters = loaded?.defaultRadiusMeters;
+      _displayName = name ?? auth?.email?.split('@').first ?? 'there';
+      notifyListeners();
+    }();
+  }
+
+  /// Tries loading the profile again after a failure.
+  Future<void> retryProfileLoad() async {
+    final account = _accountId;
+    if (account == null || !_profileLoadFailed) return;
+    _profileLoadFailed = false;
     notifyListeners();
+    await _loadDisplayName(account, ++_nameRequest);
+  }
+
+  /// Saves one edit to the signed-in person's profile. Only the edited field
+  /// is sent, and the stored row the server returns replaces the copy here.
+  /// Bound to the account signed in when it was called: if that changes
+  /// before the answer, the answer is dropped (and RLS stops a write to
+  /// another person's row).
+  Future<ProfileSaveOutcome> updateProfile(ProfileChange change) async {
+    final service = profiles;
+    final account = _accountId;
+    if (service == null || account == null || _profile == null) return ProfileSaveOutcome.failed;
+    if (change.toColumns() == null) return ProfileSaveOutcome.invalid;
+    final generation = _accountGeneration;
+    // One save at a time, in the order they were made: a quick second edit
+    // can't be overwritten by the first one arriving late, and an older
+    // answer can't replace a newer one on screen.
+    final before = _saving;
+    final done = Completer<void>();
+    _saving = done.future;
+    _savesInFlight++;
+    notifyListeners();
+    try {
+      await before;
+      if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
+      return await _save(service, account, generation, change);
+    } finally {
+      done.complete();
+      // An account change reset the counter; an old save can't touch it.
+      if (_accountGeneration == generation) {
+        _savesInFlight--;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// The save in flight, if any; the next one waits for it.
+  Future<void> _saving = Future.value();
+
+  /// True while a profile save is on its way. Editors are closed meanwhile,
+  /// so an edit can't start from a value that is about to change.
+  bool get profileSaving => _savesInFlight > 0;
+  int _savesInFlight = 0;
+
+  Future<ProfileSaveOutcome> _save(ProfileService service, String account, int generation, ProfileChange change) async {
+    // Bounded: a save that never answers counts as a lost answer (then the
+    // stored row is read back), so the editors can't stay locked.
+    final (outcome, stored) = await service
+        .save(account, change)
+        .timeout(profileWait * 2, onTimeout: () => (ProfileSaveOutcome.network, null));
+    if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
+    if (outcome == ProfileSaveOutcome.network) {
+      // The answer was lost, but the row may have been saved: show what is
+      // stored now (settings and search distance), if it can be read.
+      // Bounded: a read that never answers mustn't keep the editors locked.
+      final now = await service.load(account).timeout(profileWait * 2, onTimeout: () => null);
+      if (now != null && _accountId == account && _accountGeneration == generation) {
+        _profile = now;
+        _displayName = now.displayName;
+        search.radiusMeters = now.defaultRadiusMeters;
+        notifyListeners();
+      }
+      return ProfileSaveOutcome.network;
+    }
+    if (outcome != ProfileSaveOutcome.ok || stored == null) return outcome == ProfileSaveOutcome.ok ? ProfileSaveOutcome.failed : outcome;
+    _profile = stored;
+    _displayName = stored.displayName;
+    search.radiusMeters = stored.defaultRadiusMeters;
+    notifyListeners();
+    return ProfileSaveOutcome.ok;
   }
 
   /// Finds where to search. Tests pass a fake.
@@ -279,6 +386,13 @@ class AppSession extends ChangeNotifier {
   /// deleted, or the session expired).
   void _clearUserData() {
     _displayName = null;
+    _profile = null;
+    _profileLoadFailed = false;
+    // A save from the previous person neither delays nor locks the next one's.
+    _saving = Future.value();
+    _savesInFlight = 0;
+    _profileLoad = null;
+    search.radiusMeters = null;
     _isGuest = false;
     _searchLocation = null;
     _locationProblem = null;

@@ -5,6 +5,7 @@ import '../core/app_colors.dart';
 import '../core/routes.dart';
 import '../core/session.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
 import '../widgets/glass.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -16,10 +17,10 @@ class ProfileScreen extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final name = session.isGuest ? 'Guest' : session.displayName;
     final rated = session.bookmarks.where((r) => session.bookmarkRating(r.placeId) > 0).length;
-
-    void comingSoon(String what) => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$what is coming soon')),
-        );
+    final profile = session.profile;
+    // Not while a save is on its way: an editor opened now would start from
+    // the old value and could undo the change being saved.
+    final canEdit = session.isSignedIn && profile != null && !session.profileSaving;
 
     return ListView(
       // Bottom padding clears the floating nav bar.
@@ -54,7 +55,8 @@ class ProfileScreen extends StatelessWidget {
                     Text(name, style: text.titleLarge),
                     const SizedBox(height: 2),
                     Text(
-                      session.isGuest ? 'Browsing as a guest' : (session.email ?? 'Signed in'),
+                      // The email is in the Account section below.
+                      session.isGuest ? 'Browsing as a guest' : 'Signed in',
                       style: text.bodyMedium?.copyWith(color: AppColors.textMuted),
                     ),
                   ],
@@ -85,10 +87,10 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Keep your saves', style: text.titleMedium),
+                Text('Make Cravera yours', style: text.titleMedium),
                 const SizedBox(height: 4),
                 Text(
-                  'Create a free account so Cravera knows you on any phone. Saved places that follow you are coming next.',
+                  'Create a free account to keep your name, dietary preferences and search distance on any phone.',
                   style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 14),
@@ -101,15 +103,71 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
         ],
+        if (session.isSignedIn) ...[
+          const _SectionLabel('Account'),
+          Glass(
+            child: Column(
+              children: [
+                _Row(
+                  icon: Icons.badge_outlined,
+                  title: 'Name',
+                  value: profile?.displayName ?? session.displayName,
+                  onTap: canEdit ? () => _editName(context, session) : null,
+                  enabled: canEdit || profile == null,
+                ),
+                const _RowDivider(),
+                _Row(icon: Icons.mail_outline_rounded, title: 'Email', value: session.email ?? ''),
+              ],
+            ),
+          ),
+        ],
         const _SectionLabel('Preferences'),
+        if (!canEdit && !session.profileSaving)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    session.isGuest
+                        ? 'Create an account to save preferences.'
+                        : session.profileLoadFailed
+                            ? 'Couldn’t load your preferences.'
+                            : 'Loading your preferences…',
+                    style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                  ),
+                ),
+                if (session.isSignedIn && session.profileLoadFailed)
+                  TextButton(onPressed: session.retryProfileLoad, child: const Text('Try again')),
+              ],
+            ),
+          ),
         Glass(
           child: Column(
             children: [
-              _Row(icon: Icons.restaurant_menu_rounded, title: 'Dietary preferences', onTap: () => comingSoon('Dietary preferences')),
+              _Row(
+                icon: Icons.restaurant_menu_rounded,
+                title: 'Dietary preferences',
+                value: profile == null ? null : _dietSummary(profile.dietaryPreferences),
+                onTap: canEdit ? () => _editDiet(context, session) : null,
+                enabled: canEdit,
+              ),
               const _RowDivider(),
-              _Row(icon: Icons.near_me_rounded, title: 'Location', onTap: () => comingSoon('Location settings')),
+              _Row(
+                icon: Icons.location_city_rounded,
+                title: 'Home city',
+                value: profile == null ? null : (profile.homeCity ?? 'Not set'),
+                onTap: canEdit ? () => _editCity(context, session) : null,
+                enabled: canEdit,
+              ),
               const _RowDivider(),
-              _Row(icon: Icons.notifications_none_rounded, title: 'Notifications', onTap: () => comingSoon('Notification settings')),
+              _Row(
+                icon: Icons.near_me_rounded,
+                title: 'Search distance',
+                value: profile == null ? null : _km(profile.defaultRadiusMeters),
+                onTap: canEdit ? () => _editRadius(context, session) : null,
+                enabled: canEdit,
+              ),
             ],
           ),
         ),
@@ -117,9 +175,9 @@ class ProfileScreen extends StatelessWidget {
         Glass(
           child: Column(
             children: [
-              _Row(icon: Icons.shield_outlined, title: 'Privacy & data', onTap: () => comingSoon('Privacy & data')),
+              _Row(icon: Icons.shield_outlined, title: 'Privacy & data', onTap: () => _showPrivacy(context)),
               const _RowDivider(),
-              _Row(icon: Icons.help_outline_rounded, title: 'Help & support', onTap: () => comingSoon('Help & support')),
+              _Row(icon: Icons.help_outline_rounded, title: 'Help', onTap: () => _showHelp(context)),
             ],
           ),
         ),
@@ -186,6 +244,300 @@ Future<void> _confirmDelete(BuildContext context, AppSession session) async {
   }
 }
 
+String _km(int meters) {
+  final km = meters / 1000;
+  return '${km == km.roundToDouble() ? km.toStringAsFixed(0) : km.toStringAsFixed(1)} km';
+}
+
+String _capitalized(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+String _dietSummary(List<String> diet) {
+  if (diet.isEmpty) return 'None';
+  final first = _capitalized(diet.first);
+  return diet.length == 1 ? first : '$first +${diet.length - 1}';
+}
+
+/// Saves one edit and tells the person how it went. Only that field is
+/// sent; the session drops the answer if the account changed meanwhile.
+Future<void> _save(BuildContext context, AppSession session, ProfileChange change) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final outcome = await session.updateProfile(change);
+  messenger
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(content: Text(profileSaveMessage(outcome))));
+}
+
+/// Saves [change] once an editor closes, unless the account changed while it
+/// was open (then nothing is saved onto the wrong person).
+Future<void> _saveEdit(BuildContext context, AppSession session, String? account, ProfileChange change) async {
+  if (!context.mounted || session.profile == null || session.accountId != account) return;
+  await _save(context, session, change);
+}
+
+Future<void> _editName(BuildContext context, AppSession session) async {
+  // An old "Saved." message would cover the editor's bottom option.
+  ScaffoldMessenger.of(context).clearSnackBars();
+  final current = session.profile;
+  if (current == null) return;
+  final account = session.accountId;
+  final name = await _askText(context, title: 'Your name', initial: current.displayName, maxLength: Profile.maxNameLength);
+  if (name == null || !context.mounted) return;
+  await _saveEdit(context, session, account, ProfileChange(displayName: name));
+}
+
+Future<void> _editCity(BuildContext context, AppSession session) async {
+  // An old "Saved." message would cover the editor's bottom option.
+  ScaffoldMessenger.of(context).clearSnackBars();
+  final current = session.profile;
+  if (current == null) return;
+  final account = session.accountId;
+  final city = await _askText(
+    context,
+    title: 'Home city',
+    initial: current.homeCity ?? '',
+    maxLength: Profile.maxCityLength,
+    hint: 'e.g. Oakland',
+    allowEmpty: true,
+  );
+  if (city == null || !context.mounted) return;
+  final trimmed = city.trim();
+  await _saveEdit(context, session, account, ProfileChange(homeCity: trimmed));
+}
+
+/// A one-field dialog. Returns the text, or null if cancelled.
+Future<String?> _askText(
+  BuildContext context, {
+  required String title,
+  required String initial,
+  required int maxLength,
+  String? hint,
+  bool allowEmpty = false,
+}) =>
+    showDialog<String>(
+      context: context,
+      builder: (_) => _TextDialog(title: title, initial: initial, maxLength: maxLength, hint: hint, allowEmpty: allowEmpty),
+    );
+
+/// Owns its text controller, so it lives until the dialog's closing
+/// animation is over (disposing it when the dialog returns is too early).
+class _TextDialog extends StatefulWidget {
+  const _TextDialog({required this.title, required this.initial, required this.maxLength, this.hint, this.allowEmpty = false});
+  final String title;
+  final String initial;
+  final int maxLength;
+  final String? hint;
+  final bool allowEmpty;
+
+  @override
+  State<_TextDialog> createState() => _TextDialogState();
+}
+
+class _TextDialogState extends State<_TextDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _ok => widget.allowEmpty || _controller.text.trim().isNotEmpty;
+
+  void _submit() {
+    if (_ok) Navigator.of(context).pop(_controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: widget.maxLength,
+        textCapitalization: TextCapitalization.words,
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          labelText: widget.title,
+          errorText: _ok ? null : 'Enter at least one character.',
+        ),
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        TextButton(onPressed: _ok ? _submit : null, child: const Text('Save')),
+      ],
+    );
+  }
+}
+
+Future<void> _editDiet(BuildContext context, AppSession session) async {
+  // An old "Saved." message would cover the editor's bottom option.
+  ScaffoldMessenger.of(context).clearSnackBars();
+  final current = session.profile;
+  if (current == null) return;
+  final account = session.accountId;
+  final chosen = await showModalBottomSheet<List<String>>(
+    context: context,
+    isScrollControlled: true,
+    // Above the floating nav bar (on the tabs' navigator it sits under it).
+    useRootNavigator: true,
+    builder: (_) => _DietSheet(initial: current.dietaryPreferences),
+  );
+  if (chosen == null || !context.mounted) return;
+  await _saveEdit(context, session, account, ProfileChange(dietaryPreferences: chosen));
+}
+
+/// The dietary choices sheet. Owns its selection: the sheet's builder can
+/// run again (route or layout changes), and a selection kept there was reset,
+/// so a tap could vanish and Save could store nothing (seen on the emulator).
+class _DietSheet extends StatefulWidget {
+  const _DietSheet({required this.initial});
+  final List<String> initial;
+
+  @override
+  State<_DietSheet> createState() => _DietSheetState();
+}
+
+class _DietSheetState extends State<_DietSheet> {
+  late final Set<String> _picked = {...widget.initial};
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Dietary preferences', style: text.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Saved to your account. Search doesn’t use them yet.',
+              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final d in Profile.dietaryChoices)
+                  FilterChip(
+                    label: Text(_capitalized(d)),
+                    selected: _picked.contains(d),
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    onSelected: (on) => setState(() => on ? _picked.add(d) : _picked.remove(d)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop([
+                  for (final d in Profile.dietaryChoices)
+                    if (_picked.contains(d)) d,
+                ]),
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _editRadius(BuildContext context, AppSession session) async {
+  // An old "Saved." message would cover the editor's bottom option.
+  ScaffoldMessenger.of(context).clearSnackBars();
+  final current = session.profile;
+  if (current == null) return;
+  final account = session.accountId;
+  final chosen = await showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    // Above the floating nav bar (on the tabs' navigator it sits under it).
+    useRootNavigator: true,
+    builder: (sheetContext) {
+      final text = Theme.of(sheetContext).textTheme;
+      return SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                child: Text('Search distance', style: text.titleLarge),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'How far new searches look from your location.',
+                  style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                ),
+              ),
+              for (final m in Profile.radiusChoices)
+                ListTile(
+                  title: Text(_km(m)),
+                  trailing: m == current.defaultRadiusMeters ? const Icon(Icons.check_rounded, color: AppColors.accent) : null,
+                  selected: m == current.defaultRadiusMeters,
+                  onTap: () => Navigator.of(sheetContext).pop(m),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+  // Saved even if it matches what the sheet showed: an earlier choice may
+  // still be saving, and the last pick must win.
+  if (chosen == null || !context.mounted) return;
+  await _saveEdit(context, session, account, ProfileChange(defaultRadiusMeters: chosen));
+}
+
+void _showHelp(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('How Cravera works'),
+      content: const SingleChildScrollView(
+        child: Text(
+          'Type what you\u2019re craving, in your own words. Cravera shows one place that is open now and near you.\n\n'
+          'No shows the next place. Cheaper, Closer and Something else change the search. After a few Nos, '
+          'Narrow it down lets you type more, like \u201cno seafood\u201d.\n\n'
+          'Yes opens directions in your maps app. The place chip at the top sets where to search; '
+          'Search distance in Profile sets how far.',
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK'))],
+    ),
+  );
+}
+
+void _showPrivacy(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Privacy & data'),
+      content: const SingleChildScrollView(
+        child: Text(
+          'With an account, Cravera keeps your email, name, home city, dietary preferences and search distance. '
+          'Only you can read or change them, and Delete account removes them for good.\n\n'
+          'To find a place, your craving and the area you search are sent to Google (Places and Gemini). '
+          'Cravera doesn’t keep your searches or your location.',
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK'))],
+    ),
+  );
+}
+
 class _Stat extends StatelessWidget {
   final String value;
   final String label;
@@ -232,26 +584,50 @@ class _SectionLabel extends StatelessWidget {
 class _Row extends StatelessWidget {
   final IconData icon;
   final String title;
-  final VoidCallback onTap;
+
+  /// The current setting, shown under the title.
+  final String? value;
+
+  /// Null makes a plain row with no chevron.
+  final VoidCallback? onTap;
+
+  /// False shows a setting greyed out (guests, or while the profile loads).
+  final bool enabled;
   final Color? color;
-  const _Row({required this.icon, required this.title, required this.onTap, this.color});
+  const _Row({required this.icon, required this.title, this.value, this.onTap, this.enabled = true, this.color});
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppColors.textPrimary;
-    return InkWell(
-      onTap: onTap,
+    final text = Theme.of(context).textTheme;
+    final c = !enabled ? AppColors.textSecondary : (color ?? AppColors.textPrimary);
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
             Icon(icon, size: 22, color: color ?? AppColors.textSecondary),
             const SizedBox(width: 14),
-            Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: c))),
-            Icon(Icons.chevron_right_rounded, color: (color ?? AppColors.textMuted).withValues(alpha: 0.8)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: text.titleMedium?.copyWith(color: c)),
+                  if (value != null && value!.isNotEmpty)
+                    Text(value!, style: text.bodyMedium?.copyWith(color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            if (onTap != null) Icon(Icons.chevron_right_rounded, color: (color ?? AppColors.textMuted).withValues(alpha: 0.8)),
           ],
         ),
       ),
+    );
+    // One control for screen readers: title and value read together.
+    return MergeSemantics(
+      child: onTap == null
+          ? Semantics(enabled: enabled, child: row)
+          : InkWell(onTap: onTap, child: row),
     );
   }
 }

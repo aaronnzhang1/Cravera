@@ -251,7 +251,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// True from a tap on Search until its request starts, so a second tap
+  /// while waiting (for the profile, or the place) can't send a second one.
+  bool _starting = false;
+
   Future<void> _startSearch(String prompt) async {
+    if (_starting) return;
+    _starting = true;
+    try {
+      await _startSearchOnce(prompt);
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> _startSearchOnce(String prompt) async {
     if (prompt.isEmpty || AppSessionScope.of(context).search.status == SearchStatus.loading) return;
     final session = AppSessionScope.of(context);
     if (session.locationChanging) {
@@ -273,7 +287,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (near == null || session.accountGeneration != generation) return;
     // A refine draft belongs to the search it was typed for.
     _repromptController.clear();
-    await session.search.start(prompt, near);
+    // Right after sign-in, wait for the profile so its distance is used.
+    await session.profileReady;
+    if (!mounted || session.accountGeneration != generation) return;
+    // The place may have changed while waiting: search where Home shows now.
+    final nearNow = session.searchLocation;
+    if (nearNow == null || session.locationChanging) return;
+    await session.search.start(prompt, nearNow);
   }
 
   /// Adds the user's extra words to the craving and searches again.

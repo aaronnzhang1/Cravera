@@ -172,6 +172,9 @@ void main() {
     expect(find.text(FakeAuth.knownEmail), findsOneWidget, reason: 'Profile shows the account email');
 
     await tester.ensureVisible(find.text('Delete account'));
+    // Scroll to the end: just in view, the row sits under the floating nav bar.
+    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    await tester.pump();
     await tester.tap(find.text('Delete account'));
     await _settle(tester);
     await tester.tap(find.text('Cancel'));
@@ -180,6 +183,9 @@ void main() {
     expect(session.isSignedIn, isTrue);
 
     await tester.ensureVisible(find.text('Delete account'));
+    // Scroll to the end: just in view, the row sits under the floating nav bar.
+    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    await tester.pump();
     await tester.tap(find.text('Delete account'));
     await _settle(tester);
     await tester.tap(find.text('Delete'));
@@ -197,6 +203,9 @@ void main() {
     await tester.tap(find.text('Profile'));
     await _settle(tester);
     await tester.ensureVisible(find.text('Delete account'));
+    // Scroll to the end: just in view, the row sits under the floating nav bar.
+    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    await tester.pump();
     await tester.tap(find.text('Delete account'));
     await _settle(tester);
 
@@ -253,6 +262,9 @@ void main() {
     await tester.tap(find.text('Profile'));
     await _settle(tester);
     await tester.ensureVisible(find.text('Delete account'));
+    // Scroll to the end: just in view, the row sits under the floating nav bar.
+    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    await tester.pump();
     await tester.tap(find.text('Delete account'));
     await _settle(tester);
     await tester.tap(find.text('Delete'));
