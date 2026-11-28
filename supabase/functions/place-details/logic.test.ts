@@ -160,3 +160,9 @@ test("text helpers trim, cap and reject non-web links", () => {
   assert.equal(webUrl("ftp://x"), null);
   assert.equal(webUrl("https://example.com"), "https://example.com/");
 });
+
+test("reviews are kept whole, never cut", () => {
+  const long = "Fictional opening. ".repeat(120) + "But not for vegans.";
+  const d = mapDetails({ reviews: [{ authorAttribution: { displayName: "A" }, text: { text: long } }] }, PLACE);
+  assert.equal(d.reviews[0].text, long.trim());
+});

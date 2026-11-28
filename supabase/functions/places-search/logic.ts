@@ -417,7 +417,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "price", price, "excluded", excluded.size, "curate", curation, "results", results.length);
 
   // 4. Explain, from Places facts only.
-  results = results.map(({ types: _types, ...r }) => ({ ...r, reasons: reasonsFor(r) }));
+  results = results.map(({ types: _types, ...r }) => ({ ...r, reasons: reasonsFor(r, intent.priceLevels) }));
   return json(200, noNewPlaces ? { results, intent, noNewPlaces } : { results, intent });
 }
 
@@ -464,9 +464,15 @@ export function fallbackText(input: SearchInput): string {
  * in code: the model can't add, word or influence them (it never decides
  * what the guest "asked for" on the card).
  */
-export function reasonsFor(r: RestaurantResult): string[] {
+/**
+ * Reasons from Places facts only. Budget-friendly only when the guest asked
+ * for a price range and this price is inside it ([requested] is the search's
+ * own intent, kept even when a relaxed retry dropped the price filter), so a
+ * price is never a reason the guest didn't ask for (ADR 0005).
+ */
+export function reasonsFor(r: RestaurantResult, requested: number[] = []): string[] {
   const reasons: string[] = [];
-  if (r.priceLevel !== null && r.priceLevel <= 1) reasons.push("Budget-friendly");
+  if (r.priceLevel !== null && r.priceLevel <= 1 && requested.includes(r.priceLevel)) reasons.push("Budget-friendly");
   if (r.distanceMeters <= NEAR_M) reasons.push("Close by");
   if (r.rating !== null && r.rating >= HIGHLY_RATED) reasons.push("Highly rated");
   return reasons;

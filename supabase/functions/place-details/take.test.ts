@@ -46,7 +46,7 @@ test("facts: a price is a reason only inside a requested range", () => {
 });
 
 test("take: a clean note passes", () => {
-  assert.equal(checkTake("  Cozy spot with rich broth.  You can eat in, which suits a slow night. "), "Cozy spot with rich broth. You can eat in, which suits a slow night.");
+  assert.equal(checkTake("  Cozy spot with rich broth.  You can eat in, which suits a slow dinner. "), "Cozy spot with rich broth. You can eat in, which suits a slow dinner.");
 });
 
 test("take: anything we can't check is dropped", () => {
@@ -60,6 +60,10 @@ test("take: anything we can't check is dropped", () => {
     "A cheap price for great ramen.",
     "Open late, so no rush.", // hours
     "It closes soon, go now.",
+    "A great late night taco spot.", // availability, indirectly
+    "They serve tacos late into the night.",
+    "Perfect for a weekend brunch.",
+    "Grab a bite any time.",
     "See https://example.com for the menu.", // link
     "Menu at example.com.",
     "A. B. C. D.", // too many sentences
@@ -145,4 +149,13 @@ test("handle: the craving is never logged", async () => {
     console.error = orig;
   }
   assert.ok(!logged.some((v) => String(v).includes("secret")));
+});
+
+test("reviews reach Gemini whole, and only those that fit", async () => {
+  const { wholeReviews, MAX_REVIEW_INPUT } = await import("./take.ts");
+  const long = "x".repeat(MAX_REVIEW_INPUT - 10);
+  const r = (text: string) => ({ authorName: "A", authorUri: null, authorPhotoUri: null, rating: 4, relativeTime: null, text, mapsUri: null });
+  const out = wholeReviews([r(long), r("This is great, but not for vegans."), r("ok")]);
+  assert.deepEqual(out.map((o) => o.number), [1, 3]); // review 2 doesn't fit whole, so it's left out
+  assert.equal(out[0].text, long);
 });

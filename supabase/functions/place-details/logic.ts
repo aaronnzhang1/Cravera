@@ -20,6 +20,8 @@ export const PLACE_ID = /^[A-Za-z0-9_-]{1,300}$/;
 export const MAX_PHOTOS = 5;
 export const MAX_REVIEWS = 5;
 export const MAX_TEXT = 1500;
+/** Reviews are shown whole; one longer than this is left out, never cut. */
+export const MAX_REVIEW_TEXT = 20_000;
 const UPSTREAM_TIMEOUT_MS = 8000;
 
 
@@ -105,6 +107,14 @@ function localized(value: unknown): string | null {
   return cleanText((value as { text?: unknown })?.text);
 }
 
+/** Localized text kept whole: null when empty or longer than [MAX_REVIEW_TEXT] (never cut). */
+function wholeText(value: unknown): string | null {
+  const t = (value as { text?: unknown })?.text;
+  if (typeof t !== "string") return null;
+  const s = t.trim();
+  return s && s.length <= MAX_REVIEW_TEXT ? s : null;
+}
+
 /** A website link: http or https only (many restaurant sites are still http). */
 export function webUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -136,7 +146,7 @@ export function mapDetails(data: unknown, placeId: string): Details {
     const rv = r as Record<string, unknown>;
     const author = rv.authorAttribution as { displayName?: unknown; uri?: unknown; photoUri?: unknown } | undefined;
     const authorName = cleanText(author?.displayName, 100);
-    const text = localized(rv.text) ?? localized(rv.originalText);
+    const text = wholeText(rv.text) ?? wholeText(rv.originalText);
     if (!authorName || !text) continue;
     const rating = typeof rv.rating === "number" && rv.rating >= 1 && rv.rating <= 5 ? rv.rating : null;
     reviews.push({

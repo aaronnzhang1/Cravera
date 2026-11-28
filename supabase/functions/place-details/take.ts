@@ -91,7 +91,9 @@ export function checkFacts(refs: unknown, d: Details, input: TakeInput): Fact[] 
 
 const NUMBER_WORDS = /\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|dozen|half|once|twice|first|second|third)\b/i;
 const PRICE_WORDS = /\b(dollars?|bucks?|cents?|price[sd]?|pricing|cost|costs|usd)\b/i;
-const HOURS_WORDS = /\b(open|opens|opened|opening|closed?|closes|closing|hours?|am|pm|o'clock|midnight|noon|tonight|today|tomorrow|until|till)\b/i;
+// Hours and availability, including indirect ones ("late night", "any time"):
+// open-now comes only from the search, in code.
+const HOURS_WORDS = /\b(open|opens|opened|opening|closed?|closes|closing|hours?|am|pm|o'clock|midnight|noon|tonight|today|tomorrow|until|till|late|later|overnight|night|nights|early|morning|evening|weekends?|weekdays?|now|anytime)\b|24\/7|around the clock|all day|any time|after dark/i;
 const LINK = /(https?:|www\.|\.(com|net|org|io|co|app)\b|@)/i;
 
 /** The take if it passes every check, else null (then the template is used). */
@@ -139,6 +141,21 @@ export function orderReviews<T>(reviews: T[], order: unknown): T[] {
   return [...picked.map((n) => reviews[n - 1]), ...reviews.filter((_, i) => !picked.includes(i + 1))];
 }
 
+/** Gemini input budget for review text; reviews that don't fit whole are omitted. */
+export const MAX_REVIEW_INPUT = 6000;
+
+/** Reviews for Gemini, each whole, numbered as shown, within [MAX_REVIEW_INPUT]. */
+export function wholeReviews(reviews: Details["reviews"]): { number: number; rating: number | null; text: string }[] {
+  const out: { number: number; rating: number | null; text: string }[] = [];
+  let used = 0;
+  reviews.forEach((r, i) => {
+    if (used + r.text.length > MAX_REVIEW_INPUT) return;
+    used += r.text.length;
+    out.push({ number: i + 1, rating: r.rating, text: r.text });
+  });
+  return out;
+}
+
 const TAKE_SCHEMA = {
   type: "object",
   properties: {
@@ -172,7 +189,8 @@ export async function explain(
     rating: d.rating,
     priceLevel: d.priceLevel,
     attributes: d.attributes,
-    reviews: d.reviews.map((r, i) => ({ number: i + 1, rating: r.rating, text: r.text })),
+    // Whole reviews only (an excerpt can drop a "not"); ones that don't fit the budget are left out.
+    reviews: wholeReviews(d.reviews),
   };
   const raw = await callGemini(
     config,
