@@ -58,6 +58,10 @@ test("take: anything we can't check is dropped", () => {
     "Great value at $$.", // currency sign
     "Mains are about fifteen dollars.", // price word
     "A cheap price for great ramen.",
+    "A budget-friendly spot with inexpensive ramen.", // qualitative price
+    "Affordable and filling.",
+    "Great value for the area.",
+    "A fancy night out.",
     "Open late, so no rush.", // hours
     "It closes soon, go now.",
     "A great late night taco spot.", // availability, indirectly

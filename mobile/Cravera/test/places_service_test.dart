@@ -46,6 +46,14 @@ Future<PlacesSearchError?> errorFor(MockClient client) async {
 
 void main() {
   detailsTests();
+  test('a long refined craving sends its most recent part, within the limit', () {
+    final long = '${'tacos ' * 40}no seafood please';
+    final sent = recentCraving(long);
+    expect(sent.length, lessThanOrEqualTo(CravingLimits.maxQuery));
+    expect(sent.endsWith('no seafood please'), isTrue);
+    expect(sent.startsWith(' '), isFalse);
+    expect(recentCraving('  ramen '), 'ramen');
+  });
 
   group('request', () {
     test('posts the query and location to the function with the publishable key', () async {

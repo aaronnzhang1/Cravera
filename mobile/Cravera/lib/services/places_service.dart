@@ -135,7 +135,9 @@ class PlacesService {
       ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
       ..body = jsonEncode({
         'placeId': placeId,
-        if (craving != null && craving.isNotEmpty && craving.length <= CravingLimits.maxQuery) 'craving': craving,
+        // After several refines the whole conversation can pass the limit:
+        // send its most recent part, which holds the latest wishes.
+        if (craving != null && craving.trim().isNotEmpty) 'craving': recentCraving(craving),
         if (priceLevels.isNotEmpty) 'priceLevels': priceLevels,
       });
     try {
@@ -392,6 +394,17 @@ class PlacesService {
   static String? _string(Object? v) => v is String && v.trim().isNotEmpty ? v : null;
   static double? _double(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
   static int? _int(Object? v) => v is num && v.isFinite ? v.round() : null;
+}
+
+/// The craving as sent with a details request: whole when it fits the
+/// server's limit, else its last [CravingLimits.maxQuery] characters, starting
+/// at a word.
+String recentCraving(String craving) {
+  final c = craving.trim();
+  if (c.length <= CravingLimits.maxQuery) return c;
+  final tail = c.substring(c.length - CravingLimits.maxQuery);
+  final space = tail.indexOf(' ');
+  return (space > 0 && space < tail.length - 1 ? tail.substring(space + 1) : tail).trim();
 }
 
 /// Shared limits for what the app sends.

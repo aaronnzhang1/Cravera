@@ -90,7 +90,8 @@ export function checkFacts(refs: unknown, d: Details, input: TakeInput): Fact[] 
 }
 
 const NUMBER_WORDS = /\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|dozen|half|once|twice|first|second|third)\b/i;
-const PRICE_WORDS = /\b(dollars?|bucks?|cents?|price[sd]?|pricing|cost|costs|usd)\b/i;
+// Price claims, including qualitative ones: price is a checked fact only (ADR 0005).
+const PRICE_WORDS = /\b(dollars?|bucks?|cents?|price[sd]?|pricing|pricey|cost|costs|costly|usd|cheap|cheaper|cheapest|inexpensive|expensive|affordable|affordably|budget|bargains?|deals?|value|splurge|wallet|reasonably|steal|overpriced|upscale|fancy|luxury)\b/i;
 // Hours and availability, including indirect ones ("late night", "any time"):
 // open-now comes only from the search, in code.
 const HOURS_WORDS = /\b(open|opens|opened|opening|closed?|closes|closing|hours?|am|pm|o'clock|midnight|noon|tonight|today|tomorrow|until|till|late|later|overnight|night|nights|early|morning|evening|weekends?|weekdays?|now|anytime|still|currently|available|availability|kitchen)\b|24\/7|around the clock|all day|any time|after dark|at the moment|right away/i;
