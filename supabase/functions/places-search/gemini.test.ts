@@ -197,6 +197,16 @@ test("while Gemini is down, Closer puts the nearest first", async () => {
   assert.deepEqual(body.results.map((r: { placeId: string }) => r.placeId), ["near", "far"]);
 });
 
+test("while Gemini is down, Closer after an empty priced search still puts the nearest first", async () => {
+  const farNoPrice = place("far", { location: { latitude: 37.02, longitude: -122.001 } });
+  const nearPricey = place("near", { location: { latitude: 37.0005, longitude: -122.0005 }, priceLevel: "PRICE_LEVEL_EXPENSIVE" });
+  const g = fakeGoogle([new Response("{}"), new Response(JSON.stringify({ places: [farNoPrice, nearPricey] }))], [new Error("503")]);
+  const prev = { ...gymIntent, textQuery: "tacos", priceLevels: [1], distance: "any" as const };
+  const body = await (await handle(request({ query: "closer", previousIntent: prev, ...here }), env, g.fn)).json();
+  assert.equal(g.placesCalls().length, 2);
+  assert.deepEqual(body.results.map((r: { placeId: string }) => r.placeId), ["near", "far"]);
+});
+
 test("fallback Cheaper steps below the lowest previous price", () => {
   const input = { query: "cheaper", latitude: 0, longitude: 0, radiusMeters: 5000, localHour: null, previousIntent: null, excludePlaceIds: [] };
   const base = { ...gymIntent, priceLevels: [] as number[] };

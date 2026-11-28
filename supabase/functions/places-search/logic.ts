@@ -429,9 +429,10 @@ export function priceFirst(results: RestaurantResult[], priceLevels: number[], n
   if (priceLevels.length === 0 && !nearFirst) return results;
   const rank = (r: RestaurantResult) =>
     priceLevels.length === 0 ? 0 : r.priceLevel === null ? 1 : priceLevels.includes(r.priceLevel) ? 0 : 2;
-  // Array.prototype.sort is stable, so Places order holds within a group
-  // (or nearest first there, when the guest asked for closer).
-  return [...results].sort((a, b) => rank(a) - rank(b) || (nearFirst ? a.distanceMeters - b.distanceMeters : 0));
+  // Array.prototype.sort is stable, so Places order holds within a group.
+  // Closer: distance first, price only breaks ties.
+  if (nearFirst) return [...results].sort((a, b) => a.distanceMeters - b.distanceMeters || rank(a) - rank(b));
+  return [...results].sort((a, b) => rank(a) - rank(b));
 }
 
 /**
