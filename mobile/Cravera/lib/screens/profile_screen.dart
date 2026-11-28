@@ -381,6 +381,8 @@ Future<void> _editDiet(BuildContext context, AppSession session) async {
   final chosen = await showModalBottomSheet<List<String>>(
     context: context,
     isScrollControlled: true,
+    // Above the floating nav bar (on the tabs' navigator it sits under it).
+    useRootNavigator: true,
     builder: (sheetContext) {
       final picked = {...current.dietaryPreferences};
       final text = Theme.of(sheetContext).textTheme;
@@ -443,6 +445,8 @@ Future<void> _editRadius(BuildContext context, AppSession session) async {
   final chosen = await showModalBottomSheet<int>(
     context: context,
     isScrollControlled: true,
+    // Above the floating nav bar (on the tabs' navigator it sits under it).
+    useRootNavigator: true,
     builder: (sheetContext) {
       final text = Theme.of(sheetContext).textTheme;
       return SafeArea(
