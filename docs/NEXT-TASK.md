@@ -10,20 +10,21 @@
 
 Tick a box only after checking it in the running app. Never delete or reword a criterion. Propose any change to the maintainer instead.
 
-- [ ] Profile is in sections: **Account** (name, email, edit display name, sign out, delete account), **Preferences** (dietary preferences, home city, default search distance), **About** (privacy, help). No "coming soon" rows: a row works or is removed.
-- [ ] A signed-in person can change display name, home city, dietary preferences (pick from a short list) and default distance (e.g. 1, 2, 5, 10 km); changes save to their own `profiles` row, survive an app restart, and show on another sign-in. Invalid input (empty or over-long name) shows a clear message; a failed save says so and keeps the old value.
-- [ ] The default distance is used as the search radius for new searches (within the server's existing cap). Dietary preferences are stored only; using them in search is a later task.
+- [x] Profile is in sections: **Account** (name, email, edit display name, sign out, delete account), **Preferences** (dietary preferences, home city, default search distance), **About** (privacy, help). No "coming soon" rows: a row works or is removed.
+- [x] A signed-in person can change display name, home city, dietary preferences (pick from a short list) and default distance (e.g. 1, 2, 5, 10 km); changes save to their own `profiles` row, survive an app restart, and show on another sign-in. Invalid input (empty or over-long name) shows a clear message; a failed save says so and keeps the old value.
+- [x] The default distance is used as the search radius for new searches (within the server's existing cap). Dietary preferences are stored only; using them in search is a later task.
 - [x] A guest sees Preferences disabled with a "Create an account to save preferences" prompt that promises only what exists.
 - [x] Friends shows a designed preview (sharing picks, seeing where friends eat) with an **Invite** button that opens the system share sheet with a short invite text; the demo people list is gone.
 - [ ] Fast tab taps (Home → Saved → Friends) no longer make a page jump sides as it leaves (deferred P2 from PR #22): it starts its exit from its current offset.
 - [x] Profile and Friends pass the tap-target, label and contrast guideline tests, also at 2x text on a 320 x 568 phone.
-- [ ] `flutter analyze` and `flutter test` pass, with tests for saving each preference (fake service), a failed save, and the guest state; checked on the Android emulator signed in and as a guest.
+- [x] `flutter analyze` and `flutter test` pass, with tests for saving each preference (fake service), a failed save, and the guest state; checked on the Android emulator signed in and as a guest.
 
 ## Checked
 
 - 2026-11-27, `Pixel_10_Pro`, guest: Profile shows Account/Preferences/About sections with Preferences off and "Create an account to save preferences."; Privacy & data and Help open; Friends shows the preview, no fake people; **Invite opens the Android share sheet** with the invite text (`share_plus`, approved by the maintainer).
 - Accessibility guideline tests pass for Profile (signed in, guest) and Friends, at the top and scrolled, also at 2x text on 320 x 568.
-- Still to check in the app: signed-in Profile (criteria 1–3, 8; needs an account), the tab slide (criterion 6; unit-tested in `tab_slide_test.dart`).
+- 2026-11-27 ~19:05 PST, `Pixel_10_Pro`, signed in (maintainer's account, values restored afterwards): Profile loads name/email/preferences from the server; Search distance → 2 km, Dietary → Vegetarian + Halal, Home city → Oakland, Name → "Aaron Test", each "Saved."; after closing and reopening the app all four are still there, and a read-only query on the live `profiles` row shows the same values. "ramen" then found only places within 2 km (0.3–1.6 km). Everything set back (name Aaron Zhang, no diet, no city, 5 km; checked in the row). Found and fixed on the way: the sheets opened under the nav bar; the dietary sheet lost picks when it rebuilt.
+- Still to check in the app: the tab slide (criterion 6; unit-tested in `tab_slide_test.dart`).
 
 ## Out of scope
 
