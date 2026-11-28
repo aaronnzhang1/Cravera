@@ -3,7 +3,7 @@
 **Goal.** The pick opens into a detail page that tells the guest about the place and why Cravera picked it, so the app is more than search-and-display. Everything shown comes from Google Places; Gemini only writes the cited "Why this pick" claims ([ADR 0005](adr/0005-traceable-ai-summaries.md)). Background and the maintainer's words: [the smart card plan](plans/v0.3-smart-card.md).
 
 **Release:** moved ahead of TASK-004 by the maintainer (2026-11-27: "move onto the next part first"). TASK-UI-3 is merged (#35); its criterion 6 (tab slide) is unit-tested but not yet checked in the app (see CURRENT.md).
-**Approved:** pending. The maintainer made the four decisions on 2026-11-27 (ADR 0005); the criteria below still need their OK.
+**Approved:** 2026-11-27 (maintainer: "approve"), as written. Claude may work any criterion below without asking again; anything outside this file's scope still needs approval.
 **Review level:** L3: new Places data and SKUs, a new Gemini call fed with review text, Google attribution rules, a new Edge Function path.
 
 ## Acceptance criteria
