@@ -4,11 +4,12 @@ import 'package:flutter/widgets.dart';
 
 import '../models/restaurant.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
 import '../services/craving_search.dart';
 import '../services/location_service.dart';
 
 class AppSession extends ChangeNotifier {
-  AppSession({this.locationService = const LocationService(), CravingSearch? search, this.auth})
+  AppSession({this.locationService = const LocationService(), CravingSearch? search, this.auth, this.profiles})
       : search = search ?? CravingSearch() {
     // Screens listen to the session, so pass search changes on.
     this.search.addListener(notifyListeners);
@@ -67,13 +68,45 @@ class AppSession extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Loads the display name from the signed-in person's profile; dropped if
-  /// the account changed or signed out meanwhile.
+  /// The signed-in person's settings (TASK-UI-3). Null when the app has no
+  /// Supabase key. Tests pass a fake.
+  final ProfileService? profiles;
+
+  /// The signed-in person's profile, once loaded; null for guests.
+  Profile? _profile;
+  Profile? get profile => _profile;
+
+  /// Loads the signed-in person's profile (or just the display name without a
+  /// profile service); dropped if the account changed or signed out meanwhile.
   Future<void> _loadDisplayName(String accountId, int request) async {
-    final name = await auth?.displayName();
+    final loaded = await profiles?.load(accountId);
+    final name = loaded?.displayName ?? await auth?.displayName();
     if (request != _nameRequest || _accountId != accountId) return;
+    _profile = loaded;
+    search.radiusMeters = loaded?.defaultRadiusMeters;
     _displayName = name ?? auth?.email?.split('@').first ?? 'there';
     notifyListeners();
+  }
+
+  /// Saves [updated] as the signed-in person's profile. Bound to the account
+  /// signed in when it was called: if that changes before the answer, the
+  /// answer is dropped (and RLS stops a write to another person's row).
+  Future<ProfileSaveOutcome> saveProfile(Profile updated) async {
+    final service = profiles;
+    final account = _accountId;
+    if (service == null || account == null || _profile == null) return ProfileSaveOutcome.failed;
+    final valid = updated.validated();
+    if (valid == null) return ProfileSaveOutcome.invalid;
+    final generation = _accountGeneration;
+    final outcome = await service.save(account, valid);
+    if (outcome != ProfileSaveOutcome.ok || _accountId != account || _accountGeneration != generation) {
+      return outcome == ProfileSaveOutcome.ok ? ProfileSaveOutcome.failed : outcome;
+    }
+    _profile = valid;
+    _displayName = valid.displayName;
+    search.radiusMeters = valid.defaultRadiusMeters;
+    notifyListeners();
+    return ProfileSaveOutcome.ok;
   }
 
   /// Finds where to search. Tests pass a fake.
@@ -279,6 +312,8 @@ class AppSession extends ChangeNotifier {
   /// deleted, or the session expired).
   void _clearUserData() {
     _displayName = null;
+    _profile = null;
+    search.radiusMeters = null;
     _isGuest = false;
     _searchLocation = null;
     _locationProblem = null;
