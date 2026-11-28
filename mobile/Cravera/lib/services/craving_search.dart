@@ -50,6 +50,25 @@ class CravingSearch extends ChangeNotifier {
   List<Restaurant> _results = const [];
   int _index = 0;
   int _rejections = 0;
+
+  /// Place IDs shown in this search session (the first craving and every
+  /// refine of it), oldest first. A refine sends them so the server leaves
+  /// them out, and they are filtered here too: a place the guest already saw
+  /// (and said No to) never comes back in the same session (TASK-005).
+  final List<String> _shown = [];
+
+  /// Places the guest said No to in this session. Even a retry (after an
+  /// error, or to refresh expired results) never brings these back.
+  final List<String> _rejected = [];
+
+  /// The most IDs sent with one request (the server accepts this many).
+  static const maxExcluded = 100;
+
+  void _markShown() {
+    if (_status != SearchStatus.showing) return;
+    final id = _results[_index].placeId;
+    if (!_shown.contains(id)) _shown.add(id);
+  }
   PlacesSearchError? _error;
 
   /// Numbers each search. Only the newest may write its result, so a slow
@@ -138,21 +157,38 @@ class CravingSearch extends ChangeNotifier {
   /// rejecting every result).
   bool get foundNothing => _status == SearchStatus.exhausted && _results.isEmpty;
 
+  /// True when the last answer had open matches, but the guest had already
+  /// seen all of them in this session (TASK-005).
+  bool get noNewPlaces => foundNothing && _noNewPlaces;
+  bool _noNewPlaces = false;
+
   /// Searches for [query] around [near]. Empty queries are ignored.
   Future<void> start(String query, SearchLocation near) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
     _messages = List.unmodifiable([trimmed]);
+    _shown.clear(); // a new craving starts a new session
+    _rejected.clear();
     await _run(display: trimmed, send: trimmed, previous: null, near: near);
   }
+
+  /// The place IDs the last request left out, so [retry] repeats it exactly
+  /// (an expired search shows its places again; a refine still skips them).
+  List<String> _sentExcluded = const [];
+
+  /// Every place shown so far in this session. The request sends only the
+  /// newest [maxExcluded]; the answer is filtered against all of them.
+  List<String> get _excludeNow => List.unmodifiable(_shown);
 
   Future<void> _run({
     required String display,
     required String send,
     required Map<String, Object?>? previous,
     required SearchLocation near,
+    List<String> exclude = const [],
   }) async {
     final request = ++_request;
+    _sentExcluded = exclude;
     _query = display;
     _sentQuery = send;
     _sentIntent = previous;
@@ -184,13 +220,19 @@ class CravingSearch extends ChangeNotifier {
         near: near,
         previousIntent: previous,
         localHour: _now().hour,
+        excludePlaceIds: exclude.isEmpty
+            ? null
+            : (exclude.length > maxExcluded ? exclude.sublist(exclude.length - maxExcluded) : exclude),
       );
       if (request != _request) return; // a newer search or a reset won
-      final results = answer.results;
+      // Also here, not only on the server: never show a place twice.
+      final results = [for (final r in answer.results) if (!exclude.contains(r.placeId)) r];
+      _noNewPlaces = results.isEmpty && (answer.noNewPlaces || answer.results.isNotEmpty);
       _results = List.unmodifiable(results);
       _intent = answer.intent;
       _searchedAt = _now();
       _status = results.isEmpty ? SearchStatus.exhausted : SearchStatus.showing;
+      _markShown();
     } on PlacesSearchException catch (e) {
       if (request != _request) return;
       _error = e.error;
@@ -204,8 +246,11 @@ class CravingSearch extends ChangeNotifier {
   void next() {
     if (!checkFresh() || _status != SearchStatus.showing) return;
     _rejections++;
+    final id = _results[_index].placeId;
+    if (!_rejected.contains(id)) _rejected.add(id);
     if (_index + 1 < _results.length) {
       _index++;
+      _markShown();
     } else {
       _status = SearchStatus.exhausted;
     }
@@ -244,9 +289,9 @@ class CravingSearch extends ChangeNotifier {
     _messages = List.unmodifiable([..._messages, added]);
     if (intent == null) {
       final combined = '$_query $added';
-      await _run(display: combined, send: combined, previous: null, near: near);
+      await _run(display: combined, send: combined, previous: null, near: near, exclude: _excludeNow);
     } else {
-      await _run(display: '$_query $added', send: added, previous: intent, near: near);
+      await _run(display: '$_query $added', send: added, previous: intent, near: near, exclude: _excludeNow);
     }
   }
 
@@ -254,12 +299,16 @@ class CravingSearch extends ChangeNotifier {
   Future<void> retry() async {
     final near = _near;
     if (near == null || _sentQuery.isEmpty) return;
-    await _run(display: _query, send: _sentQuery, previous: _sentIntent, near: near);
+    // The same request, but never a place said No to since it was sent.
+    final exclude = [..._sentExcluded, for (final id in _rejected) if (!_sentExcluded.contains(id)) id];
+    await _run(display: _query, send: _sentQuery, previous: _sentIntent, near: near, exclude: exclude);
   }
 
   /// Back to no search. A search still in flight is dropped.
   void reset() {
     _request++;
+    _shown.clear();
+    _rejected.clear();
     _status = SearchStatus.idle;
     _query = '';
     _messages = const [];
