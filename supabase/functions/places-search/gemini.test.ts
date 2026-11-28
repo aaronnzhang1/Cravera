@@ -299,6 +299,15 @@ test("a relaxed retry that fails is a 502, not an empty answer", async () => {
   }
 });
 
+test("a priced batch our filters empty (closed, outside the circle) is never retried", async () => {
+  const far = place("far", { location: { latitude: 40, longitude: -100 } });
+  const closed = place("closed", { currentOpeningHours: { openNow: false } });
+  const g = fakeGoogle([new Response(JSON.stringify({ places: [far, closed] })), new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer({ ...gymIntent, priceLevels: [1] })]);
+  const res = await handle(request({ query: "cheaper", ...here }), env, g.fn);
+  assert.equal(g.placesCalls().length, 1);
+  assert.deepEqual((await res.json()).results, []);
+});
+
 test("a priced search that finds nothing near the deadline is a 502, not \"nothing open\"", async () => {
   let t = 0;
   const g = fakeGoogle([new Response("{}"), new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer({ ...gymIntent, priceLevels: [1] })]);

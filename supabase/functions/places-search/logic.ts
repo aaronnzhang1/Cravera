@@ -368,17 +368,20 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const priced = intent.priceLevels.length > 0;
   // A priced search leaves time for the relaxed retry it may need.
   const firstTimeout = Math.min(UPSTREAM_TIMEOUT_MS, priced ? left() - MIN_RETRY_MS : left());
-  let found = await searchPlaces(input, intent, env.placesKey, fetchFn, firstTimeout, priced);
-  if (found === null) return json(502, { error: "Search failed. Try again." });
+  let answer = await searchPlaces(input, intent, env.placesKey, fetchFn, firstTimeout, priced);
+  if (answer === null) return json(502, { error: "Search failed. Try again." });
   let price = priced ? "filter" : "none";
-  if (priced && found.length === 0) {
+  // Only Google's own empty answer counts, not places our filters dropped
+  // (closed, outside the circle): the caller controls those too.
+  if (priced && answer.googleEmpty) {
     // No time left to try without the price: say "Try again", never "nothing open".
     if (left() < MIN_RETRY_MS) return json(502, { error: "Search failed. Try again." });
-    found = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
+    answer = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
     // A failed retry can't say "nothing open": let the app offer Try again.
-    if (found === null) return json(502, { error: "Search failed. Try again." });
+    if (answer === null) return json(502, { error: "Search failed. Try again." });
     price = "relaxed";
   }
+  const found = answer.results;
   let results = fresh(found);
   // Open places matched, but the guest has seen them all: say so, rather
   // than "nothing open matched".
@@ -459,7 +462,7 @@ async function searchPlaces(
   fetchFn: FetchFn,
   timeoutMs: number,
   withPrice: boolean,
-): Promise<RestaurantResult[] | null> {
+): Promise<{ results: RestaurantResult[]; googleEmpty: boolean } | null> {
   if (timeoutMs <= 0) return null;
   let upstream: Response;
   try {
@@ -485,7 +488,9 @@ async function searchPlaces(
     return null;
   }
   try {
-    return mapPlaces(await upstream.json(), input);
+    const data = await upstream.json();
+    const raw = (data as { places?: unknown })?.places;
+    return { results: mapPlaces(data, input), googleEmpty: !Array.isArray(raw) || raw.length === 0 };
   } catch {
     console.error("places-search: upstream returned invalid JSON");
     return null;
