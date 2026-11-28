@@ -1,4 +1,4 @@
-# 0006 · A restricted Maps SDK key in the app
+# 0006 · Restricted Maps SDK keys in the app
 
 - **Status:** Accepted (maintainer, 2026-11-27)
 - **Date:** 2026-11-27
@@ -9,7 +9,7 @@ ADR 0003 keeps every Google key out of the app. The Saved hub (TASK-004) needs a
 
 ## Decision
 
-The app holds one Google key: a Maps SDK key, restricted in Google Cloud to the Cravera Android app (package `com.cravera.app` plus the debug and release signing SHA-1s) and the iOS bundle ID, and allowed to call only Maps SDK for Android and Maps SDK for iOS. It lives in the platform config the SDKs read (Android manifest placeholder, iOS `AppDelegate`), filled from a local, untracked file at build time, never from `.env` and never committed. The Places, Places photos and Gemini keys stay server-side (ADR 0003 unchanged for them).
+Each platform build holds one Google key: an Android key restricted to the Cravera Android app (package `com.cravera.app` plus the debug and release signing SHA-1s) and allowed only Maps SDK for Android, and an iOS key restricted to the Cravera bundle ID and allowed only Maps SDK for iOS. Two keys, because a Google key takes only one kind of app restriction (Codex on PR #41). It lives in the platform config the SDKs read (Android manifest placeholder, iOS `AppDelegate`), filled from a local, untracked file at build time, never from `.env` and never committed. The Places, Places photos and Gemini keys stay server-side (ADR 0003 unchanged for them).
 
 ## Alternatives
 
@@ -18,6 +18,6 @@ The app holds one Google key: a Maps SDK key, restricted in Google Cloud to the 
 
 ## Consequences
 
-- The APK/IPA key scan changes: exactly one `AIza…` string is expected (the Maps SDK key), and it must show the app and API restrictions in Google Cloud; any other Google key in the bundle is still a P1.
+- The APK/IPA key scan changes: exactly one `AIza…` string is expected per build (that platform's Maps SDK key), and it must show the app and API restrictions in Google Cloud; any other Google key in the bundle is still a P1.
 - A leaked Maps key can only load maps inside an app signed with our certificate; Street View must stay off.
 - Setting up a new machine needs the local key file (HOW_TO_RUN.md, when TASK-004 adds it).
