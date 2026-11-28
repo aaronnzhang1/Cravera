@@ -216,6 +216,9 @@ void main() {
     expect(const ProfileChange(dietaryPreferences: ['raw meat only']).toColumns(), isNull);
     expect(const ProfileChange(defaultRadiusMeters: 50000).toColumns(), isNull);
     expect(const ProfileChange().toColumns(), isNull, reason: 'nothing to save');
+    // Counted like Postgres char_length: 31 emoji are 31 characters (62 in UTF-16).
+    expect(ProfileChange(displayName: '\u{1F35C}' * 31).toColumns(), isNotNull);
+    expect(ProfileChange(displayName: '\u{1F35C}' * 61).toColumns(), isNull);
   });
 }
 
@@ -258,6 +261,8 @@ void profileScreenTests() {
       expect(find.text(gone), findsNothing);
     }
     expect(find.text(FakeAuth.knownEmail), findsOneWidget);
+    await tester.ensureVisible(find.text('Help'));
+    expect(find.text('Help'), findsOneWidget);
     expect(find.text('5 km'), findsOneWidget, reason: 'the default distance shows');
   });
 

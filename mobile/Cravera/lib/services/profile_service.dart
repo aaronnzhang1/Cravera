@@ -69,12 +69,13 @@ class ProfileChange {
     final out = <String, Object?>{};
     if (displayName != null) {
       final name = displayName!.trim();
-      if (name.isEmpty || name.length > Profile.maxNameLength) return null;
+      // runes: characters as Postgres char_length counts them (an emoji is one).
+      if (name.isEmpty || name.runes.length > Profile.maxNameLength) return null;
       out['display_name'] = name;
     }
     if (homeCity != null) {
       final city = homeCity!.trim();
-      if (city.length > Profile.maxCityLength) return null;
+      if (city.runes.length > Profile.maxCityLength) return null;
       out['home_city'] = city.isEmpty ? null : city;
     }
     if (dietaryPreferences != null) {

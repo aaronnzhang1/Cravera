@@ -251,7 +251,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// True from a tap on Search until its request starts, so a second tap
+  /// while waiting (for the profile, or the place) can't send a second one.
+  bool _starting = false;
+
   Future<void> _startSearch(String prompt) async {
+    if (_starting) return;
+    _starting = true;
+    try {
+      await _startSearchOnce(prompt);
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> _startSearchOnce(String prompt) async {
     if (prompt.isEmpty || AppSessionScope.of(context).search.status == SearchStatus.loading) return;
     final session = AppSessionScope.of(context);
     if (session.locationChanging) {

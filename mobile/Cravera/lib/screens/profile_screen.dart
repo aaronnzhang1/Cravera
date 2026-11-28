@@ -170,7 +170,13 @@ class ProfileScreen extends StatelessWidget {
         ),
         const _SectionLabel('About'),
         Glass(
-          child: _Row(icon: Icons.shield_outlined, title: 'Privacy & data', onTap: () => _showPrivacy(context)),
+          child: Column(
+            children: [
+              _Row(icon: Icons.shield_outlined, title: 'Privacy & data', onTap: () => _showPrivacy(context)),
+              const _RowDivider(),
+              _Row(icon: Icons.help_outline_rounded, title: 'Help', onTap: () => _showHelp(context)),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         if (session.isSignedIn) ...[
@@ -467,8 +473,29 @@ Future<void> _editRadius(BuildContext context, AppSession session) async {
       );
     },
   );
-  if (chosen == null || chosen == current.defaultRadiusMeters || !context.mounted) return;
+  // Saved even if it matches what the sheet showed: an earlier choice may
+  // still be saving, and the last pick must win.
+  if (chosen == null || !context.mounted) return;
   await _saveEdit(context, session, account, ProfileChange(defaultRadiusMeters: chosen));
+}
+
+void _showHelp(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('How Cravera works'),
+      content: const SingleChildScrollView(
+        child: Text(
+          'Type what you\u2019re craving, in your own words. Cravera shows one place that is open now and near you.\n\n'
+          'No shows the next place. Cheaper, Closer and Something else change the search. After a few Nos, '
+          'Narrow it down lets you type more, like \u201cno seafood\u201d.\n\n'
+          'Yes opens directions in your maps app. The place chip at the top sets where to search; '
+          'Search distance in Profile sets how far.',
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK'))],
+    ),
+  );
 }
 
 void _showPrivacy(BuildContext context) {

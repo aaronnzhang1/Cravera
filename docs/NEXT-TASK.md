@@ -4,7 +4,7 @@
 
 **Release:** v0.2.0 · Accounts. TASK-002 is done (all 8 criteria checked in the app, 2026-11-27; see git history of this file). TASK-003 is merged (#30).
 **Approved:** 2026-11-27 (maintainer), as written. Claude may work any criterion below without asking again; anything outside this file's scope still needs approval.
-**Review level:** L2. Screens plus writes to the signed-in person's own `profiles` row through the existing RLS and column grants; no migration, no new dependency, no Edge Function change.
+**Review level:** L3 (raised from L2 after Codex round 3 on PR #35: CONTRIBUTING lists personal data and data isolation as L3). The app now reads and writes personal data (home city, dietary preferences) in the person's own `profiles` row, and closes popups when the account on the device changes. No migration, no new dependency, no Edge Function change: RLS and column grants are TASK-003's.
 
 ## Acceptance criteria
 
