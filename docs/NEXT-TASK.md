@@ -3,7 +3,7 @@
 **Goal.** Saved becomes "a central hub for places you've been to or want to go" (maintainer): a signed-in person's saved places live in their own Supabase rows, sorted into Want to go and Been, grouped by city, on a real Google map, with notes; tapping a place opens the same full page as the smart card. From [the v0.2 plan](plans/v0.2-hub.md) (task 2).
 
 **Release:** v0.2.0 · Accounts. Follows TASK-UI-4 (merged in #40; its four remaining criteria are listed in CURRENT.md and its full spec is in this file's history at a9d8eec).
-**Approved:** pending. Decided by the maintainer (2026-11-27): a real Google map with a restricted Maps SDK key in the app ([ADR 0006](adr/0006-maps-sdk-key-in-app.md)); the list loads only basic facts (Google's cheapest tier) and the full details load when a place is tapped; stay inside the free tiers while testing. The criteria below need the maintainer's OK.
+**Approved:** 2026-11-27 (maintainer: "Ok go for it"), as written, including `google_maps_flutter` and applying the migration after clean reviews. Decided earlier the same day: a real Google map with a restricted Maps SDK key in the app ([ADR 0006](adr/0006-maps-sdk-key-in-app.md)); the list loads only basic facts and the full details load when a place is tapped; stay inside the free tiers while testing. Claude may work any criterion below without asking again; anything outside this file's scope still needs approval.
 **Review level:** L3: a migration with RLS, personal data (what places someone saves, their notes), a Google key in the app, a new Edge Function.
 
 ## What may be stored
