@@ -8,6 +8,10 @@ import 'package:cravera/services/location_service.dart';
 import 'package:cravera/main.dart';
 import 'package:cravera/services/auth_service.dart';
 import 'package:flutter/material.dart';
+import 'package:cravera/models/restaurant.dart';
+import 'package:cravera/services/saved_hub.dart';
+
+import 'support/fake_saved_places.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, AuthRetryableFetchException;
 
@@ -275,16 +279,16 @@ void main() {
 
   testWidgets('when the session ends on the server, this device forgets the person', (tester) async {
     final auth = FakeAuth();
-    final session = AppSession(auth: auth);
+    final session = AppSession(auth: auth, saved: SavedHub(service: FakeSavedPlaces()));
     await _start(tester, session);
     await _signIn(tester, FakeAuth.knownEmail, FakeAuth.knownPassword);
-    session.toggleBookmark(session.suggestedRestaurants.first);
-    expect(session.bookmarks, isNotEmpty);
+    await tester.runAsync(() => session.toggleBookmark(const Restaurant(placeId: 'fake-a', name: 'Test Place')));
+    expect(session.saved.items, isNotEmpty);
 
     auth.expire();
     await _settle(tester);
     expect(session.isSignedIn, isFalse);
-    expect(session.bookmarks, isEmpty, reason: 'the next person on this phone sees nothing of theirs');
+    expect(session.saved.items, isEmpty, reason: 'the next person on this phone sees nothing of theirs');
     expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
   });
 
@@ -302,14 +306,16 @@ void main() {
 
   test('a session that ends while its name is still loading still clears local data', () async {
     final auth = FakeAuth()..nameGate = Completer<String?>();
-    final session = AppSession(auth: auth);
+    final session = AppSession(auth: auth, saved: SavedHub(service: FakeSavedPlaces()));
     expect(await session.signInWithEmail(email: FakeAuth.knownEmail, password: FakeAuth.knownPassword), AuthOutcome.ok);
-    session.toggleBookmark(session.suggestedRestaurants.first);
+    await pumpEventQueue(); // the saved list loads first
+    await session.toggleBookmark(const Restaurant(placeId: 'fake-a', name: 'Test Place'));
+    expect(session.saved.items, isNotEmpty);
 
     auth.expire(); // before the profile lookup answers
     await pumpEventQueue();
     expect(session.isSignedIn, isFalse);
-    expect(session.bookmarks, isEmpty, reason: 'cleared even though no name had loaded');
+    expect(session.saved.items, isEmpty, reason: 'cleared even though no name had loaded');
 
     auth.nameGate!.complete('Old Session Name');
     await pumpEventQueue();

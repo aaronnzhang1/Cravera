@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../core/app_colors.dart';
 import '../core/routes.dart';
 import '../core/session.dart';
+import '../services/saved_places_service.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../widgets/glass.dart';
@@ -16,7 +17,7 @@ class ProfileScreen extends StatelessWidget {
     final session = AppSessionScope.of(context);
     final text = Theme.of(context).textTheme;
     final name = session.isGuest ? 'Guest' : session.displayName;
-    final rated = session.bookmarks.where((r) => session.bookmarkRating(r.placeId) > 0).length;
+    final been = session.saved.byStatus(SavedStatus.been).length;
     final profile = session.profile;
     // Not while a save is on its way: an editor opened now would start from
     // the old value and could undo the change being saved.
@@ -70,13 +71,13 @@ class ProfileScreen extends StatelessWidget {
           children: [
             Expanded(
               child: _Stat(
-                value: '${session.bookmarks.length}',
+                value: '${session.saved.items.length}',
                 label: 'Saved',
                 onTap: () => context.go(AppRoutes.appBookmarks),
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(child: _Stat(value: '$rated', label: 'Rated')),
+            Expanded(child: _Stat(value: '$been', label: 'Been')),
           ],
         ),
         if (session.isGuest) ...[

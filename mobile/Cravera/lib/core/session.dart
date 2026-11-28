@@ -7,12 +7,16 @@ import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/craving_search.dart';
 import '../services/location_service.dart';
+import '../services/saved_hub.dart';
+import '../services/saved_places_service.dart';
 
 class AppSession extends ChangeNotifier {
-  AppSession({this.locationService = const LocationService(), CravingSearch? search, this.auth, this.profiles})
-      : search = search ?? CravingSearch() {
-    // Screens listen to the session, so pass search changes on.
+  AppSession({this.locationService = const LocationService(), CravingSearch? search, this.auth, this.profiles, SavedHub? saved})
+      : search = search ?? CravingSearch(),
+        saved = saved ?? SavedHub() {
+    // Screens listen to the session, so pass search and Saved changes on.
     this.search.addListener(notifyListeners);
+    this.saved.addListener(notifyListeners);
     // Follow sign-in changes from the server too (a stored session that
     // expires, or one restored when the app starts).
     _authChanges = auth?.signedInChanges.listen((_) => _syncAccount());
@@ -54,6 +58,8 @@ class AppSession extends ChangeNotifier {
       _isGuest = false;
       unawaited(_loadDisplayName(id, _nameRequest));
     }
+    // Saved follows the account: the previous person's places are cleared.
+    saved.switchAccount(id);
     if (notify) notifyListeners();
   }
 
@@ -190,6 +196,9 @@ class AppSession extends ChangeNotifier {
   /// [PlacesService].
   final CravingSearch search;
 
+  /// The signed-in person's saved places (TASK-004). Tests pass a fake service.
+  final SavedHub saved;
+
   String? _displayName;
   SearchLocation? _searchLocation;
   LocationProblem? _locationProblem;
@@ -200,48 +209,6 @@ class AppSession extends ChangeNotifier {
   /// replace the user's newer choice, or hand a signed-out user's location
   /// to the next one. Sign out also bumps it.
   int _locationRequest = 0;
-  final List<Restaurant> _bookmarks = [];
-  final Map<String, int> _bookmarkRatings = {};
-
-  final List<Restaurant> _suggested = const [
-    Restaurant(
-      placeId: 'demo_1',
-      name: 'Cedar & Citrus',
-      cuisine: 'Mediterranean',
-      address: '123 Market St',
-      rating: 4.6,
-      priceLevel: 2,
-      distanceMeters: 1200,
-    ),
-    Restaurant(
-      placeId: 'demo_2',
-      name: 'Nori House',
-      cuisine: 'Sushi',
-      address: '88 Pine Ave',
-      rating: 4.7,
-      priceLevel: 3,
-      distanceMeters: 2400,
-    ),
-    Restaurant(
-      placeId: 'demo_3',
-      name: 'Torch & Tacos',
-      cuisine: 'Mexican',
-      address: '42 Sunset Blvd',
-      rating: 4.4,
-      priceLevel: 1,
-      distanceMeters: 900,
-    ),
-    Restaurant(
-      placeId: 'demo_4',
-      name: 'Saffron Spoon',
-      cuisine: 'Indian',
-      address: '7 Oak Lane',
-      rating: 4.5,
-      priceLevel: 2,
-      distanceMeters: 3100,
-    ),
-  ];
-
   bool _isGuest = false;
 
   /// Signed in to a real account (a session exists on this device).
@@ -257,9 +224,6 @@ class AppSession extends ChangeNotifier {
   bool get canEnterApp => isSignedIn || isGuest;
   String get displayName => (_displayName ?? '').trim().isEmpty ? 'there' : _displayName!.trim();
 
-  List<Restaurant> get bookmarks => List.unmodifiable(_bookmarks);
-  List<Restaurant> get suggestedRestaurants => List.unmodifiable(_suggested);
-  int bookmarkRating(String placeId) => _bookmarkRatings[placeId] ?? 0;
 
   /// Where searches happen: the device location or a typed place. Null until found.
   SearchLocation? get searchLocation => _searchLocation;
@@ -400,37 +364,19 @@ class AppSession extends ChangeNotifier {
     _lookingUpPlace = false;
     _locationRequest++;
     search.reset(); // the next user must not see this search
-    // Bookmarks are real places now and aren't tied to an account yet, so
-    // they go too: the next person on this phone must not see them.
-    _bookmarks.clear();
-    _bookmarkRatings.clear();
+    saved.switchAccount(null); // the next person on this phone must not see these
     notifyListeners();
   }
 
-  bool isBookmarked(String placeId) => _bookmarks.any((r) => r.placeId == placeId);
+  /// Whether the signed-in person has saved [placeId].
+  bool isBookmarked(String placeId) => isSignedIn && saved.contains(placeId);
 
-  void toggleBookmark(Restaurant restaurant) {
-    final existingIndex = _bookmarks.indexWhere((r) => r.placeId == restaurant.placeId);
-    if (existingIndex >= 0) {
-      _bookmarks.removeAt(existingIndex);
-      _bookmarkRatings.remove(restaurant.placeId);
-    } else {
-      _bookmarks.add(restaurant);
-    }
-    notifyListeners();
-  }
-
-  void rateBookmark(String placeId, int rating) {
-    if (!isBookmarked(placeId)) return;
-    _bookmarkRatings[placeId] = rating.clamp(0, 5).toInt();
-    notifyListeners();
-  }
-
-  void addDemoBookmarks() {
-    for (final r in _suggested) {
-      if (!isBookmarked(r.placeId)) _bookmarks.add(r);
-    }
-    notifyListeners();
+  /// Saves or unsaves [restaurant] for the signed-in person. Null for guests:
+  /// nothing is saved on the device as if it were (the screen asks them to
+  /// create an account).
+  Future<SavedOutcome?> toggleBookmark(Restaurant restaurant) async {
+    if (!isSignedIn) return null;
+    return saved.contains(restaurant.placeId) ? saved.remove(restaurant.placeId) : saved.add(restaurant.placeId);
   }
 }
 

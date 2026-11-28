@@ -9,6 +9,7 @@ import '../core/constants.dart';
 import '../models/place_details.dart';
 import '../models/restaurant.dart';
 import 'location_service.dart';
+import 'saved_hub.dart' show SavedBasics;
 
 /// What went wrong with a search, so the screen can say something useful.
 enum PlacesSearchError {
@@ -144,6 +145,51 @@ class PlacesService {
       final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
       if (response.statusCode != 200) return null;
       return PlaceDetails.fromJson(jsonDecode(utf8.decode(response.bodyBytes)), placeId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The function that returns fresh basics for saved places (TASK-004).
+  static final savedEndpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/saved-places');
+
+  /// Fresh name, address, city and location for the signed-in person's own
+  /// saved places (the newest 50). No place IDs are sent: the function reads
+  /// the person's rows with [accessToken], so RLS decides. Null when the whole
+  /// request fails; a place Google can't answer for comes back failed.
+  Future<List<SavedBasics>?> savedBasics({required String accessToken}) async {
+    final request = http.Request('POST', savedEndpoint)
+      ..followRedirects = false
+      ..headers.addAll({
+        'Content-Type': 'application/json',
+        'apikey': publishableKey,
+        'Authorization': 'Bearer $accessToken',
+      })
+      ..body = '{}';
+    try {
+      final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
+      if (response.statusCode != 200) return null;
+      final places = (jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>)['places'];
+      if (places is! List) return null;
+      final out = <SavedBasics>[];
+      for (final p in places) {
+        if (p is! Map<String, dynamic>) continue;
+        final id = p['placeId'];
+        if (id is! String || !_placeId.hasMatch(id)) continue;
+        final name = p['name'];
+        final lat = p['latitude'];
+        final lng = p['longitude'];
+        out.add(SavedBasics(
+          placeId: id,
+          name: name is String && name.trim().isNotEmpty ? name.trim() : null,
+          address: p['address'] is String ? p['address'] as String : null,
+          city: p['city'] is String ? p['city'] as String : null,
+          latitude: lat is num && lng is num ? lat.toDouble() : null,
+          longitude: lat is num && lng is num ? lng.toDouble() : null,
+          missing: p['error'] == 'not_found',
+        ));
+      }
+      return out;
     } catch (_) {
       return null;
     }

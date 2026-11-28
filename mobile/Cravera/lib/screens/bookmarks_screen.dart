@@ -1,135 +1,265 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_colors.dart';
+import '../core/routes.dart';
 import '../core/session.dart';
-import '../models/restaurant.dart';
+import '../services/saved_hub.dart';
+import '../services/saved_places_service.dart';
 import '../widgets/glass.dart';
+import '../widgets/saved_map.dart';
 
-class BookmarksScreen extends StatelessWidget {
+/// Saved (TASK-004): the signed-in person's places, in Want to go and Been,
+/// grouped by city. Each place's name and address are fetched fresh when this
+/// screen opens (Google's terms don't allow storing them).
+class BookmarksScreen extends StatefulWidget {
   const BookmarksScreen({super.key});
+
+  @override
+  State<BookmarksScreen> createState() => _BookmarksScreenState();
+}
+
+class _BookmarksScreenState extends State<BookmarksScreen> {
+  SavedStatus _tab = SavedStatus.wantToGo;
+  bool _showMap = false;
+  bool _asked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Once per visit: fresh names and addresses for the saved places.
+    if (_asked) return;
+    final hub = AppSessionScope.of(context).saved;
+    if (hub.status == SavedLoadStatus.loaded) {
+      _asked = true;
+      // Each visit re-reads the stored rows (cheap, our own database) before
+      // the fresh names, so Saved never shows an out-of-date list for long.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await hub.load();
+        await hub.loadBasics();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final session = AppSessionScope.of(context);
-    final bookmarks = session.bookmarks;
-
+    final hub = session.saved;
     final text = Theme.of(context).textTheme;
+    // The list may finish loading after this screen opened.
+    if (!_asked && hub.status == SavedLoadStatus.loaded && hub.items.isNotEmpty) {
+      _asked = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => hub.loadBasics());
+    }
+    final bottom = 24 + MediaQuery.paddingOf(context).bottom;
+
+    if (!session.isSignedIn) {
+      return ListView(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, bottom),
+        children: [
+          const PageHeader(title: 'Saved', subtitle: 'Places you want to try and places you loved.'),
+          _Prompt(
+            icon: Icons.bookmark_add_outlined,
+            title: 'Create an account to save places',
+            body: 'Saved places stay with your account on any phone.',
+            action: FilledButton(onPressed: () => context.go(AppRoutes.signUp), child: const Text('Create account')),
+          ),
+        ],
+      );
+    }
+
+    final places = hub.byStatus(_tab);
+    final groups = <String, List<SavedPlace>>{};
+    for (final p in places) {
+      final b = hub.basics(p.placeId);
+      groups.putIfAbsent(b?.city ?? (b == null && hub.basicsStatus == SavedLoadStatus.loading ? 'Loading…' : 'Other places'), () => []).add(p);
+    }
+
     return ListView(
-      // Bottom padding clears the floating nav bar.
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, bottom),
       children: [
         PageHeader(
           title: 'Saved',
-          subtitle: bookmarks.isEmpty
-              ? 'Places you save show up here.'
-              : '${bookmarks.length} ${bookmarks.length == 1 ? 'place' : 'places'}, rate them to tune your picks',
+          subtitle: hub.items.isEmpty ? 'Places you save show up here.' : '${hub.items.length} ${hub.items.length == 1 ? 'place' : 'places'}',
         ),
-        if (bookmarks.isEmpty)
-          Glass(
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
-            child: Column(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.accentSoft),
-                  child: const Icon(Icons.bookmark_add_outlined, color: AppColors.accent, size: 30),
-                ),
-                const SizedBox(height: 16),
-                Text('Nothing saved yet', style: text.titleLarge),
-                const SizedBox(height: 6),
-                Text(
-                  'Tap the bookmark on a pick you like. Ratings here help Cravera learn your taste.',
-                  textAlign: TextAlign.center,
-                  style: text.bodyMedium?.copyWith(color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 18),
-                OutlinedButton(
-                  onPressed: session.addDemoBookmarks,
-                  child: const Text('Add demo bookmarks'),
-                ),
-              ],
+        SegmentedButton<SavedStatus>(
+          segments: [
+            ButtonSegment(value: SavedStatus.wantToGo, label: Text('Want to go (${hub.byStatus(SavedStatus.wantToGo).length})')),
+            ButtonSegment(value: SavedStatus.been, label: Text('Been (${hub.byStatus(SavedStatus.been).length})')),
+          ],
+          selected: {_tab},
+          onSelectionChanged: (s) => setState(() => _tab = s.first),
+        ),
+        if (mapsAvailable && places.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _showMap = !_showMap),
+              icon: Icon(_showMap ? Icons.view_list_rounded : Icons.map_outlined),
+              label: Text(_showMap ? 'Show list' : 'Show map'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
             ),
+          ),
+        const SizedBox(height: 8),
+        if (hub.status == SavedLoadStatus.loading && hub.items.isEmpty)
+          const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
+        else if (hub.status == SavedLoadStatus.failed && hub.items.isEmpty)
+          _Prompt(
+            icon: Icons.cloud_off_rounded,
+            title: "Couldn't load your saved places",
+            body: 'Check your connection and try again.',
+            action: OutlinedButton(onPressed: hub.load, child: const Text('Try again')),
           )
-        else
-          for (final r in bookmarks)
+        else if (places.isEmpty)
+          _Prompt(
+            icon: _tab == SavedStatus.wantToGo ? Icons.bookmark_add_outlined : Icons.check_circle_outline_rounded,
+            title: _tab == SavedStatus.wantToGo ? 'Nothing saved yet' : 'No places marked as been',
+            body: _tab == SavedStatus.wantToGo
+                ? 'Tap the bookmark on a pick you like.'
+                : 'Open a saved place and mark it as Been after you go.',
+          )
+        else if (_showMap && mapsAvailable)
+          SavedMap(places: places, hub: hub, onOpen: (p) => _openPlace(context, p))
+        else ...[
+          if (hub.basicsStatus == SavedLoadStatus.failed)
             Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _BookmarkCard(
-                restaurant: r,
-                userRating: session.bookmarkRating(r.placeId),
-                onRate: (rating) => session.rateBookmark(r.placeId, rating),
-                onRemove: () => session.toggleBookmark(r),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(child: Text("Couldn't load place names.", style: text.bodyMedium?.copyWith(color: AppColors.textSecondary))),
+                  TextButton(onPressed: hub.loadBasics, child: const Text('Try again')),
+                ],
               ),
             ),
+          for (final entry in groups.entries) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+              child: Text(entry.key, style: text.titleMedium),
+            ),
+            for (final p in entry.value)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _SavedRow(place: p, basics: hub.basics(p.placeId), onTap: () => _openPlace(context, p)),
+              ),
+          ],
+          // Places data outside a Google map needs Google's credit.
+          Padding(
+            padding: const EdgeInsets.only(top: 12, left: 4),
+            child: Semantics(
+              label: 'Google Maps',
+              image: true,
+              excludeSemantics: true,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Image.asset('assets/images/google_maps_logo.png', height: 16, fit: BoxFit.contain),
+              ),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  void _openPlace(BuildContext context, SavedPlace place) {
+    final hub = AppSessionScope.of(context).saved;
+    showModalBottomSheet<void>(
+      context: context,
+      // Above the floating nav bar, so its buttons are never covered.
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.background,
+      builder: (context) => ListenableBuilder(
+        listenable: hub,
+        builder: (context, _) {
+          // The place may have been removed (or the account changed) meanwhile.
+          final current = hub.items.where((p) => p.placeId == place.placeId).firstOrNull;
+          if (current == null) return const SizedBox(height: 120, child: Center(child: Text('This place is no longer saved.')));
+          return _SavedSheet(place: current, basics: hub.basics(current.placeId), hub: hub);
+        },
+      ),
     );
   }
 }
 
-class _BookmarkCard extends StatelessWidget {
-  final Restaurant restaurant;
-  final int userRating;
-  final ValueChanged<int> onRate;
-  final VoidCallback onRemove;
-
-  const _BookmarkCard({
-    required this.restaurant,
-    required this.userRating,
-    required this.onRate,
-    required this.onRemove,
-  });
+class _Prompt extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+  final Widget? action;
+  const _Prompt({required this.icon, required this.title, required this.body, this.action});
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Glass(
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.accentSoft),
+            child: Icon(icon, color: AppColors.accent, size: 30),
+          ),
+          const SizedBox(height: 16),
+          Text(title, style: text.titleLarge, textAlign: TextAlign.center),
+          const SizedBox(height: 6),
+          Text(body, textAlign: TextAlign.center, style: text.bodyMedium?.copyWith(color: AppColors.textMuted)),
+          if (action != null) ...[const SizedBox(height: 18), action!],
+        ],
+      ),
+    );
+  }
+}
+
+class _SavedRow extends StatelessWidget {
+  final SavedPlace place;
+  final SavedBasics? basics;
+  final VoidCallback onTap;
+  const _SavedRow({required this.place, required this.basics, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final b = basics;
+    final hub = AppSessionScope.of(context).saved;
+    final title = b == null
+        ? (hub.basicsStatus == SavedLoadStatus.loading || hub.basicsStatus == SavedLoadStatus.idle
+            ? 'Loading…'
+            : 'Name not loaded: Saved shows names for your newest ${SavedHub.maxPlaces} places')
+        : b.missing
+            ? 'No longer on Google Maps'
+            : b.name ?? "Couldn't load this place";
+    return Glass(
+      padding: EdgeInsets.zero,
       child: InkWell(
-        onTap: () => _showBookmarkDetails(context, restaurant),
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border, width: 1),
-                  ),
-                  child: restaurant.photoUrl == null || restaurant.photoUrl!.trim().isEmpty
-                      ? const Icon(Icons.restaurant_rounded, color: AppColors.textSecondary, size: 24)
-                      : Image.network(restaurant.photoUrl!, fit: BoxFit.cover),
-                ),
-              ),
-              const SizedBox(width: 10),
+              Icon(place.status == SavedStatus.been ? Icons.check_circle_rounded : Icons.bookmark_rounded,
+                  color: place.status == SavedStatus.been ? AppColors.sage : AppColors.accent),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      restaurant.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    _RatingControl(
-                      value: userRating,
-                      onChanged: onRate,
-                    ),
+                    Text(title, style: text.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (b?.address != null)
+                      Text(b!.address!, style: text.bodySmall?.copyWith(color: AppColors.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    if (place.note != null) ...[
+                      const SizedBox(height: 4),
+                      Text(place.note!, style: text.bodyMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
-              GlassIconButton(
-                icon: Icons.bookmark_remove_rounded,
-                tooltip: 'Remove',
-                onPressed: onRemove,
-              ),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
             ],
           ),
         ),
@@ -138,267 +268,107 @@ class _BookmarkCard extends StatelessWidget {
   }
 }
 
-Future<void> _showBookmarkDetails(BuildContext context, Restaurant restaurant) {
-  final distanceLabel = restaurant.distanceMeters == null ? null : '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km away';
-  final priceLabel = restaurant.priceLevel == null ? null : '\$' * restaurant.priceLevel!.clamp(1, 4);
+/// A saved place: move it between Want to go and Been, edit its note, open it
+/// in Google Maps, or remove it. Every change is confirmed by the server
+/// before it shows; a failure says so and keeps the old state.
+class _SavedSheet extends StatefulWidget {
+  final SavedPlace place;
+  final SavedBasics? basics;
+  final SavedHub hub;
+  const _SavedSheet({required this.place, required this.basics, required this.hub});
 
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
-    builder: (context) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.surface2,
-                border: Border.all(color: AppColors.border, width: 1),
-              ),
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: AppColors.border,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          restaurant.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        icon: const Icon(Icons.close_rounded),
-                        color: AppColors.textSecondary,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _RestaurantPhoto(photoUrl: restaurant.photoUrl),
-                  const SizedBox(height: 14),
-                  _DetailGrid(
-                    items: [
-                      _DetailItem(icon: Icons.star_rounded, label: 'Rating', value: restaurant.rating == null ? 'Not listed' : '${restaurant.rating!.toStringAsFixed(1)}/5'),
-                      _DetailItem(icon: Icons.place_rounded, label: 'Distance', value: distanceLabel ?? 'Not listed'),
-                      _DetailItem(icon: Icons.local_dining_rounded, label: 'Cuisine', value: restaurant.cuisine ?? 'Not listed'),
-                      _DetailItem(icon: Icons.attach_money_rounded, label: 'Price', value: priceLabel ?? 'Not listed'),
-                    ],
-                  ),
-                  if ((restaurant.address ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _AddressRow(address: restaurant.address!.trim()),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    },
-  );
+  @override
+  State<_SavedSheet> createState() => _SavedSheetState();
 }
 
-class _RatingControl extends StatelessWidget {
-  final int value;
-  final ValueChanged<int> onChanged;
+class _SavedSheetState extends State<_SavedSheet> {
+  late final TextEditingController _note = TextEditingController(text: widget.place.note ?? '');
+  bool _busy = false;
+  String? _message;
 
-  const _RatingControl({
-    required this.value,
-    required this.onChanged,
-  });
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<SavedOutcome> Function() call, {bool closeOnOk = false}) async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    final outcome = await call();
+    if (!mounted) return;
+    if (outcome == SavedOutcome.ok && closeOnOk) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _message = outcome == SavedOutcome.ok ? 'Saved.' : savedMessage(outcome);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final normalizedValue = value.clamp(0, 5).toInt();
-
-    return PopupMenuButton<int>(
-      onSelected: onChanged,
-      color: AppColors.surface2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.border),
-      ),
-      itemBuilder: (context) {
-        return [
-          for (var rating = 1; rating <= 5; rating++)
-            PopupMenuItem<int>(
-              value: rating,
-              child: Text('$rating/5'),
-            ),
-        ];
-      },
-      child: Container(
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: normalizedValue == 0 ? AppColors.surface2 : AppColors.accent.withValues(alpha: 0.75),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.border, width: 1),
-        ),
-        child: Row(
+    final text = Theme.of(context).textTheme;
+    final p = widget.place;
+    final b = widget.basics;
+    final maps = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeQueryComponent(b?.name ?? 'Google')}&query_place_id=${p.placeId}');
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              normalizedValue == 0 ? Icons.keyboard_arrow_down_rounded : Icons.star_rounded,
-              size: 16,
-              color: normalizedValue == 0 ? AppColors.textMuted : AppColors.textPrimary,
+            Text(b?.name ?? 'Saved place', style: text.headlineSmall),
+            if (b?.address != null) Text(b!.address!, style: text.bodyMedium?.copyWith(color: AppColors.textMuted)),
+            const SizedBox(height: 16),
+            SegmentedButton<SavedStatus>(
+              segments: const [
+                ButtonSegment(value: SavedStatus.wantToGo, label: Text('Want to go')),
+                ButtonSegment(value: SavedStatus.been, label: Text('Been')),
+              ],
+              selected: {p.status},
+              onSelectionChanged: _busy ? null : (s) => _run(() => widget.hub.setStatus(p.placeId, s.first)),
             ),
-            const SizedBox(width: 6),
-            Text(
-              normalizedValue == 0 ? 'Rate' : 'You $normalizedValue/5',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: normalizedValue == 0 ? AppColors.textMuted : AppColors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _note,
+              enabled: !_busy,
+              maxLength: SavedPlace.maxNoteLength,
+              maxLines: 3,
+              minLines: 1,
+              decoration: const InputDecoration(labelText: 'Your note', hintText: 'What to order, who to bring…'),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _busy ? null : () => _run(() => widget.hub.setNote(p.placeId, _note.text)),
+                child: const Text('Save note'),
+              ),
+            ),
+            if (_message != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Semantics(liveRegion: true, child: Text(_message!, style: text.bodyMedium?.copyWith(color: AppColors.textSecondary))),
+              ),
+            OutlinedButton.icon(
+              onPressed: () => launchUrl(maps, mode: LaunchMode.externalApplication),
+              icon: const Icon(Icons.map_outlined),
+              label: const Text('Open in Google Maps'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _busy ? null : () => _run(() => widget.hub.remove(p.placeId), closeOnOk: true),
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+              label: const Text('Remove from Saved', style: TextStyle(color: AppColors.danger)),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RestaurantPhoto extends StatelessWidget {
-  final String? photoUrl;
-
-  const _RestaurantPhoto({required this.photoUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        height: 160,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border, width: 1),
-        ),
-        child: photoUrl == null || photoUrl!.trim().isEmpty
-            ? const Center(
-                child: Icon(Icons.restaurant_rounded, color: AppColors.textSecondary, size: 44),
-              )
-            : Image.network(photoUrl!, fit: BoxFit.cover),
-      ),
-    );
-  }
-}
-
-class _DetailItem {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _DetailItem({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-}
-
-class _DetailGrid extends StatelessWidget {
-  final List<_DetailItem> items;
-
-  const _DetailGrid({required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisExtent: 78,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border, width: 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  Icon(item.icon, size: 16, color: AppColors.textSecondary),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                item.value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AddressRow extends StatelessWidget {
-  final String address;
-
-  const _AddressRow({required this.address});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.location_on_rounded, size: 18, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              address,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-            ),
-          ),
-        ],
       ),
     );
   }

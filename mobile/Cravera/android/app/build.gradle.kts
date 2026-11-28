@@ -1,3 +1,12 @@
+import java.util.Properties
+
+// The Maps SDK key (ADR 0006) comes from the git-ignored local.properties,
+// never from .env or the repo. Without it the app builds, but maps stay blank.
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -28,6 +37,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("MAPS_ANDROID_API_KEY") ?: ""
     }
 
     buildTypes {

@@ -399,21 +399,20 @@ void main() {
     expect(places.queries, ['ramen']);
   });
 
-  testWidgets('sign out clears the search and saved places', (tester) async {
+  testWidgets('a guest bookmark asks for an account and saves nothing; sign out clears the search', (tester) async {
     final session = await _homeWith(tester, FakePlaces((_) => [_place('a', 'Test Noodle House')]));
     await _searchFor(tester, 'ramen');
     expect(session.search.status, SearchStatus.showing);
     await tester.tap(find.byTooltip('Bookmark'));
     await _settle(tester);
-    session.rateBookmark('a', 4);
-    expect(session.bookmarks, hasLength(1));
+    expect(find.text('Create an account to save places.'), findsOneWidget);
+    expect(session.isBookmarked('a'), isFalse);
+    expect(session.saved.items, isEmpty);
 
     session.signOut();
     await _settle(tester);
     expect(session.search.status, SearchStatus.idle);
     expect(session.search.query, isEmpty);
-    expect(session.bookmarks, isEmpty, reason: 'the next person must not see saved places');
-    expect(session.bookmarkRating('a'), 0);
   });
 
   testWidgets('a too-long craving says so and offers no pointless retry', (tester) async {
@@ -466,7 +465,7 @@ void main() {
 
     // Time passes with no tap; something else redraws Home.
     now = now.add(const Duration(minutes: 20));
-    session.toggleBookmark(_place('z', 'Other'));
+    session.continueAsGuest(); // any change that redraws Home
     await _settle(tester);
     expect(find.text('These results are out of date.'), findsOneWidget);
     expect(session.search.status, SearchStatus.expired);
