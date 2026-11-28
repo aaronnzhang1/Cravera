@@ -300,7 +300,7 @@ test("a relaxed retry that fails is a 502, not an empty answer", async () => {
 });
 
 test("a malformed Places answer is a failure, never an empty result or a reason to retry", async () => {
-  for (const bad of ["null", "[]", JSON.stringify({ places: "none" }), JSON.stringify({ error: { code: 500 } }), JSON.stringify({ places: [null] })]) {
+  for (const bad of ["null", "[]", JSON.stringify({ places: "none" }), JSON.stringify({ error: { code: 500 } }), JSON.stringify({ places: [null] }), JSON.stringify({ places: [], error: { code: 500 } })]) {
     // On the priced attempt: no retry, 502.
     const g = fakeGoogle([new Response(bad), new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer({ ...gymIntent, priceLevels: [1] })]);
     const res = await handle(request({ query: "cheaper", ...here }), env, g.fn);

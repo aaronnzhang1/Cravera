@@ -496,7 +496,10 @@ async function searchPlaces(
     // Empty is exactly {} or { places: [] }: an object with other keys and no
     // places (an error envelope) is a failure, and so is any entry that isn't
     // an object.
-    if (raw === undefined && Object.keys(data).length > 0) throw new Error("no places field");
+    if ("error" in data) throw new Error("error envelope");
+    if ((raw === undefined || (Array.isArray(raw) && raw.length === 0)) && Object.keys(data).some((k) => k !== "places")) {
+      throw new Error("unexpected empty shape");
+    }
     if (raw !== undefined && !Array.isArray(raw)) throw new Error("places is not a list");
     if (Array.isArray(raw) && raw.some((p) => typeof p !== "object" || p === null || Array.isArray(p))) throw new Error("bad entry");
     return { results: mapPlaces(data, input), googleEmpty: raw === undefined || raw.length === 0 };
