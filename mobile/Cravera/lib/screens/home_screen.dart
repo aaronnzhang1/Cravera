@@ -12,6 +12,7 @@ import '../services/places_service.dart';
 import '../widgets/cravera_logo.dart';
 import '../widgets/floating_cards.dart';
 import '../widgets/glass.dart';
+import '../widgets/place_details_section.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -757,6 +758,8 @@ class _PickView extends StatelessWidget {
                           // Places data shown outside a Google map needs this credit,
                           // styled per Google's text-attribution rules.
                           const _GoogleMapsCredit(),
+                          // TASK-UI-4: more about the place, loaded only when asked for.
+                          PlaceDetailsSection(search: session.search),
                         ],
                       ),
                     ),

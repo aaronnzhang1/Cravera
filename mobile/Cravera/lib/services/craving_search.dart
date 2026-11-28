@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/place_details.dart';
 import '../models/restaurant.dart';
 import 'location_service.dart';
 import 'places_service.dart';
@@ -150,6 +151,36 @@ class CravingSearch extends ChangeNotifier {
     }
   }
 
+  /// Details for places the guest opened, by place ID (TASK-UI-4). Loaded
+  /// only on open, never during search, so the pricier Places fields are
+  /// paid for only when someone wants them.
+  final Map<String, DetailsLoad> _details = {};
+
+  /// The details of [current], or null if the guest hasn't opened it.
+  DetailsLoad? get currentDetails {
+    final place = current;
+    return place == null ? null : _details[place.placeId];
+  }
+
+  /// Opens [current]'s details: loads them once, or again after a failure
+  /// (Try again). A late answer from an older search is dropped.
+  void openDetails() {
+    final service = places;
+    final place = current;
+    if (place == null || service == null) return;
+    final id = place.placeId;
+    final existing = _details[id];
+    if (existing != null && existing.status != DetailsStatus.failed) return;
+    _details[id] = const DetailsLoad(DetailsStatus.loading);
+    notifyListeners();
+    final request = _request;
+    service.details(id).then((details) {
+      if (request != _request) return;
+      _details[id] = details == null ? const DetailsLoad(DetailsStatus.failed) : DetailsLoad(DetailsStatus.loaded, details);
+      notifyListeners();
+    });
+  }
+
   /// True when the craving is longer than the server accepts.
   bool get queryTooLong => _sentQuery.length > maxQueryLength;
 
@@ -205,6 +236,7 @@ class CravingSearch extends ChangeNotifier {
     _searchedAt = null;
     _photos.clear(); // photo links are short-lived; each search starts fresh
     _avatars.clear();
+    _details.clear();
     if (send.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
@@ -328,6 +360,7 @@ class CravingSearch extends ChangeNotifier {
     _searchedAt = null;
     _photos.clear();
     _avatars.clear();
+    _details.clear();
     notifyListeners();
   }
 
@@ -336,4 +369,15 @@ class CravingSearch extends ChangeNotifier {
     _status = SearchStatus.failed;
     notifyListeners();
   }
+}
+
+enum DetailsStatus { loading, loaded, failed }
+
+/// Where loading one place's details stands.
+class DetailsLoad {
+  final DetailsStatus status;
+
+  /// Set when [status] is [DetailsStatus.loaded].
+  final PlaceDetails? details;
+  const DetailsLoad(this.status, [this.details]);
 }

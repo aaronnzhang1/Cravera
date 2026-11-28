@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/constants.dart';
+import '../models/place_details.dart';
 import '../models/restaurant.dart';
 import 'location_service.dart';
 
@@ -113,6 +114,30 @@ class PlacesService {
   Future<Uint8List?> avatarBytes(String avatarUri) async {
     if (!isSafePhotoUri(avatarUri)) return null;
     return _downloadImage(Uri.parse(avatarUri), maxAvatarBytes);
+  }
+
+  /// The function that returns one place's details for the smart card.
+  static final detailsEndpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/place-details');
+
+  /// Only Places place IDs are sent, matching what the function accepts.
+  static final _placeId = RegExp(r'^[A-Za-z0-9_-]{1,300}$');
+
+  /// Details for [placeId] (photos, reviews, summaries, attributes, links),
+  /// asked for only when the guest opens the card. Null on any failure: the
+  /// card then keeps its search facts and offers Try again.
+  Future<PlaceDetails?> details(String placeId) async {
+    if (!_placeId.hasMatch(placeId)) return null;
+    final request = http.Request('POST', detailsEndpoint)
+      ..followRedirects = false
+      ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
+      ..body = jsonEncode({'placeId': placeId});
+    try {
+      final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
+      if (response.statusCode != 200) return null;
+      return PlaceDetails.fromJson(jsonDecode(utf8.decode(response.bodyBytes)), placeId);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Downloads an image from [link] without following redirects, reading at

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:cravera/models/place_details.dart';
 import 'package:cravera/models/restaurant.dart';
 import 'package:cravera/services/craving_search.dart';
 import 'package:cravera/services/location_service.dart';
@@ -65,6 +66,16 @@ class FakePlaces extends PlacesService {
   Future<Uint8List?> photoBytes(String photoName) async {
     photoRequests.add(photoName);
     return photo?.call(photoName);
+  }
+
+  /// Answers details requests; null (failed) when not set.
+  FutureOr<PlaceDetails?> Function(String placeId)? detailsAnswer;
+  final detailRequests = <String>[];
+
+  @override
+  Future<PlaceDetails?> details(String placeId) async {
+    detailRequests.add(placeId);
+    return detailsAnswer?.call(placeId);
   }
 }
 
@@ -383,5 +394,55 @@ void main() {
 
     expect(places.queries, ['tacos', 'no seafood', 'no seafood']);
     expect(places.previousIntents.last, {'textQuery': 'tacos'});
+  });
+
+  group('details (TASK-UI-4)', () {
+    test('a search and No make no details request; opening asks once', () async {
+      final places = FakePlaces((_) => [place('a'), place('b')])
+        ..detailsAnswer = (id) => PlaceDetails(placeId: id, editorialSummary: 'Fictional summary');
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.next();
+      expect(places.detailRequests, isEmpty);
+      expect(search.currentDetails, isNull);
+
+      search.openDetails();
+      expect(search.currentDetails!.status, DetailsStatus.loading);
+      search.openDetails(); // a second tap while loading sends nothing
+      await pumpEventQueue();
+      expect(places.detailRequests, ['b']);
+      expect(search.currentDetails!.status, DetailsStatus.loaded);
+      expect(search.currentDetails!.details!.editorialSummary, 'Fictional summary');
+      search.openDetails(); // already loaded: nothing new
+      expect(places.detailRequests, ['b']);
+    });
+
+    test('a failed load can be tried again', () async {
+      final places = FakePlaces((_) => [place('a')]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.openDetails();
+      await pumpEventQueue();
+      expect(search.currentDetails!.status, DetailsStatus.failed);
+
+      places.detailsAnswer = (id) => PlaceDetails(placeId: id);
+      search.openDetails();
+      await pumpEventQueue();
+      expect(places.detailRequests, ['a', 'a']);
+      expect(search.currentDetails!.status, DetailsStatus.loaded);
+    });
+
+    test('details that arrive after a new search or reset are dropped', () async {
+      final gate = Completer<PlaceDetails?>();
+      final places = FakePlaces((_) => [place('a')])..detailsAnswer = (_) => gate.future;
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.openDetails();
+      search.reset();
+      await search.start('tacos', here);
+      gate.complete(const PlaceDetails(placeId: 'a'));
+      await pumpEventQueue();
+      expect(search.currentDetails, isNull);
+    });
   });
 }
