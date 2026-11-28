@@ -24,9 +24,18 @@ Tick a box only after checking it in the running app with real data. Never delet
 - [ ] Function tests (input validation, publishable-key and caller checks, field mask is Essentials only, no logging of place IDs with a user); `flutter analyze` and `flutter test` pass, with tests for each state (empty, loading, loaded, a failed row, guest) and the accessibility guidelines at 1x and 2x text.
 - [ ] Checked in the app on Android and iPhone with real saved places; the built app's key scan finds only the restricted Maps SDK key.
 
+## Open decision (found while building, 2026-11-27)
+
+The list criterion says "basic Place Details fields (Google's Essentials tier)", but Google bills a place's **name** (`displayName`) in the **Pro** tier; Essentials has only address, location and address parts (Codex on PR #41 found the same). Both ways below stay inside a free monthly allowance; the maintainer asked to stay free:
+
+- **Pro for the list:** name + address + location, about 5,000 free a month (about 160 a day), then $17 per 1,000; a daily Pro quota keeps it free.
+- **Essentials for the list:** address and location only (about 10,000 free a month); the name shows after a tap (the full page).
+
+Until the maintainer picks, the list criterion isn't worked; the rest is.
+
 ## Needs from the maintainer before building
 
-1. Create the Maps SDK key in Google Cloud Console and restrict it (Android: package `com.cravera.app` with the debug SHA-1, which Claude will print; iOS: bundle ID; APIs: Maps SDK for Android and iOS only). Put it in a local file Claude names, not in chat.
+1. Create two Maps SDK keys in Google Cloud Console (a key takes one kind of app restriction): an Android key (package `com.cravera.app`, debug SHA-1 `E5:1C:1B:BE:54:88:19:82:6F:93:07:80:3B:BB:0C:A3:88:8A:6D:E5`; API: Maps SDK for Android only) and an iOS key (bundle ID; API: Maps SDK for iOS only). Put them in a local file Claude names, not in chat.
 2. A daily quota on Place Details Essentials (for example 300/day; about 10,000 a month are free).
 3. OK to add `google_maps_flutter` (official Flutter plugin) and to apply the migration after review.
 
