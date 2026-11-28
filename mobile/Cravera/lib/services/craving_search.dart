@@ -251,9 +251,11 @@ class CravingSearch extends ChangeNotifier {
 
   /// The opened card's gallery: the search photo first whenever the pick
   /// has one (so opening the card never loses a photo that already shows),
-  /// then the other details photos, no more photos than the details sent
-  /// (at most 5). The order depends only on the names, never on what has
+  /// then the other details photos, at most [maxGallery] in all. The order depends only on the names, never on what has
   /// loaded, so pages don't move while the guest swipes.
+  /// The most photos the gallery shows (TASK-UI-4).
+  static const maxGallery = 5;
+
   List<DetailPhoto> get currentGallery {
     final place = current;
     final photos = currentDetails?.details?.photos ?? const <DetailPhoto>[];
@@ -264,7 +266,7 @@ class CravingSearch extends ChangeNotifier {
     final first = same.isNotEmpty
         ? same.first
         : DetailPhoto(name: name, authors: place.photoCredits, mapsUri: place.photoMapsUri);
-    return [first, ...photos.where((p) => p.name != name)].take(photos.length).toList();
+    return [first, ...photos.where((p) => p.name != name)].take(maxGallery).toList();
   }
 
   /// The gallery photo [name] arrived but can't be shown (not a readable

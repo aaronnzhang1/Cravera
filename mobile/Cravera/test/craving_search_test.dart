@@ -505,7 +505,7 @@ void main() {
       expect(search.galleryPhoto('places/a/photos/p1'), isNotNull);
     });
 
-    test('opening keeps the search photo first, with its own credit, within the details count', () async {
+    test('opening keeps the search photo first, with its own credit, and every details photo', () async {
       const credit = PhotoAuthor(name: 'Search Author');
       final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0', photoAuthors: const [credit]);
       final places = FakePlaces((_) => [first])
@@ -517,7 +517,7 @@ void main() {
       expect(search.currentGallery, isEmpty); // not opened
       search.openDetails();
       await pumpEventQueue();
-      expect(search.currentGallery.map((p) => p.name), ['places/a/photos/p0', 'places/a/photos/p1']);
+      expect(search.currentGallery.map((p) => p.name), ['places/a/photos/p0', 'places/a/photos/p1', 'places/a/photos/p2']);
       expect(search.currentGallery.first.authors.single.name, 'Search Author');
     });
   });
