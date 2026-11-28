@@ -172,7 +172,37 @@ void main() {
       expect(await session.updateProfile(const ProfileChange(homeCity: 'Berkeley')), answer);
       expect(session.profile, before);
     }
-    expect(profileSaveMessage(ProfileSaveOutcome.network), contains('old setting is kept'));
+    expect(profileSaveMessage(ProfileSaveOutcome.failed), contains('old setting is kept'));
+  });
+
+  test('a save whose answer was lost shows what was actually stored', () async {
+    await signIn();
+    // The row was updated, but the answer never arrived.
+    profiles.saveAnswer = ProfileSaveOutcome.network;
+    profiles.rows[_me] = const Profile(displayName: 'Test Diner', defaultRadiusMeters: 2000);
+    expect(await session.updateProfile(const ProfileChange(defaultRadiusMeters: 2000)), ProfileSaveOutcome.network);
+    expect(session.profile?.defaultRadiusMeters, 2000);
+    expect(session.search.radiusMeters, 2000, reason: 'search uses what is stored');
+  });
+
+  test('a save still pending from the previous account neither locks nor delays the next', () async {
+    await signIn();
+    final firstGate = Completer<void>();
+    profiles.saveGate = firstGate;
+    final pending = session.updateProfile(const ProfileChange(displayName: 'First Person'));
+    await pumpEventQueue();
+    expect(session.profileSaving, isTrue);
+    auth.switchTo('other@example.test');
+    await pumpEventQueue();
+    expect(session.profileSaving, isFalse, reason: 'the new account can edit right away');
+    profiles.saveGate = null;
+    expect(await session.updateProfile(const ProfileChange(homeCity: 'Oakland')), ProfileSaveOutcome.ok);
+    expect(session.profile?.homeCity, 'Oakland');
+    // The old save finishing later changes nothing for the new account.
+    firstGate.complete();
+    await pending;
+    expect(session.profileSaving, isFalse);
+    expect(session.profile?.displayName, isNot('First Person'));
   });
 
   test('an invalid name is refused before anything is sent', () async {

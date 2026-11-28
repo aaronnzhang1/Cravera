@@ -138,8 +138,11 @@ class AppSession extends ChangeNotifier {
       return await _save(service, account, generation, change);
     } finally {
       done.complete();
-      _savesInFlight--;
-      notifyListeners();
+      // An account change reset the counter; an old save can't touch it.
+      if (_accountGeneration == generation) {
+        _savesInFlight--;
+        notifyListeners();
+      }
     }
   }
 
@@ -154,6 +157,18 @@ class AppSession extends ChangeNotifier {
   Future<ProfileSaveOutcome> _save(ProfileService service, String account, int generation, ProfileChange change) async {
     final (outcome, stored) = await service.save(account, change);
     if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
+    if (outcome == ProfileSaveOutcome.network) {
+      // The answer was lost, but the row may have been saved: show what is
+      // stored now (settings and search distance), if it can be read.
+      final now = await service.load(account);
+      if (now != null && _accountId == account && _accountGeneration == generation) {
+        _profile = now;
+        _displayName = now.displayName;
+        search.radiusMeters = now.defaultRadiusMeters;
+        notifyListeners();
+      }
+      return ProfileSaveOutcome.network;
+    }
     if (outcome != ProfileSaveOutcome.ok || stored == null) return outcome == ProfileSaveOutcome.ok ? ProfileSaveOutcome.failed : outcome;
     _profile = stored;
     _displayName = stored.displayName;
@@ -367,6 +382,9 @@ class AppSession extends ChangeNotifier {
     _displayName = null;
     _profile = null;
     _profileLoadFailed = false;
+    // A save from the previous person neither delays nor locks the next one's.
+    _saving = Future.value();
+    _savesInFlight = 0;
     _profileLoad = null;
     search.radiusMeters = null;
     _isGuest = false;

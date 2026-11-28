@@ -96,7 +96,7 @@ enum ProfileSaveOutcome { ok, invalid, network, failed }
 String profileSaveMessage(ProfileSaveOutcome outcome) => switch (outcome) {
       ProfileSaveOutcome.ok => 'Saved.',
       ProfileSaveOutcome.invalid => 'Names need 1 to 60 characters, and a home city up to 80.',
-      ProfileSaveOutcome.network => 'Couldn’t save: no connection. Your old setting is kept.',
+      ProfileSaveOutcome.network => 'Couldn’t confirm the save: no connection. Showing your settings as last saved.',
       ProfileSaveOutcome.failed => 'Couldn’t save right now. Your old setting is kept.',
     };
 
