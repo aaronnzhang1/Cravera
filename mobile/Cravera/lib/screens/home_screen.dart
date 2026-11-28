@@ -1444,72 +1444,122 @@ class _PhotoArea extends StatefulWidget {
 class _PhotoAreaState extends State<_PhotoArea> {
   int _page = 0;
 
-  List<DetailPhoto> get _gallery => widget.search.currentDetails?.details?.photos ?? const [];
+  @override
+  Widget build(BuildContext context) {
+    final search = widget.search;
+    final gallery = search.currentGallery;
+    final r = widget.restaurant;
+    if (gallery.isEmpty) {
+      final credit = widget.photo != null && (r.photoCredits.isNotEmpty || r.photoMapsUri != null)
+          ? _PhotoCredit(authors: r.photoCredits, avatar: search.avatar, mapsUri: r.photoMapsUri)
+          : null;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: widget.height,
+            child: Stack(fit: StackFit.expand, children: [_PhotoHeader(photo: widget.photo), ...widget.overlays]),
+          ),
+          // Google requires crediting every photo author (avatar, name,
+          // profile link) and a link to the photo on Maps. Directly under the
+          // photo, so any number of credits can wrap without covering controls.
+          if (credit != null) Padding(padding: const EdgeInsets.fromLTRB(14, 2, 14, 0), child: credit),
+        ],
+      );
+    }
+    final page = _page.clamp(0, gallery.length - 1);
+    // The page in view is loaded here, and only it: swiping is what asks.
+    search.loadGalleryPhoto(gallery[page]);
+    return SizedBox(
+      height: widget.height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            itemCount: gallery.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            // Each page carries its own credit, so a photo is never seen
+            // next to another photo's authors, even mid-swipe.
+            itemBuilder: (context, i) => _GalleryPage(
+              photo: gallery[i],
+              index: i,
+              count: gallery.length,
+              search: search,
+            ),
+          ),
+          ...widget.overlays,
+        ],
+      ),
+    );
+  }
+}
+
+/// One gallery photo with its own credit along its bottom edge (on the cream
+/// scrim, readable over any photo), its place in the gallery, and Try again
+/// when it failed to load.
+class _GalleryPage extends StatelessWidget {
+  final DetailPhoto photo;
+  final int index;
+  final int count;
+  final CravingSearch search;
+  const _GalleryPage({required this.photo, required this.index, required this.count, required this.search});
 
   @override
   Widget build(BuildContext context) {
-    final gallery = _gallery;
-    final search = widget.search;
-    final r = widget.restaurant;
-    final Widget image;
-    final Widget? credit;
-    if (gallery.isEmpty) {
-      image = _PhotoHeader(photo: widget.photo);
-      credit = widget.photo != null && (r.photoCredits.isNotEmpty || r.photoMapsUri != null)
-          ? _PhotoCredit(authors: r.photoCredits, avatar: search.avatar, mapsUri: r.photoMapsUri)
-          : null;
-    } else {
-      final page = _page.clamp(0, gallery.length - 1);
-      // The page in view is loaded here, and only it: swiping is what asks.
-      search.loadGalleryPhoto(gallery[page]);
-      image = PageView.builder(
-        itemCount: gallery.length,
-        onPageChanged: (i) => setState(() => _page = i),
-        itemBuilder: (context, i) => Semantics(
-          label: 'Photo ${i + 1} of ${gallery.length}',
-          image: true,
-          child: _PhotoHeader(photo: search.galleryPhoto(gallery[i].name)),
-        ),
-      );
-      final shown = gallery[page];
-      credit = search.galleryPhoto(shown.name) == null
-          ? null
-          : _PhotoCredit(authors: shown.authors, avatar: search.avatar, mapsUri: shown.mapsUri);
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final bytes = search.galleryPhoto(photo.name);
+    final failed = search.galleryFailed(photo.name);
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        SizedBox(
-          height: widget.height,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              image,
-              ...widget.overlays,
-              if (gallery.length > 1)
-                Positioned(
-                  bottom: 10,
-                  right: 12,
-                  child: ExcludeSemantics(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: AppColors.scrim, borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        child: Text(
-                          '${_page.clamp(0, gallery.length - 1) + 1} / ${gallery.length}',
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textPrimary),
-                        ),
-                      ),
+        Semantics(label: 'Photo ${index + 1} of $count', image: true, child: _PhotoHeader(photo: bytes)),
+        if (failed)
+          Center(
+            child: TextButton.icon(
+              onPressed: () => search.loadGalleryPhoto(photo, retry: true),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Photo didn’t load. Try again'),
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.scrim,
+                foregroundColor: AppColors.textPrimary,
+                minimumSize: const Size(48, 48),
+              ),
+            ),
+          ),
+        if (count > 1)
+          Positioned(
+            top: 22,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: ExcludeSemantics(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: AppColors.scrim, borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    child: Text(
+                      '${index + 1} / $count',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textPrimary),
                     ),
                   ),
                 ),
-            ],
+              ),
+            ),
+          ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: ColoredBox(
+            color: AppColors.scrim,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              // Credit only once the photo shows: it belongs to the image.
+              child: bytes == null
+                  ? const SizedBox(height: 48)
+                  : _PhotoCredit(authors: photo.authors, avatar: search.avatar, mapsUri: photo.mapsUri),
+            ),
           ),
         ),
-        // Google requires crediting every photo author (avatar, name,
-        // profile link) and a link to the photo on Maps. Directly under the
-        // photo, so any number of credits can wrap without covering controls.
-        if (credit != null) Padding(padding: const EdgeInsets.fromLTRB(14, 2, 14, 0), child: credit),
       ],
     );
   }

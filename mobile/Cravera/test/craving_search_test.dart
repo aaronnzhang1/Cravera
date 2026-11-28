@@ -482,4 +482,43 @@ void main() {
       expect(search.galleryPhoto('places/a/photos/p1'), isNull);
     });
   });
+
+  group('gallery failures (TASK-UI-4 review)', () {
+    DetailPhoto photo(String n) => DetailPhoto(name: n, authors: const [PhotoAuthor(name: 'Test Author')]);
+
+    test('a failed photo is not asked again on rebuilds, only on Try again', () async {
+      Uint8List? answer;
+      final places = FakePlaces((_) => [place('a')])..photo = (_) => answer;
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      await pumpEventQueue();
+      expect(search.galleryFailed('places/a/photos/p1'), isTrue);
+      search.loadGalleryPhoto(photo('places/a/photos/p1')); // a rebuild
+      expect(places.photoRequests, ['places/a/photos/p1']);
+
+      answer = Uint8List.fromList([1]);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'), retry: true);
+      await pumpEventQueue();
+      expect(places.photoRequests, ['places/a/photos/p1', 'places/a/photos/p1']);
+      expect(search.galleryFailed('places/a/photos/p1'), isFalse);
+      expect(search.galleryPhoto('places/a/photos/p1'), isNotNull);
+    });
+
+    test('opening keeps the search photo first, with its own credit, within the details count', () async {
+      const credit = PhotoAuthor(name: 'Search Author');
+      final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0', photoAuthors: const [credit]);
+      final places = FakePlaces((_) => [first])
+        ..photo = ((_) => Uint8List.fromList([1]))
+        ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: [photo('places/a/photos/p1'), photo('places/a/photos/p2')]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      await pumpEventQueue();
+      expect(search.currentGallery, isEmpty); // not opened
+      search.openDetails();
+      await pumpEventQueue();
+      expect(search.currentGallery.map((p) => p.name), ['places/a/photos/p0', 'places/a/photos/p1']);
+      expect(search.currentGallery.first.authors.single.name, 'Search Author');
+    });
+  });
 }

@@ -199,22 +199,57 @@ class CravingSearch extends ChangeNotifier {
   /// Fetches one gallery photo, when the guest swipes to it (never ahead),
   /// and its authors' avatars. Never notifies synchronously, so a screen
   /// may call it while building. A late answer from an older search is dropped.
-  void loadGalleryPhoto(DetailPhoto photo) {
+  ///
+  /// A failed photo is not asked for again on rebuilds, only when the guest
+  /// taps Try again ([retry]).
+  void loadGalleryPhoto(DetailPhoto photo, {bool retry = false}) {
     final service = places;
     if (service == null || current == null) return;
     if (galleryPhoto(photo.name) != null) {
       _loadAvatarsOf(photo.authors, service, _request);
       return;
     }
-    if (_gallery.containsKey(photo.name)) return;
+    if (_galleryFailed.contains(photo.name)) {
+      if (!retry) return;
+      _galleryFailed.remove(photo.name);
+      notifyListeners();
+    }
+    if (_gallery.containsKey(photo.name)) return; // already on its way
     _gallery[photo.name] = null;
     final request = _request;
     service.photoBytes(photo.name).then((bytes) {
-      if (request != _request || bytes == null) return;
+      if (request != _request) return;
+      if (bytes == null) {
+        _gallery.remove(photo.name);
+        _galleryFailed.add(photo.name);
+        notifyListeners();
+        return;
+      }
       _gallery[photo.name] = bytes;
       notifyListeners();
       _loadAvatarsOf(photo.authors, service, request);
     });
+  }
+
+  /// Gallery photos whose download failed in this search.
+  final Set<String> _galleryFailed = {};
+
+  /// True when the gallery photo [name] failed to load (show Try again).
+  bool galleryFailed(String name) => _galleryFailed.contains(name);
+
+  /// The opened card's gallery: the search photo first (with its own credit,
+  /// so opening the card never loses a photo that already shows), then the
+  /// details photos, no more photos than the details sent (at most 5).
+  List<DetailPhoto> get currentGallery {
+    final place = current;
+    final photos = currentDetails?.details?.photos ?? const <DetailPhoto>[];
+    if (place == null || photos.isEmpty) return const [];
+    final name = place.photoName;
+    if (name == null || _photos[place.placeId] == null || photos.any((p) => p.name == name)) return photos;
+    return [
+      DetailPhoto(name: name, authors: place.photoCredits, mapsUri: place.photoMapsUri),
+      ...photos,
+    ].take(photos.length).toList();
   }
 
   /// True when the craving is longer than the server accepts.
@@ -274,6 +309,7 @@ class CravingSearch extends ChangeNotifier {
     _avatars.clear();
     _details.clear();
     _gallery.clear();
+    _galleryFailed.clear();
     if (send.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
@@ -399,6 +435,7 @@ class CravingSearch extends ChangeNotifier {
     _avatars.clear();
     _details.clear();
     _gallery.clear();
+    _galleryFailed.clear();
     notifyListeners();
   }
 
