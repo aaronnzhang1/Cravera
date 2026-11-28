@@ -185,6 +185,18 @@ void main() {
     expect(session.search.radiusMeters, 2000, reason: 'search uses what is stored');
   });
 
+  test('a re-read that never answers after a lost save does not lock the editors', () async {
+    // Real time: the re-read gives up after profileWait * 2 (10 s).
+    await signIn();
+    profiles.saveAnswer = ProfileSaveOutcome.network;
+    profiles.loadGate = Completer<void>(); // the re-read never answers
+    final pending = session.updateProfile(const ProfileChange(homeCity: 'Berkeley'));
+    await pumpEventQueue();
+    expect(session.profileSaving, isTrue);
+    expect(await pending, ProfileSaveOutcome.network);
+    expect(session.profileSaving, isFalse);
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   test('a save still pending from the previous account neither locks nor delays the next', () async {
     await signIn();
     final firstGate = Completer<void>();

@@ -160,7 +160,8 @@ class AppSession extends ChangeNotifier {
     if (outcome == ProfileSaveOutcome.network) {
       // The answer was lost, but the row may have been saved: show what is
       // stored now (settings and search distance), if it can be read.
-      final now = await service.load(account);
+      // Bounded: a read that never answers mustn't keep the editors locked.
+      final now = await service.load(account).timeout(profileWait * 2, onTimeout: () => null);
       if (now != null && _accountId == account && _accountGeneration == generation) {
         _profile = now;
         _displayName = now.displayName;
