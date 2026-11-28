@@ -5,6 +5,7 @@ Deno.serve((req) =>
   handle(
     req,
     {
+      supabaseUrl: Deno.env.get("SUPABASE_URL"),
       placesKey: Deno.env.get("GOOGLE_MAPS_API_KEY"),
       publishableKeys: Deno.env.get("SUPABASE_PUBLISHABLE_KEYS"),
     },

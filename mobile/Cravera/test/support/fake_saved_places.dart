@@ -18,8 +18,10 @@ class FakeSavedPlaces implements SavedPlacesService {
   @override
   Future<List<SavedPlace>?> list() async {
     listCalls++;
+    // The read happens now; a gate only delays the answer (a stale snapshot).
+    final snapshot = List.of(rows);
     await listGate?.future;
-    return listFails ? null : List.of(rows);
+    return listFails ? null : snapshot;
   }
 
   @override

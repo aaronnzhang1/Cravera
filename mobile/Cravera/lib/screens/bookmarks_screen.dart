@@ -66,7 +66,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     final groups = <String, List<SavedPlace>>{};
     for (final p in places) {
       final b = hub.basics(p.placeId);
-      groups.putIfAbsent(b?.city ?? (b == null ? 'Loading…' : 'Other places'), () => []).add(p);
+      groups.putIfAbsent(b?.city ?? (b == null && hub.basicsStatus == SavedLoadStatus.loading ? 'Loading…' : 'Other places'), () => []).add(p);
     }
 
     return ListView(
@@ -204,8 +204,11 @@ class _SavedRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final b = basics;
+    final hub = AppSessionScope.of(context).saved;
     final title = b == null
-        ? 'Loading…'
+        ? (hub.basicsStatus == SavedLoadStatus.loading || hub.basicsStatus == SavedLoadStatus.idle
+            ? 'Loading…'
+            : 'Name not loaded: Saved shows names for your newest ${SavedHub.maxPlaces} places')
         : b.missing
             ? 'No longer on Google Maps'
             : b.name ?? "Couldn't load this place";

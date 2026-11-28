@@ -41,13 +41,14 @@ class SavedPlace {
       SavedPlace(placeId: placeId, status: status ?? this.status, note: clearNote ? null : note ?? this.note);
 }
 
-enum SavedOutcome { ok, invalid, network, failed }
+enum SavedOutcome { ok, invalid, network, failed, notReady }
 
 /// A plain sentence for each failed outcome.
 String savedMessage(SavedOutcome outcome) => switch (outcome) {
       SavedOutcome.ok => 'Saved.',
       SavedOutcome.invalid => 'Notes can be up to 500 characters.',
-      SavedOutcome.network => 'No connection. Your saved places are as they were.',
+      SavedOutcome.network => 'Couldn’t confirm that change. Saved shows what is stored.',
+      SavedOutcome.notReady => 'Still loading your saved places. Try again in a moment.',
       SavedOutcome.failed => 'Couldn’t save right now. Your saved places are as they were.',
     };
 

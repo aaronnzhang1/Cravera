@@ -31,6 +31,7 @@ Future<void> main() async {
       saved: SavedHub(
         service: auth == null ? null : SupabaseSavedPlacesService(Supabase.instance.client),
         places: places,
+        accessToken: auth == null ? null : () => Supabase.instance.client.auth.currentSession?.accessToken,
       ),
     ),
   ));

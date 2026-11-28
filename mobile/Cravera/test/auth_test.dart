@@ -308,6 +308,7 @@ void main() {
     final auth = FakeAuth()..nameGate = Completer<String?>();
     final session = AppSession(auth: auth, saved: SavedHub(service: FakeSavedPlaces()));
     expect(await session.signInWithEmail(email: FakeAuth.knownEmail, password: FakeAuth.knownPassword), AuthOutcome.ok);
+    await pumpEventQueue(); // the saved list loads first
     await session.toggleBookmark(const Restaurant(placeId: 'fake-a', name: 'Test Place'));
     expect(session.saved.items, isNotEmpty);
 

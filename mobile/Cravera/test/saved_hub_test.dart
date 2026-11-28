@@ -16,8 +16,12 @@ class FakeBasics extends PlacesService {
   bool fails = false;
   Completer<void>? gate;
 
+  /// The places the function would read from the caller's rows.
+  List<String> rows = const [];
+
   @override
-  Future<List<SavedBasics>?> savedBasics(List<String> placeIds) async {
+  Future<List<SavedBasics>?> savedBasics({required String accessToken}) async {
+    final placeIds = rows;
     requests.add(placeIds);
     await gate?.future;
     if (fails) return null;
@@ -107,8 +111,8 @@ void main() {
 
   test('basics: one request per open for the saved places, per-place results, dropped after a switch', () async {
     final service = FakeSavedPlaces()..rows.addAll(const [SavedPlace(placeId: 'a1'), SavedPlace(placeId: 'b2'), SavedPlace(placeId: 'gone')]);
-    final places = FakeBasics();
-    final hub = SavedHub(service: service, places: places);
+    final places = FakeBasics()..rows = const ['a1', 'b2', 'gone'];
+    final hub = SavedHub(service: service, places: places, accessToken: () => 'fake-token');
     hub.switchAccount('account-a');
     await pumpEventQueue();
     await hub.loadBasics();
@@ -130,10 +134,60 @@ void main() {
   test('basics that fail show as failed', () async {
     final service = FakeSavedPlaces()..rows.add(const SavedPlace(placeId: 'a1'));
     final places = FakeBasics()..fails = true;
-    final hub = SavedHub(service: service, places: places);
+    final hub = SavedHub(service: service, places: places, accessToken: () => 'fake-token');
     hub.switchAccount('account-a');
     await pumpEventQueue();
     await hub.loadBasics();
     expect(hub.basicsStatus, SavedLoadStatus.failed);
+  });
+
+  test('nothing can be toggled before the list has loaded', () async {
+    final service = FakeSavedPlaces()..listGate = Completer<void>();
+    final hub = SavedHub(service: service);
+    hub.switchAccount('account-a');
+    expect(await hub.add('p1'), SavedOutcome.notReady);
+    expect(service.rows, isEmpty);
+    service.listGate!.complete();
+  });
+
+  test('an older list read can\u2019t erase a bookmark confirmed after it started', () async {
+    final service = FakeSavedPlaces();
+    final hub = SavedHub(service: service);
+    hub.switchAccount('account-a');
+    await pumpEventQueue();
+    service.listGate = Completer<void>();
+    final staleRead = hub.load(); // reads before the save
+    final snapshotRows = <SavedPlace>[];
+    expect(snapshotRows, isEmpty);
+    expect(await hub.add('p1'), SavedOutcome.ok);
+    service.listGate!.complete();
+    service.listGate = null;
+    await staleRead;
+    await pumpEventQueue();
+    expect(hub.contains('p1'), isTrue);
+  });
+
+  test('a lost answer re-reads the list, so a change that did land shows', () async {
+    final service = FakeSavedPlaces()..rows.add(const SavedPlace(placeId: 'p1'));
+    final hub = SavedHub(service: service);
+    hub.switchAccount('account-a');
+    await pumpEventQueue();
+    // The delete reaches the server but its answer is lost.
+    service.rows.clear();
+    service.failWith = SavedOutcome.network;
+    expect(await hub.remove('p1'), SavedOutcome.network);
+    service.failWith = null;
+    await pumpEventQueue();
+    expect(hub.contains('p1'), isFalse, reason: 'the re-read shows it is gone');
+  });
+
+  test('without an access token no basics are asked for', () async {
+    final service = FakeSavedPlaces()..rows.add(const SavedPlace(placeId: 'a1'));
+    final places = FakeBasics()..rows = const ['a1'];
+    final hub = SavedHub(service: service, places: places, accessToken: () => null);
+    hub.switchAccount('account-a');
+    await pumpEventQueue();
+    await hub.loadBasics();
+    expect(places.requests, isEmpty);
   });
 }

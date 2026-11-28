@@ -30,11 +30,19 @@ class SavedBasics {
 /// an answer that arrives after a sign-out or account switch is dropped, so
 /// one person's places never show for another.
 class SavedHub extends ChangeNotifier {
-  SavedHub({this.service, this.places});
+  SavedHub({this.service, this.places, this.accessToken});
 
   /// Null when the app has no Supabase key; tests pass a fake.
   final SavedPlacesService? service;
   final PlacesService? places;
+
+  /// The signed-in person's current access token, for the `saved-places`
+  /// function (it reads their own rows with it).
+  final String? Function()? accessToken;
+
+  /// Counts confirmed or possibly-applied changes, so a list read that started
+  /// before one can't overwrite it when it answers later.
+  int _changes = 0;
 
   String? _account;
   int _generation = 0;
@@ -82,12 +90,23 @@ class SavedHub extends ChangeNotifier {
     final account = _account;
     if (s == null || account == null) return;
     final generation = _generation;
-    _status = SavedLoadStatus.loading;
+    final changesBefore = _changes;
+    if (_status != SavedLoadStatus.loaded) _status = SavedLoadStatus.loading;
     notifyListeners();
     final list = await s.list().timeout(const Duration(seconds: 10), onTimeout: () => null);
     if (!_current(generation, account)) return;
-    _items = list ?? _items;
-    _status = list == null ? SavedLoadStatus.failed : SavedLoadStatus.loaded;
+    if (list != null && _changes != changesBefore) {
+      // A change landed while this read was on its way: it may not include
+      // it. Read again rather than show an older snapshot.
+      return load();
+    }
+    if (list == null) {
+      // Keep what is known; before the first load nothing can be toggled.
+      if (_status != SavedLoadStatus.loaded) _status = SavedLoadStatus.failed;
+    } else {
+      _items = list;
+      _status = SavedLoadStatus.loaded;
+    }
     notifyListeners();
   }
 
@@ -96,12 +115,12 @@ class SavedHub extends ChangeNotifier {
   Future<void> loadBasics() async {
     final p = places;
     final account = _account;
-    if (p == null || account == null || _items.isEmpty || _basicsStatus == SavedLoadStatus.loading) return;
+    final token = accessToken?.call();
+    if (p == null || account == null || token == null || _items.isEmpty || _basicsStatus == SavedLoadStatus.loading) return;
     final generation = _generation;
-    final ids = [for (final i in _items.take(maxPlaces)) i.placeId];
     _basicsStatus = SavedLoadStatus.loading;
     notifyListeners();
-    final answer = await p.savedBasics(ids);
+    final answer = await p.savedBasics(accessToken: token);
     if (!_current(generation, account)) return;
     if (answer == null) {
       _basicsStatus = SavedLoadStatus.failed;
@@ -115,17 +134,25 @@ class SavedHub extends ChangeNotifier {
   }
 
   /// Runs one change for the current account and applies [onOk] only if the
-  /// server confirmed it and the account is still the same.
+  /// server confirmed it and the account is still the same. Nothing can be
+  /// changed before the list has loaded (whether a place is saved isn't
+  /// known yet). A lost answer may still have been applied: the list is read
+  /// again so the screen shows what is stored.
   Future<SavedOutcome> _change(Future<SavedOutcome> Function(SavedPlacesService s) call, void Function() onOk) async {
     final s = service;
     final account = _account;
     if (s == null || account == null) return SavedOutcome.failed;
+    if (_status != SavedLoadStatus.loaded) return SavedOutcome.notReady;
     final generation = _generation;
     final outcome = await call(s).timeout(const Duration(seconds: 10), onTimeout: () => SavedOutcome.network);
     if (!_current(generation, account)) return SavedOutcome.failed;
     if (outcome == SavedOutcome.ok) {
+      _changes++;
       onOk();
       notifyListeners();
+    } else if (outcome == SavedOutcome.network) {
+      _changes++;
+      unawaited(load());
     }
     return outcome;
   }

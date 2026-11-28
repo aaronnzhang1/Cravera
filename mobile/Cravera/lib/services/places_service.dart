@@ -153,16 +153,19 @@ class PlacesService {
   /// The function that returns fresh basics for saved places (TASK-004).
   static final savedEndpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/saved-places');
 
-  /// Fresh name, address, city and location for each of [placeIds] (at most
-  /// 50, each checked); null when the whole request fails. A place Google
-  /// can't answer for comes back as a failed entry, not an error.
-  Future<List<SavedBasics>?> savedBasics(List<String> placeIds) async {
-    final ids = [for (final id in placeIds.toSet()) if (_placeId.hasMatch(id)) id].take(50).toList();
-    if (ids.isEmpty) return const [];
+  /// Fresh name, address, city and location for the signed-in person's own
+  /// saved places (the newest 50). No place IDs are sent: the function reads
+  /// the person's rows with [accessToken], so RLS decides. Null when the whole
+  /// request fails; a place Google can't answer for comes back failed.
+  Future<List<SavedBasics>?> savedBasics({required String accessToken}) async {
     final request = http.Request('POST', savedEndpoint)
       ..followRedirects = false
-      ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
-      ..body = jsonEncode({'placeIds': ids});
+      ..headers.addAll({
+        'Content-Type': 'application/json',
+        'apikey': publishableKey,
+        'Authorization': 'Bearer $accessToken',
+      })
+      ..body = '{}';
     try {
       final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
       if (response.statusCode != 200) return null;
@@ -172,7 +175,7 @@ class PlacesService {
       for (final p in places) {
         if (p is! Map<String, dynamic>) continue;
         final id = p['placeId'];
-        if (id is! String || !ids.contains(id)) continue;
+        if (id is! String || !_placeId.hasMatch(id)) continue;
         final name = p['name'];
         final lat = p['latitude'];
         final lng = p['longitude'];
