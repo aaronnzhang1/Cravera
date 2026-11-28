@@ -125,12 +125,19 @@ class PlacesService {
   /// Details for [placeId] (photos, reviews, summaries, attributes, links),
   /// asked for only when the guest opens the card. Null on any failure: the
   /// card then keeps its search facts and offers Try again.
-  Future<PlaceDetails?> details(String placeId) async {
+  ///
+  /// [craving] (the guest's words) and [priceLevels] (the search's requested
+  /// range) let the server write Cravera's take and check price reasons.
+  Future<PlaceDetails?> details(String placeId, {String? craving, List<int> priceLevels = const []}) async {
     if (!_placeId.hasMatch(placeId)) return null;
     final request = http.Request('POST', detailsEndpoint)
       ..followRedirects = false
       ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
-      ..body = jsonEncode({'placeId': placeId});
+      ..body = jsonEncode({
+        'placeId': placeId,
+        if (craving != null && craving.isNotEmpty && craving.length <= CravingLimits.maxQuery) 'craving': craving,
+        if (priceLevels.isNotEmpty) 'priceLevels': priceLevels,
+      });
     try {
       final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
       if (response.statusCode != 200) return null;
@@ -385,4 +392,10 @@ class PlacesService {
   static String? _string(Object? v) => v is String && v.trim().isNotEmpty ? v : null;
   static double? _double(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
   static int? _int(Object? v) => v is num && v.isFinite ? v.round() : null;
+}
+
+/// Shared limits for what the app sends.
+abstract final class CravingLimits {
+  /// The server refuses longer cravings.
+  static const maxQuery = 200;
 }

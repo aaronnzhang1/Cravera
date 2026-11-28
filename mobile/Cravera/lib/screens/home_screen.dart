@@ -654,6 +654,8 @@ class _PickView extends StatelessWidget {
       if (restaurant.distanceMeters != null) '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km',
     ];
     final hasAddress = (restaurant.address ?? '').trim().isNotEmpty;
+    final checked = session.search.currentDetails?.details?.why ?? const <String>[];
+    final why = checked.isNotEmpty ? checked : restaurant.reasons;
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -713,11 +715,12 @@ class _PickView extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: text.headlineMedium,
                           ),
-                          // Why this pick: reasons the server built from Places facts.
-                          if (restaurant.reasons.isNotEmpty) ...[
+                          // Why this pick: facts the server checked for this craving
+                          // (ADR 0005), else the Places-only reasons from search.
+                          if (why.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             Text(
-                              restaurant.reasons.join(' · '),
+                              why.join(' · '),
                               style: text.bodyLarge?.copyWith(color: AppColors.tomato, fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -747,7 +750,7 @@ class _PickView extends StatelessWidget {
                           // styled per Google's text-attribution rules.
                           const _GoogleMapsCredit(),
                           // TASK-UI-4: more about the place, loaded only when asked for.
-                          PlaceDetailsSection(search: session.search),
+                          PlaceDetailsSection(search: session.search, restaurant: restaurant),
                         ],
                       ),
                     ),

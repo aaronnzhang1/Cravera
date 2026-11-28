@@ -71,9 +71,11 @@ class FakePlaces extends PlacesService {
   /// Answers details requests; null (failed) when not set.
   FutureOr<PlaceDetails?> Function(String placeId)? detailsAnswer;
   final detailRequests = <String>[];
+  final detailCravings = <String?>[];
 
   @override
-  Future<PlaceDetails?> details(String placeId) async {
+  Future<PlaceDetails?> details(String placeId, {String? craving, List<int> priceLevels = const []}) async {
+    detailCravings.add(craving);
     detailRequests.add(placeId);
     return detailsAnswer?.call(placeId);
   }
@@ -397,24 +399,21 @@ void main() {
   });
 
   group('details (TASK-UI-4)', () {
-    test('a search and No make no details request; opening asks once', () async {
-      final places = FakePlaces((_) => [place('a'), place('b')])
+    test('each place shown loads its details by itself, once; places not reached load nothing', () async {
+      final places = FakePlaces((_) => [place('a'), place('b'), place('c')])
         ..detailsAnswer = (id) => PlaceDetails(placeId: id, editorialSummary: 'Fictional summary');
       final search = CravingSearch(places: places);
       await search.start('tacos', here);
-      search.next();
-      expect(places.detailRequests, isEmpty);
-      expect(search.currentDetails, isNull);
-
-      search.openDetails();
       expect(search.currentDetails!.status, DetailsStatus.loading);
-      search.openDetails(); // a second tap while loading sends nothing
+      search.openDetails(); // a rebuild or tap while loading sends nothing
       await pumpEventQueue();
-      expect(places.detailRequests, ['b']);
+      expect(places.detailRequests, ['a']);
       expect(search.currentDetails!.status, DetailsStatus.loaded);
       expect(search.currentDetails!.details!.editorialSummary, 'Fictional summary');
       search.openDetails(); // already loaded: nothing new
-      expect(places.detailRequests, ['b']);
+      search.next();
+      await pumpEventQueue();
+      expect(places.detailRequests, ['a', 'b']); // 'c' not reached
     });
 
     test('a failed load can be tried again', () async {
@@ -433,16 +432,20 @@ void main() {
     });
 
     test('details that arrive after a new search or reset are dropped', () async {
-      final gate = Completer<PlaceDetails?>();
-      final places = FakePlaces((_) => [place('a')])..detailsAnswer = (_) => gate.future;
+      final gates = <Completer<PlaceDetails?>>[];
+      final places = FakePlaces((_) => [place('a')])
+        ..detailsAnswer = (_) {
+          gates.add(Completer<PlaceDetails?>());
+          return gates.last.future;
+        };
       final search = CravingSearch(places: places);
-      await search.start('tacos', here);
-      search.openDetails();
+      await search.start('tacos', here); // loads by itself
       search.reset();
-      await search.start('tacos', here);
-      gate.complete(const PlaceDetails(placeId: 'a'));
+      await search.start('tacos', here); // the new search's own request
+      gates.first.complete(const PlaceDetails(placeId: 'a', editorialSummary: 'Old'));
       await pumpEventQueue();
-      expect(search.currentDetails, isNull);
+      expect(gates.length, 2);
+      expect(search.currentDetails!.status, DetailsStatus.loading); // the old answer is ignored
     });
   });
 
@@ -514,9 +517,6 @@ void main() {
       final search = CravingSearch(places: places);
       await search.start('tacos', here);
       await pumpEventQueue();
-      expect(search.currentGallery, isEmpty); // not opened
-      search.openDetails();
-      await pumpEventQueue();
       expect(search.currentGallery.map((p) => p.name), ['places/a/photos/p0', 'places/a/photos/p1', 'places/a/photos/p2']);
       expect(search.currentGallery.first.authors.single.name, 'Search Author');
     });
@@ -580,5 +580,21 @@ void main() {
     expect(places.photoRequests.length, 2);
     expect(search.galleryPhoto('places/a/photos/p0'), isNotNull);
     expect(search.galleryFailed('places/a/photos/p0'), isFalse);
+  });
+
+  test('the first details photo by the same authors as the search photo is that picture, shown once', () async {
+    const credit = PhotoAuthor(name: 'Same Author');
+    final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/s0', photoAuthors: const [credit]);
+    final places = FakePlaces((_) => [first])
+      ..photo = ((_) => Uint8List.fromList([1]))
+      ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: const [
+            DetailPhoto(name: 'places/a/photos/d0', authors: [credit]),
+            DetailPhoto(name: 'places/a/photos/d1', authors: [credit]),
+            DetailPhoto(name: 'places/a/photos/d2', authors: [PhotoAuthor(name: 'Other')]),
+          ]);
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    await pumpEventQueue();
+    expect(search.currentGallery.map((p) => p.name), ['places/a/photos/s0', 'places/a/photos/d1', 'places/a/photos/d2']);
   });
 }

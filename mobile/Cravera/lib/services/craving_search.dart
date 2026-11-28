@@ -147,6 +147,13 @@ class CravingSearch extends ChangeNotifier {
   void _loadAvatars(Restaurant place, PlacesService service, int request) =>
       _loadAvatarsOf(place.photoAuthors, service, request);
 
+  /// Loads the avatars of [authors] (for example reviewers) for the current
+  /// search; each loads once. Never notifies synchronously.
+  void loadAvatars(List<PhotoAuthor> authors) {
+    final service = places;
+    if (service != null) _loadAvatarsOf(authors, service, _request);
+  }
+
   void _loadAvatarsOf(List<PhotoAuthor> authors, PlacesService service, int request) {
     for (final author in authors) {
       final link = author.avatarUri;
@@ -160,9 +167,9 @@ class CravingSearch extends ChangeNotifier {
     }
   }
 
-  /// Details for places the guest opened, by place ID (TASK-UI-4). Loaded
-  /// only on open, never during search, so the pricier Places fields are
-  /// paid for only when someone wants them.
+  /// Details by place ID (TASK-UI-4). Each place loads its own as it is
+  /// shown (the first pick, then each place after No), never during the
+  /// search request and never for places the guest hasn't reached.
   final Map<String, DetailsLoad> _details = {};
 
   /// The details of [current], or null if the guest hasn't opened it.
@@ -171,8 +178,9 @@ class CravingSearch extends ChangeNotifier {
     return place == null ? null : _details[place.placeId];
   }
 
-  /// Opens [current]'s details: loads them once, or again after a failure
-  /// (Try again). A late answer from an older search is dropped.
+  /// Loads [current]'s details: one automatic attempt per shown place; only
+  /// Try again after a failure sends another; calls while one is on its way
+  /// share it. A late answer from an older search is dropped.
   void openDetails() {
     final service = places;
     final place = current;
@@ -183,7 +191,12 @@ class CravingSearch extends ChangeNotifier {
     _details[id] = const DetailsLoad(DetailsStatus.loading);
     notifyListeners();
     final request = _request;
-    service.details(id).then((details) {
+    final levels = _intent?['priceLevels'];
+    service.details(
+      id,
+      craving: _query,
+      priceLevels: [if (levels is List) for (final l in levels) if (l is int) l],
+    ).then((details) {
       if (request != _request) return;
       _details[id] = details == null ? const DetailsLoad(DetailsStatus.failed) : DetailsLoad(DetailsStatus.loaded, details);
       notifyListeners();
@@ -266,8 +279,18 @@ class CravingSearch extends ChangeNotifier {
     final first = same.isNotEmpty
         ? same.first
         : DetailPhoto(name: name, authors: place.photoCredits, mapsUri: place.photoMapsUri);
-    return [first, ...photos.where((p) => p.name != name)].take(maxGallery).toList();
+    // Google names the same picture differently in search and in details, and
+    // sends photos in the same order: a first details photo by the same
+    // authors as the search photo is that picture, so it isn't shown twice.
+    final rest = [
+      for (final (i, p) in photos.indexed)
+        if (p.name != name && !(i == 0 && same.isEmpty && _sameAuthors(p.authors, place.photoCredits))) p,
+    ];
+    return [first, ...rest].take(maxGallery).toList();
   }
+
+  static bool _sameAuthors(List<PhotoAuthor> a, List<PhotoAuthor> b) =>
+      a.isNotEmpty && a.length == b.length && [for (var i = 0; i < a.length; i++) a[i].name == b[i].name].every((x) => x);
 
   /// The gallery photo [name] arrived but can't be shown (not a readable
   /// image): forget its bytes and offer Try again, like a failed download.
@@ -378,6 +401,7 @@ class CravingSearch extends ChangeNotifier {
     }
     notifyListeners();
     _loadPhoto();
+    openDetails(); // TASK-UI-4: each place shown loads its details by itself
   }
 
   /// "No": shows the next result from the same answer, without a request.
@@ -393,6 +417,7 @@ class CravingSearch extends ChangeNotifier {
       _status = SearchStatus.exhausted;
     }
     notifyListeners();
+    openDetails(); // only the place now shown; places not reached load nothing
   }
 
   /// False (and [SearchStatus.expired]) when the results are older than

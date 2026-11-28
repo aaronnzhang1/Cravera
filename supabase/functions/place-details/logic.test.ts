@@ -83,7 +83,12 @@ test("asks Google for one place with a field mask and the key in a header", asyn
   assert.equal(headers["X-Goog-Api-Key"], "fake-places-key");
   assert.equal(headers["X-Goog-FieldMask"], FIELD_MASK);
   assert.ok(!calls[0].url.includes("fake-places-key"));
-  assert.ok(!(await res.text()).includes("fake-places-key"));
+  const body = await res.text();
+  assert.ok(!body.includes("fake-places-key"));
+  // No Gemini key here: the template take, no extra facts.
+  const answer = JSON.parse(body);
+  assert.equal(answer.take.source, "template");
+  assert.deepEqual(answer.why, []);
 });
 
 test("maps Google's failures to 502 or 404 and logs no place ID", async () => {
@@ -144,7 +149,7 @@ test("an empty answer is a valid, empty card", () => {
   const d = mapDetails({}, PLACE);
   assert.deepEqual(d, {
     placeId: PLACE, photos: [], reviews: [], editorialSummary: null, reviewSummary: null,
-    websiteUri: null, mapsUri: null, attributes: {},
+    websiteUri: null, mapsUri: null, attributes: {}, rating: null, priceLevel: null, typeName: null,
   });
 });
 

@@ -19,6 +19,16 @@ class PlaceDetails {
   /// in the server's order. An attribute Places didn't report is absent.
   final Map<String, bool> attributes;
 
+  /// Cravera's take (ADR 0005): Gemini's checked note, or the server's
+  /// template in the same voice. Null from an older server.
+  final String? take;
+
+  /// True when [take] is Gemini's note rather than the template.
+  final bool takeIsAi;
+
+  /// "Why this pick": facts the server checked and worded, best first.
+  final List<String> why;
+
   const PlaceDetails({
     required this.placeId,
     this.photos = const [],
@@ -29,6 +39,9 @@ class PlaceDetails {
     this.websiteUri,
     this.mapsUri,
     this.attributes = const {},
+    this.take,
+    this.takeIsAi = false,
+    this.why = const [],
   });
 
   static String? _text(Object? v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
@@ -49,6 +62,7 @@ class PlaceDetails {
     if (json is! Map<String, dynamic> || json['placeId'] != placeId) return null;
     final summary = json['reviewSummary'];
     final attributes = json['attributes'];
+    final take = json['take'];
     return PlaceDetails(
       placeId: placeId,
       photos: _list(json['photos'], (p) {
@@ -81,6 +95,12 @@ class PlaceDetails {
           for (final e in attributes.entries)
             if (e.value is bool) e.key: e.value as bool,
       },
+      take: take is Map<String, dynamic> ? _text(take['text']) : null,
+      takeIsAi: take is Map<String, dynamic> && take['source'] == 'ai',
+      why: [
+        for (final f in json['why'] is List ? json['why'] as List : const [])
+          if (f is Map<String, dynamic> && _text(f['text']) != null) _text(f['text'])!,
+      ],
     );
   }
 }

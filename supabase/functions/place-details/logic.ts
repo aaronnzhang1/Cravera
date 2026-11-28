@@ -11,6 +11,10 @@
 
 import { httpsUrl, parsePublishableKeys, photoAuthors, type PhotoAuthor } from "../places-search/logic.ts";
 import { PHOTO_NAME } from "../place-photo/logic.ts";
+import { DEFAULT_GEMINI_MODEL, type GeminiConfig } from "../places-search/gemini.ts";
+import { ATTRIBUTES, explain, type Fact, orderReviews, parseTakeInput, type Take } from "./take.ts";
+
+export { ATTRIBUTES };
 
 export const PLACE_ID = /^[A-Za-z0-9_-]{1,300}$/;
 export const MAX_PHOTOS = 5;
@@ -18,17 +22,6 @@ export const MAX_REVIEWS = 5;
 export const MAX_TEXT = 1500;
 const UPSTREAM_TIMEOUT_MS = 8000;
 
-/** Places attributes the card may show, in the order it shows them. */
-export const ATTRIBUTES = [
-  "takeout",
-  "delivery",
-  "dineIn",
-  "servesVegetarianFood",
-  "outdoorSeating",
-  "goodForGroups",
-  "servesBeer",
-  "servesWine",
-] as const;
 
 export const FIELD_MASK = [
   "id",
@@ -38,13 +31,21 @@ export const FIELD_MASK = [
   "reviewSummary",
   "websiteUri",
   "googleMapsUri",
+  "rating",
+  "priceLevel",
+  "primaryTypeDisplayName",
   ...ATTRIBUTES,
 ].join(",");
 
 export type Env = {
   placesKey: string | undefined;
   publishableKeys: string | undefined;
+  geminiKey?: string | undefined;
+  geminiModel?: string | undefined;
 };
+
+/** Whole request budget, under the app's 15 s timeout: Places, then Gemini with what is left. */
+export const REQUEST_BUDGET_MS = 11_000;
 
 type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -67,6 +68,19 @@ export type Details = {
   websiteUri: string | null;
   mapsUri: string | null;
   attributes: Partial<Record<(typeof ATTRIBUTES)[number], boolean>>;
+  rating: number | null;
+  priceLevel: number | null;
+  /** Google's name for the kind of place (for example "Ramen Restaurant"). */
+  typeName: string | null;
+};
+
+export type DetailsAnswer = Details & { take: Take; why: Fact[] };
+
+const PRICE_LEVELS: Record<string, number> = {
+  PRICE_LEVEL_INEXPENSIVE: 1,
+  PRICE_LEVEL_MODERATE: 2,
+  PRICE_LEVEL_EXPENSIVE: 3,
+  PRICE_LEVEL_VERY_EXPENSIVE: 4,
 };
 
 const GOOGLE_HOSTS = ["google.com", "maps.app.goo.gl"];
@@ -153,10 +167,14 @@ export function mapDetails(data: unknown, placeId: string): Details {
     websiteUri: webUrl(d.websiteUri),
     mapsUri: httpsUrl(d.googleMapsUri, GOOGLE_HOSTS),
     attributes,
+    rating: typeof d.rating === "number" && d.rating >= 1 && d.rating <= 5 ? d.rating : null,
+    priceLevel: typeof d.priceLevel === "string" ? PRICE_LEVELS[d.priceLevel] ?? null : null,
+    typeName: cleanText((d.primaryTypeDisplayName as { text?: unknown })?.text, 40),
   };
 }
 
-export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<Response> {
+export async function handle(req: Request, env: Env, fetchFn: FetchFn, now: () => number = Date.now): Promise<Response> {
+  const started = now();
   if (req.method !== "POST") return json(405, { error: "Use POST." });
 
   const allowed = parsePublishableKeys(env.publishableKeys);
@@ -204,5 +222,13 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   } catch {
     return json(502, { error: "Details unavailable." });
   }
-  return json(200, mapDetails(data, placeId));
+  const details = mapDetails(data, placeId);
+  // Cravera's take and "Why this pick" (ADR 0005): checked in take.ts; any
+  // Gemini failure falls back to the template take and no extra facts.
+  const gemini: GeminiConfig | null = env.geminiKey
+    ? { key: env.geminiKey, model: env.geminiModel || DEFAULT_GEMINI_MODEL, fetchFn }
+    : null;
+  const { take, why, reviewOrder } = await explain(gemini, details, parseTakeInput(body), REQUEST_BUDGET_MS - (now() - started));
+  const answer: DetailsAnswer = { ...details, reviews: orderReviews(details.reviews, reviewOrder), take, why };
+  return json(200, answer);
 }
