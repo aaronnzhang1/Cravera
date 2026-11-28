@@ -411,7 +411,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
 
   // Without curation (skipped, or Gemini failed, e.g. 503 when overloaded),
   // the price the guest asked for still steers the order (never filters).
-  if (curation !== "ok") results = priceFirst(results, intent.priceLevels);
+  if (curation !== "ok") results = priceFirst(results, intent.priceLevels, intent.distance === "near");
 
   // Outcomes only (no craving, intent or places), to see how Gemini is doing.
   console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "price", price, "excluded", excluded.size, "curate", curation, "results", results.length);
@@ -425,12 +425,13 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
  * Places in the wanted price levels first, then places with no price, then
  * the rest; Places order within each group. No levels wanted: unchanged.
  */
-export function priceFirst(results: RestaurantResult[], priceLevels: number[]): RestaurantResult[] {
-  if (priceLevels.length === 0) return results;
+export function priceFirst(results: RestaurantResult[], priceLevels: number[], nearFirst = false): RestaurantResult[] {
+  if (priceLevels.length === 0 && !nearFirst) return results;
   const rank = (r: RestaurantResult) =>
-    r.priceLevel === null ? 1 : priceLevels.includes(r.priceLevel) ? 0 : 2;
-  // Array.prototype.sort is stable, so Places order holds within a group.
-  return [...results].sort((a, b) => rank(a) - rank(b));
+    priceLevels.length === 0 ? 0 : r.priceLevel === null ? 1 : priceLevels.includes(r.priceLevel) ? 0 : 2;
+  // Array.prototype.sort is stable, so Places order holds within a group
+  // (or nearest first there, when the guest asked for closer).
+  return [...results].sort((a, b) => rank(a) - rank(b) || (nearFirst ? a.distanceMeters - b.distanceMeters : 0));
 }
 
 /**
