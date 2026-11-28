@@ -521,4 +521,41 @@ void main() {
       expect(search.currentGallery.first.authors.single.name, 'Search Author');
     });
   });
+
+  group('gallery order and broken images (TASK-UI-4 review round 2)', () {
+    DetailPhoto photo(String n) => DetailPhoto(name: n, authors: const [PhotoAuthor(name: 'Test Author')]);
+
+    test('the order is fixed by names, not by what has loaded', () async {
+      final gate = Completer<Uint8List?>();
+      final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0');
+      final places = FakePlaces((_) => [first])
+        ..photo = ((_) => gate.future)
+        ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: [photo('places/a/photos/p1'), photo('places/a/photos/p0')]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.openDetails(); // details arrive before the search photo
+      await pumpEventQueue();
+      final before = search.currentGallery.map((p) => p.name).toList();
+      gate.complete(Uint8List.fromList([1]));
+      await pumpEventQueue();
+      expect(before, ['places/a/photos/p0', 'places/a/photos/p1']); // search photo first even from later in the list
+      expect(search.currentGallery.map((p) => p.name), before);
+    });
+
+    test('an unreadable image becomes a failure with Try again', () async {
+      final places = FakePlaces((_) => [place('a')])..photo = ((_) => Uint8List.fromList([1]));
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      await pumpEventQueue();
+      expect(search.galleryPhoto('places/a/photos/p1'), isNotNull);
+      search.galleryPhotoBroken('places/a/photos/p1');
+      expect(search.galleryPhoto('places/a/photos/p1'), isNull);
+      expect(search.galleryFailed('places/a/photos/p1'), isTrue);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'), retry: true);
+      await pumpEventQueue();
+      expect(places.photoRequests.length, 2);
+      expect(search.galleryFailed('places/a/photos/p1'), isFalse);
+    });
+  });
 }

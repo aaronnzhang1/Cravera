@@ -237,19 +237,33 @@ class CravingSearch extends ChangeNotifier {
   /// True when the gallery photo [name] failed to load (show Try again).
   bool galleryFailed(String name) => _galleryFailed.contains(name);
 
-  /// The opened card's gallery: the search photo first (with its own credit,
-  /// so opening the card never loses a photo that already shows), then the
-  /// details photos, no more photos than the details sent (at most 5).
+  /// The opened card's gallery: the search photo first whenever the pick
+  /// has one (so opening the card never loses a photo that already shows),
+  /// then the other details photos, no more photos than the details sent
+  /// (at most 5). The order depends only on the names, never on what has
+  /// loaded, so pages don't move while the guest swipes.
   List<DetailPhoto> get currentGallery {
     final place = current;
     final photos = currentDetails?.details?.photos ?? const <DetailPhoto>[];
     if (place == null || photos.isEmpty) return const [];
     final name = place.photoName;
-    if (name == null || _photos[place.placeId] == null || photos.any((p) => p.name == name)) return photos;
-    return [
-      DetailPhoto(name: name, authors: place.photoCredits, mapsUri: place.photoMapsUri),
-      ...photos,
-    ].take(photos.length).toList();
+    if (name == null) return photos;
+    final same = photos.where((p) => p.name == name);
+    final first = same.isNotEmpty
+        ? same.first
+        : DetailPhoto(name: name, authors: place.photoCredits, mapsUri: place.photoMapsUri);
+    return [first, ...photos.where((p) => p.name != name)].take(photos.length).toList();
+  }
+
+  /// The gallery photo [name] arrived but can't be shown (not a readable
+  /// image): forget its bytes and offer Try again, like a failed download.
+  void galleryPhotoBroken(String name) {
+    if (_galleryFailed.contains(name)) return;
+    _gallery.remove(name);
+    final place = current;
+    if (place != null && place.photoName == name) _photos[place.placeId] = null;
+    _galleryFailed.add(name);
+    notifyListeners();
   }
 
   /// True when the craving is longer than the server accepts.

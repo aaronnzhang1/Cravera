@@ -1384,7 +1384,10 @@ class _PhotoHeader extends StatelessWidget {
   /// Already downloaded by [PlacesService.photoBytes], so nothing here goes
   /// to the network. Null shows the placeholder.
   final Uint8List? photo;
-  const _PhotoHeader({required this.photo});
+
+  /// Called when [photo] can't be decoded (the placeholder shows instead).
+  final VoidCallback? onBroken;
+  const _PhotoHeader({required this.photo, this.onBroken});
 
   @override
   Widget build(BuildContext context) {
@@ -1409,7 +1412,11 @@ class _PhotoHeader extends StatelessWidget {
               fit: BoxFit.cover,
               gaplessPlayback: true,
               // Bytes that aren't a valid image show the placeholder.
-              errorBuilder: (context, error, stack) => placeholder,
+              errorBuilder: (context, error, stack) {
+                final broken = onBroken;
+                if (broken != null) WidgetsBinding.instance.addPostFrameCallback((_) => broken());
+                return placeholder;
+              },
             ),
     );
   }
@@ -1511,7 +1518,11 @@ class _GalleryPage extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Semantics(label: 'Photo ${index + 1} of $count', image: true, child: _PhotoHeader(photo: bytes)),
+        Semantics(
+          label: 'Photo ${index + 1} of $count',
+          image: true,
+          child: _PhotoHeader(photo: bytes, onBroken: () => search.galleryPhotoBroken(photo.name)),
+        ),
         if (failed)
           Center(
             child: TextButton.icon(
@@ -1554,7 +1565,7 @@ class _GalleryPage extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               // Credit only once the photo shows: it belongs to the image.
-              child: bytes == null
+              child: bytes == null || failed
                   ? const SizedBox(height: 48)
                   : _PhotoCredit(authors: photo.authors, avatar: search.avatar, mapsUri: photo.mapsUri),
             ),
