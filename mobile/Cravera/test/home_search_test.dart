@@ -92,7 +92,8 @@ void main() {
     );
     await _homeWith(tester, FakePlaces((_) => [matched, _place('b', 'Sample Ramen Bar')]));
     await _searchFor(tester, 'gym food');
-    expect(find.text('In your price range · Close by'), findsOneWidget);
+    expect(find.text('In your price range'), findsOneWidget);
+    expect(find.text('Close by'), findsOneWidget);
 
     await _tapVisible(tester, find.text('No'));
     await _settle(tester);

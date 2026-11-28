@@ -156,17 +156,17 @@ class _Loaded extends StatelessWidget {
         children: [
           if (details.take != null) TakePanel(take: details.take!, isAi: details.takeIsAi),
           if (details.editorialSummary != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Text('About', style: text.titleMedium),
             const SizedBox(height: 4),
-            Text(details.editorialSummary!, style: text.bodyLarge),
+            Text(details.editorialSummary!, style: text.bodyMedium, maxLines: 3, overflow: TextOverflow.ellipsis),
           ],
           if (details.reviewSummary != null) ...[
-            const SizedBox(height: 16),
-            _ReviewSummary(details: details),
+            const SizedBox(height: 20),
+            _ReviewSummary(details: details, maxLines: 3),
           ],
           if (offers.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Text('Offers', style: text.titleMedium),
             const SizedBox(height: 6),
             Wrap(
@@ -175,9 +175,9 @@ class _Loaded extends StatelessWidget {
               children: [for (final o in offers) _Tag(label: o)],
             ),
           ],
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => showPlacePage(context, search: search, restaurant: restaurant, details: details),
               icon: const Icon(Icons.open_in_full_rounded, size: 18),
@@ -193,7 +193,10 @@ class _Loaded extends StatelessWidget {
 
 class _ReviewSummary extends StatelessWidget {
   final PlaceDetails details;
-  const _ReviewSummary({required this.details});
+
+  /// Clamped on the card; the full page shows all of it.
+  final int? maxLines;
+  const _ReviewSummary({required this.details, this.maxLines});
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +206,12 @@ class _ReviewSummary extends StatelessWidget {
       children: [
         Text('What people say', style: text.titleMedium),
         const SizedBox(height: 4),
-        Text(details.reviewSummary!, style: text.bodyLarge),
+        Text(
+          details.reviewSummary!,
+          style: maxLines == null ? text.bodyLarge : text.bodyMedium,
+          maxLines: maxLines,
+          overflow: maxLines == null ? null : TextOverflow.ellipsis,
+        ),
         // Google requires its disclosure with its AI review summary.
         if (details.reviewSummaryDisclosure != null) ...[
           const SizedBox(height: 4),

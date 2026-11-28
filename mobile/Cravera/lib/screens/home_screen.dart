@@ -23,6 +23,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  /// Keeps the drifting cards' state (positions, motion) from Home into the search.
+  final _floatingCardsKey = GlobalKey();
+
   final _promptController = TextEditingController();
   final _repromptController = TextEditingController();
 
@@ -124,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return Stack(
           fit: StackFit.expand,
           children: [
-            const FloatingCards(),
+            FloatingCards(key: _floatingCardsKey),
             // Fade the cards out toward the bottom, so the examples and the
             // input always sit on a calm background.
             IgnorePointer(
@@ -230,7 +233,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildLoading(BuildContext context) {
-    return PopScope(canPop: false, child: const Center(child: _LoadingView()));
+    // The same drifting cards as Home keep moving behind Cravera at work
+    // (one widget, moved between the two screens by its key, so they don't jump).
+    return PopScope(
+      canPop: false,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FloatingCards(key: _floatingCardsKey),
+          const Center(child: _LoadingView()),
+        ],
+      ),
+    );
   }
 
   Widget _buildResult(BuildContext context, AppSession session) {
@@ -647,12 +661,6 @@ class _PickView extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final saved = session.isBookmarked(restaurant.placeId);
-    final facts = [
-      if (restaurant.rating != null) '★ ${restaurant.rating!.toStringAsFixed(1)}',
-      if ((restaurant.cuisine ?? '').trim().isNotEmpty) restaurant.cuisine!.trim(),
-      ?priceLabel(restaurant.priceLevel),
-      if (restaurant.distanceMeters != null) '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km',
-    ];
     final hasAddress = (restaurant.address ?? '').trim().isNotEmpty;
     final checked = session.search.currentDetails?.details?.why ?? const <String>[];
     final why = checked.isNotEmpty ? checked : restaurant.reasons;
@@ -715,42 +723,41 @@ class _PickView extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: text.headlineMedium,
                           ),
-                          // Why this pick: facts the server checked for this craving
-                          // (ADR 0005), else the Places-only reasons from search.
-                          if (why.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              why.join(' · '),
-                              style: text.bodyLarge?.copyWith(color: AppColors.tomato, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                          if (facts.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(facts.join(' · '), style: text.bodyLarge?.copyWith(color: AppColors.textSecondary)),
-                          ],
+                          const SizedBox(height: 10),
+                          // At a glance: rating, kind, price, distance as tidy pills.
+                          _FactPills(restaurant: restaurant),
                           if (hasAddress) ...[
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.place_outlined, size: 18, color: AppColors.textMuted),
-                                const SizedBox(width: 6),
+                                const Icon(Icons.place_outlined, size: 16, color: AppColors.textMuted),
+                                const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     restaurant.address!.trim(),
-                                    maxLines: 2,
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: text.bodyMedium?.copyWith(color: AppColors.textMuted),
+                                    style: text.bodySmall?.copyWith(color: AppColors.textMuted),
                                   ),
                                 ),
                               ],
                             ),
                           ],
-                          // Places data shown outside a Google map needs this credit,
-                          // styled per Google's text-attribution rules.
-                          const _GoogleMapsCredit(),
-                          // TASK-UI-4: more about the place, loaded only when asked for.
+                          // Why this pick: facts the server checked for this craving
+                          // (ADR 0005), else the Places-only reasons from search.
+                          if (why.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [for (final w in why) _WhyChip(label: w)],
+                            ),
+                          ],
+                          // TASK-UI-4: Cravera's take and more, loaded as the place shows.
                           PlaceDetailsSection(search: session.search, restaurant: restaurant),
+                          // Places data shown outside a Google map needs this credit
+                          // (the official logo, unmodified), at the end of the card.
+                          const _GoogleMapsCredit(),
                         ],
                       ),
                     ),
@@ -1700,18 +1707,101 @@ class _AuthorAvatar extends StatelessWidget {
 /// The official Google Maps logo (unmodified, non-outlined on the plain
 /// background), as Google's Places policies prefer: 18 dp tall (16–19), with
 /// at least 10 dp clear space above and 5 dp below, labelled for screen readers.
+/// Rating, kind, price and distance as small pills, so the facts read at a glance.
+class _FactPills extends StatelessWidget {
+  final Restaurant restaurant;
+  const _FactPills({required this.restaurant});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = restaurant;
+    final cuisine = (r.cuisine ?? '').trim();
+    final price = priceLabel(r.priceLevel);
+    final pills = <(IconData, String, String, Color)>[
+      if (r.rating != null) (Icons.star_rounded, r.rating!.toStringAsFixed(1), 'Rated ${r.rating!.toStringAsFixed(1)} on Google', AppColors.gold),
+      if (cuisine.isNotEmpty) (Icons.local_dining_rounded, cuisine, cuisine, AppColors.textSecondary),
+      if (price != null) (Icons.payments_outlined, price, 'Price $price', AppColors.textSecondary),
+      if (r.distanceMeters != null)
+        (Icons.near_me_outlined, '${(r.distanceMeters! / 1000).toStringAsFixed(1)} km', '${(r.distanceMeters! / 1000).toStringAsFixed(1)} kilometres away', AppColors.sage),
+    ];
+    if (pills.isEmpty) return const SizedBox.shrink();
+    final style = Theme.of(context).textTheme.labelLarge;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final (icon, label, spoken, color) in pills)
+          Semantics(
+            label: spoken,
+            excludeSemantics: true,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16, color: color),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(label, style: style?.copyWith(color: AppColors.textPrimary))),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One checked reason for the pick (ADR 0005), as a quiet tomato chip.
+class _WhyChip extends StatelessWidget {
+  final String label;
+  const _WhyChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.tomato.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_rounded, size: 16, color: AppColors.tomato),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppColors.tomato, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _GoogleMapsCredit extends StatelessWidget {
   const _GoogleMapsCredit();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 10, bottom: 5),
+      padding: const EdgeInsets.only(top: 20, bottom: 5),
       child: Semantics(
         label: 'Google Maps',
         image: true,
         excludeSemantics: true,
-        child: Image.asset('assets/images/google_maps_logo.png', height: 18, fit: BoxFit.contain),
+        child: Image.asset('assets/images/google_maps_logo.png', height: 16, fit: BoxFit.contain),
       ),
     );
   }
