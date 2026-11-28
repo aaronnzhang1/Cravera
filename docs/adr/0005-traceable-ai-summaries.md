@@ -9,19 +9,20 @@ ADR 0002 and AGENTS.md let Gemini only turn a craving into search filters and re
 
 ## Decision
 
-Gemini chooses evidence; it never writes restaurant facts. For each of up to 3 "Why this pick" items, Gemini returns only a claim kind from a fixed list, a reference to the Places field or review it rests on, and, for a review, a short quote from it. The Edge Function checks each item in code against the actual Places data: an attribute item needs that attribute to be `true` (for example `takeout`), a rating or price item needs that field present, and a review quote must appear word for word in the cited review. The words on screen come from server-owned templates ("Offers takeout", "Rated 4.6 on Google") or are the verified quote with its reviewer's name; Gemini's own wording is never shown. Any item that fails a check is dropped. If Gemini fails, or no item survives, the card shows the Places-only reasons (Budget-friendly, Close by, Highly rated). Everything else on the card still comes straight from Places.
+Gemini chooses evidence; it never writes restaurant facts. For each of up to 3 "Why this pick" items, Gemini returns only a claim kind from a fixed list, and a reference to the Places field or review it rests on. The Edge Function checks each item in code against the actual Places data: an attribute item needs that attribute to be `true` (for example `takeout`), a rating or price item needs that field present and a review item needs that review to exist in the input. The words on screen come from server-owned templates ("Offers takeout", "Rated 4.6 on Google") or are the whole cited review with its reviewer's attribution (never an excerpt, which could drop a "not"); Gemini's own wording is never shown. Any item that fails a check is dropped. If Gemini fails, or no item survives, the card shows the Places-only reasons (Budget-friendly, Close by, Highly rated). Everything else on the card still comes straight from Places.
 
 Cost and data rules decided with it (maintainer, 2026-11-27):
 
 - Place details (reviews, attributes, summaries) and the Gemini call load only when the guest opens a card, never during search; the daily Places quota cap stays.
 - Up to 5 photos per opened card, loaded as the guest swipes. This replaces "keep photos free, first pick only" for opened cards; search still fetches one photo.
+- `place-details` is deployed only after a daily quota on Place Details is set in Google Cloud (Codex, PR #39): anyone with the public publishable key can call it, so the quota bounds the cost from the first deploy.
 - Gemini's free tier is used while testing, though Google may use the review text sent to it. Switching to the paid tier is a gate before any build leaves the maintainer.
 
 ## Alternatives
 
 - **No AI text on the card:** Places facts and reviews only. Safest, but loses what makes the card more than search-and-display. Rejected.
 - **Free-form AI summary with no citations:** easiest, but no way to catch invented facts. Rejected.
-- **Gemini-written sentences with a citation:** a citation proves the source exists, not that the sentence is true (a claim about a dish can cite a review that never mentions it). Rejected after Codex's adversarial review of PR #39.
+- **Gemini-written sentences with a citation:** a citation proves the source exists, not that the sentence is true (a claim about a dish can cite a review that never mentions it). Also rejected: verbatim excerpts, which can reverse a review's meaning. Both found by Codex's adversarial review of PR #39.
 
 ## Consequences
 
