@@ -355,6 +355,25 @@ test("refining sends the previous intent to Gemini and uses the new intent", asy
   assert.deepEqual((await res.json()).intent.priceLevels, [1]);
 });
 
+test("understand keeps a named landmark, also across a refine", async () => {
+  // "lunch at the Ferry Building" + "no seafood" lost "Ferry Building" (2026-11-27).
+  // The prompt is what makes Gemini keep it; a fake can't prove the model obeys
+  // (that is checked live). Here: the rule is sent, and a landmark Gemini keeps
+  // reaches Places with open-now and the radius box still set by the server.
+  const previousIntent = { ...gymIntent, textQuery: "lunch Ferry Building", avoids: [] };
+  const refined = { ...previousIntent, avoids: ["seafood"] };
+  const g = fakeGoogle([new Response(JSON.stringify({ places: [] }))], [geminiAnswer(refined)]);
+  await handle(request({ query: "no seafood", previousIntent, ...here }), env, g.fn);
+  const system = String(g.geminiCalls()[0].body.system_instruction);
+  assert.ok(system.includes("Keep a landmark or neighborhood the guest named"));
+  assert.ok(system.includes("Keep any landmark or neighborhood in the previous textQuery unless the refinement replaces it or drops it"));
+  assert.ok(!system.includes("No places"));
+  const body = g.placesCalls()[0].body;
+  assert.equal(body.textQuery, "lunch Ferry Building");
+  assert.equal(body.openNow, true);
+  assert.ok(body.locationRestriction);
+});
+
 test("refining without Gemini adds the text to the previous search text", async () => {
   const g = fakeGoogle([new Response(JSON.stringify({ places: [] }))], [new Error("offline")]);
   await handle(request({ query: "spicy", previousIntent: { ...gymIntent, textQuery: "tacos" }, ...here }), env, g.fn);
