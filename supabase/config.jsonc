@@ -461,6 +461,9 @@
     "place-details": {
       "verify_jwt": false
     },
+    "saved-places": {
+      "verify_jwt": false
+    },
     // Checks the publishable key and the caller's own access token in code.
     "delete-account": {
       "verify_jwt": false
