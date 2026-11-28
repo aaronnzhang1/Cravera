@@ -190,6 +190,7 @@ void main() {
     await search.refine('no seafood');
     expect(places.excluded.last, ['a', 'b', 'c', 'd']);
     expect(search.status, SearchStatus.exhausted, reason: 'everything was already seen');
+    expect(search.noNewPlaces, isTrue, reason: '"no new places", not "nothing open"');
 
     // A new craving is a new session.
     await search.start('ramen', here);

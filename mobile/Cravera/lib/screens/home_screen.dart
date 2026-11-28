@@ -325,6 +325,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ? ('That craving is too long.', 'Keep it under ${CravingSearch.maxQueryLength} characters and search again.')
             : failed
                 ? searchErrorText(search.error ?? PlacesSearchError.server)
+                : search.noNewPlaces
+                    ? ('No new places for that.', 'You’ve seen every open match. Try other words.')
                 : search.foundNothing
                     ? (search.messages.length > 1
                         ? ('Nothing open matched that nearby.', 'Try different words, or add more detail.')

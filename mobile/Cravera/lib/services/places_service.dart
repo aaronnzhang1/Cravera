@@ -42,7 +42,11 @@ class SearchAnswer {
   /// server validates it again. Null when the server sent none.
   final Map<String, Object?>? intent;
 
-  const SearchAnswer(this.results, {this.intent});
+  /// True when open places matched but every one was already shown in this
+  /// search session (TASK-005): "no new places", not "nothing open".
+  final bool noNewPlaces;
+
+  const SearchAnswer(this.results, {this.intent, this.noNewPlaces = false});
 }
 
 /// Searches for open restaurants through the `places-search` Edge Function.
@@ -231,7 +235,11 @@ class PlacesService {
         } on FormatException {
           throw const PlacesSearchException(PlacesSearchError.server);
         }
-        return SearchAnswer(parseResults(body), intent: parseIntent(body));
+        return SearchAnswer(
+          parseResults(body),
+          intent: parseIntent(body),
+          noNewPlaces: parseNoNewPlaces(body),
+        );
       case 400:
         throw const PlacesSearchException(PlacesSearchError.rejected);
       case 401:
@@ -288,6 +296,16 @@ class PlacesService {
   }
 
   /// The `intent` object of a response body, or null.
+  /// True only when the server says every open match was already shown.
+  static bool parseNoNewPlaces(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map<String, dynamic> && decoded['noNewPlaces'] == true;
+    } on FormatException {
+      return false;
+    }
+  }
+
   static Map<String, Object?>? parseIntent(String body) {
     try {
       final decoded = jsonDecode(body);

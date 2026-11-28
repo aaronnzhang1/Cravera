@@ -359,26 +359,30 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
     (input.previousIntent ? { ...input.previousIntent, textQuery: fallbackText(input) } : fallbackIntent(input.query));
 
   // 2. Search: the intent's text, with its price levels when it has any.
-  //    Places already shown in this session are left out. If the price
-  //    filter leaves nothing, one retry without it (when there's time).
+  //    Places already shown in this session are left out. Only when Google
+  //    itself found nothing at that price is there one retry without it;
+  //    exclusions never cause a retry, so a caller can't turn one search
+  //    into two billable calls by excluding what it was shown.
   const excluded = new Set(input.excludePlaceIds);
   const fresh = (list: RestaurantResult[]) => list.filter((r) => !excluded.has(r.placeId));
   const priced = intent.priceLevels.length > 0;
   // A priced search leaves time for the relaxed retry it may need.
   const firstTimeout = Math.min(UPSTREAM_TIMEOUT_MS, priced ? left() - MIN_RETRY_MS : left());
-  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, firstTimeout, priced);
-  if (results === null) return json(502, { error: "Search failed. Try again." });
-  results = fresh(results);
+  let found = await searchPlaces(input, intent, env.placesKey, fetchFn, firstTimeout, priced);
+  if (found === null) return json(502, { error: "Search failed. Try again." });
   let price = priced ? "filter" : "none";
-  if (priced && results.length === 0) {
+  if (priced && found.length === 0) {
     // No time left to try without the price: say "Try again", never "nothing open".
     if (left() < MIN_RETRY_MS) return json(502, { error: "Search failed. Try again." });
-    const relaxed = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
+    found = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
     // A failed retry can't say "nothing open": let the app offer Try again.
-    if (relaxed === null) return json(502, { error: "Search failed. Try again." });
-    results = fresh(relaxed);
+    if (found === null) return json(502, { error: "Search failed. Try again." });
     price = "relaxed";
   }
+  let results = fresh(found);
+  // Open places matched, but the guest has seen them all: say so, rather
+  // than "nothing open matched".
+  const noNewPlaces = results.length === 0 && found.length > 0;
 
   let curation = "skipped";
   // 3. Curate, only if Gemini understood the craving and there is time. It
@@ -411,7 +415,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
 
   // 4. Explain, from Places facts only.
   results = results.map(({ types: _types, ...r }) => ({ ...r, reasons: reasonsFor(r) }));
-  return json(200, { results, intent });
+  return json(200, noNewPlaces ? { results, intent, noNewPlaces } : { results, intent });
 }
 
 /**

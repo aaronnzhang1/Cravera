@@ -262,14 +262,32 @@ test("places already shown are never returned, also after a relaxed retry (TASK-
   const res = await handle(request({ query: "no seafood", previousIntent: gymIntent, excludePlaceIds: ["a", "b"], ...here }), env, g.fn);
   assert.deepEqual((await res.json()).results.map((r: { placeId: string }) => r.placeId), ["c"]);
 
-  // Price filter leaves only shown places: the relaxed search runs, and still skips them.
+  // Google found nothing at that price: the relaxed search runs, and still skips shown places.
   const g2 = fakeGoogle(
-    [new Response(JSON.stringify({ places: [place("a")] })), new Response(all)],
+    [new Response("{}"), new Response(all)],
     [geminiAnswer({ ...gymIntent, priceLevels: [1] })],
   );
   const res2 = await handle(request({ query: "cheaper", previousIntent: gymIntent, excludePlaceIds: ["a"], ...here }), env, g2.fn);
   assert.equal(g2.placesCalls().length, 2);
   assert.deepEqual((await res2.json()).results.map((r: { placeId: string }) => r.placeId), ["b", "c"]);
+});
+
+test("exclusions never cause a second Places call; all seen is \"no new places\" (TASK-005)", async () => {
+  // A caller excludes everything a priced search returns: still one call.
+  const g = fakeGoogle(
+    [new Response(JSON.stringify({ places: [place("a"), place("b")] })), new Response(JSON.stringify({ places: [place("c")] }))],
+    [geminiAnswer({ ...gymIntent, priceLevels: [1] })],
+  );
+  const res = await handle(request({ query: "cheaper", previousIntent: gymIntent, excludePlaceIds: ["a", "b"], ...here }), env, g.fn);
+  assert.equal(g.placesCalls().length, 1);
+  const body = await res.json();
+  assert.deepEqual(body.results, []);
+  assert.equal(body.noNewPlaces, true);
+
+  // Truly nothing open: no flag.
+  const none = fakeGoogle([new Response("{}")], [geminiAnswer({ ...gymIntent, priceLevels: [] })]);
+  const empty = await (await handle(request({ query: "tacos", ...here }), env, none.fn)).json();
+  assert.equal(empty.noNewPlaces, undefined);
 });
 
 test("a relaxed retry that fails is a 502, not an empty answer", async () => {

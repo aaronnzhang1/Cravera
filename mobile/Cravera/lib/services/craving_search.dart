@@ -157,6 +157,11 @@ class CravingSearch extends ChangeNotifier {
   /// rejecting every result).
   bool get foundNothing => _status == SearchStatus.exhausted && _results.isEmpty;
 
+  /// True when the last answer had open matches, but the guest had already
+  /// seen all of them in this session (TASK-005).
+  bool get noNewPlaces => foundNothing && _noNewPlaces;
+  bool _noNewPlaces = false;
+
   /// Searches for [query] around [near]. Empty queries are ignored.
   Future<void> start(String query, SearchLocation near) async {
     final trimmed = query.trim();
@@ -222,6 +227,7 @@ class CravingSearch extends ChangeNotifier {
       if (request != _request) return; // a newer search or a reset won
       // Also here, not only on the server: never show a place twice.
       final results = [for (final r in answer.results) if (!exclude.contains(r.placeId)) r];
+      _noNewPlaces = results.isEmpty && (answer.noNewPlaces || answer.results.isNotEmpty);
       _results = List.unmodifiable(results);
       _intent = answer.intent;
       _searchedAt = _now();
