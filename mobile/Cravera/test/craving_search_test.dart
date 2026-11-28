@@ -558,4 +558,27 @@ void main() {
       expect(search.galleryFailed('places/a/photos/p1'), isFalse);
     });
   });
+
+  test('opening while the header photo downloads shares that download (review round 3)', () async {
+    final gate = Completer<Uint8List?>();
+    final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0');
+    final places = FakePlaces((_) => [first])
+      ..photo = ((_) => gate.future)
+      ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: [DetailPhoto(name: 'places/a/photos/p0', authors: const [PhotoAuthor(name: 'A')])]);
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    search.openDetails();
+    await pumpEventQueue();
+    search.loadGalleryPhoto(search.currentGallery.first);
+    expect(places.photoRequests, ['places/a/photos/p0']); // no second download
+    gate.complete(null); // the header download fails
+    await pumpEventQueue();
+    expect(search.galleryFailed('places/a/photos/p0'), isTrue);
+    places.photo = (_) => Uint8List.fromList([1]);
+    search.loadGalleryPhoto(search.currentGallery.first, retry: true);
+    await pumpEventQueue();
+    expect(places.photoRequests.length, 2);
+    expect(search.galleryPhoto('places/a/photos/p0'), isNotNull);
+    expect(search.galleryFailed('places/a/photos/p0'), isFalse);
+  });
 }

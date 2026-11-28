@@ -129,7 +129,13 @@ class CravingSearch extends ChangeNotifier {
     _photos[place.placeId] = null;
     final request = _request;
     service.photoBytes(name).then((bytes) {
-      if (request != _request || bytes == null) return;
+      if (request != _request) return;
+      if (bytes == null) {
+        // The gallery shares this download: its first page offers Try again.
+        _galleryFailed.add(name);
+        notifyListeners();
+        return;
+      }
       _photos[place.placeId] = bytes;
       notifyListeners();
       _loadAvatars(place, service, request);
@@ -209,6 +215,12 @@ class CravingSearch extends ChangeNotifier {
       _loadAvatarsOf(photo.authors, service, _request);
       return;
     }
+    // The search photo's own download is still on its way: share it rather
+    // than starting a second one that could finish differently.
+    final place = current!;
+    if (place.photoName == photo.name && _photos.containsKey(place.placeId) && !_galleryFailed.contains(photo.name)) {
+      return;
+    }
     if (_galleryFailed.contains(photo.name)) {
       if (!retry) return;
       _galleryFailed.remove(photo.name);
@@ -235,7 +247,7 @@ class CravingSearch extends ChangeNotifier {
   final Set<String> _galleryFailed = {};
 
   /// True when the gallery photo [name] failed to load (show Try again).
-  bool galleryFailed(String name) => _galleryFailed.contains(name);
+  bool galleryFailed(String name) => _galleryFailed.contains(name) && galleryPhoto(name) == null;
 
   /// The opened card's gallery: the search photo first whenever the pick
   /// has one (so opening the card never loses a photo that already shows),
