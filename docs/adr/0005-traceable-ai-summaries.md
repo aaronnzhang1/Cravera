@@ -16,21 +16,21 @@ The card has two AI parts, kept visibly apart.
 **2. Cravera's take.** Gemini writes a short note in Cravera's voice (at most 3 sentences, 280 characters) on how the place fits the craving and what it thinks of it, given only the craving and that place's Places fields and reviews. Guardrails, in code:
 
 - The note is labelled as Cravera's AI take on Google data and reviews, and always shows next to the checked facts and Google's own content, never in place of them.
-- It is dropped if it contains any number (rating, price, distance, time, count) that is not one of the input's values, any currency sign, a link, or anything about opening hours or being open (open-now comes only from the search, in code).
+- It is dropped if it contains any digit or number word, any currency sign or price word (for example dollar, bucks, cents, price), a link, or anything about opening hours or being open. Quantities (rating, price, distance) appear only in the server's wording of checked fields, never in Gemini's prose; open-now comes only from the search, in code.
 - If Gemini fails, times out or the note is dropped, the server builds the take from a template in the same voice using only checked fields ("For your cozy ramen craving: ramen, open now, 0.3 km away, rated 4.4.").
 
 Everything else on the card (name, photos, address, price, hours, distance, attributes, Google's summaries, reviews) comes straight from Places.
 
 Cost and data rules (maintainer, 2026-11-27):
 
-- Details and the Gemini call load automatically for each place as it is shown (the first pick and each place after No), never for places the guest hasn't reached; search itself makes no details call. About 1,000 Place Details requests a month are free, then $25 per 1,000; the daily quota the maintainer set caps it.
+- Details and the Gemini call load automatically for each place as it is shown (the first pick and each place after No), never for places the guest hasn't reached; search itself makes no details call. One automatic attempt per shown place; only Try again after a failure may spend another request; repeated taps and rebuilds share a request already on its way. About 1,000 Place Details requests a month are free, then $25 per 1,000; the daily quota the maintainer set caps it.
 - Up to 5 photos per card, each loaded only when swiped to; the search photo is reused.
 - `place-details` is deployed only with a daily quota on Place Details set in Google Cloud (anyone with the public publishable key can call it).
 - Gemini's free tier is used while testing, though Google may use the review text sent to it. Switching to the paid tier is a gate before any build leaves the maintainer.
 
 ## Residual risk (accepted by the maintainer, 2026-11-27)
 
-The take's wording can still misdescribe something the checks can't catch (a dish, the atmosphere, a review's tone). Mitigations: it may only use the place's own Google data and reviews, it is labelled as an AI take, it sits beside the checked facts and the full reviews, and numbers, prices and hours in it are checked or removed.
+The take's wording can still misdescribe something the checks can't catch (a dish, the atmosphere, a review's tone). Mitigations: it may only use the place's own Google data and reviews, it is labelled as an AI take, it sits beside the checked facts and the full reviews, and it can't state numbers, prices or hours at all.
 
 ## Alternatives
 
