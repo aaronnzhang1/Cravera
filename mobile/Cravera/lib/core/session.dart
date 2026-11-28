@@ -156,7 +156,11 @@ class AppSession extends ChangeNotifier {
   int _savesInFlight = 0;
 
   Future<ProfileSaveOutcome> _save(ProfileService service, String account, int generation, ProfileChange change) async {
-    final (outcome, stored) = await service.save(account, change);
+    // Bounded: a save that never answers counts as a lost answer (then the
+    // stored row is read back), so the editors can't stay locked.
+    final (outcome, stored) = await service
+        .save(account, change)
+        .timeout(profileWait * 2, onTimeout: () => (ProfileSaveOutcome.network, null));
     if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
     if (outcome == ProfileSaveOutcome.network) {
       // The answer was lost, but the row may have been saved: show what is

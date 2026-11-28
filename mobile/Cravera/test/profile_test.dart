@@ -209,6 +209,17 @@ void main() {
     expect(session.profile, isNotNull);
   }, timeout: const Timeout(Duration(seconds: 30)));
 
+  test('a save that never answers frees the editors and reads back what is stored', () async {
+    // Real time: the save gives up after profileWait * 2 (10 s).
+    await signIn();
+    profiles.saveGate = Completer<void>(); // never answers
+    final pending = session.updateProfile(const ProfileChange(homeCity: 'Berkeley'));
+    await pumpEventQueue();
+    expect(session.profileSaving, isTrue);
+    expect(await pending, ProfileSaveOutcome.network);
+    expect(session.profileSaving, isFalse);
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   test('a save still pending from the previous account neither locks nor delays the next', () async {
     await signIn();
     final firstGate = Completer<void>();
