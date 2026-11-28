@@ -4,6 +4,8 @@ import 'package:cravera/core/session.dart';
 import 'package:cravera/services/craving_search.dart';
 import 'package:cravera/services/location_service.dart';
 import 'package:cravera/services/profile_service.dart';
+import 'package:cravera/main.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'auth_test.dart' show FakeAuth;
@@ -133,10 +135,112 @@ void main() {
     expect(profiles.saves, isEmpty);
   });
 
+  profileScreenTests();
+
   test('validation matches the table rules', () {
     expect(const Profile(displayName: 'A', homeCity: '  ').validated()?.homeCity, isNull);
     expect(Profile(displayName: 'A', homeCity: 'c' * 81).validated(), isNull);
     expect(const Profile(displayName: 'A', dietaryPreferences: ['raw meat only']).validated(), isNull);
     expect(const Profile(displayName: 'A', defaultRadiusMeters: 50000).validated(), isNull);
+  });
+}
+
+// --- the Profile screen ---
+
+Future<void> _settle(WidgetTester tester) async {
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+/// Opens the app on Profile, signed in (with [profiles]) or as a guest.
+Future<AppSession> _openProfile(WidgetTester tester, FakeProfiles profiles, {bool guest = false}) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(412, 915);
+  addTearDown(tester.view.reset);
+  final session = AppSession(search: CravingSearch(places: FakePlaces((_) => [])), auth: FakeAuth(), profiles: profiles);
+  await tester.pumpWidget(MyApp(session: session));
+  await tester.pump();
+  if (guest) {
+    await tester.tap(find.text('Continue as guest'));
+  } else {
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), FakeAuth.knownEmail);
+    await tester.enterText(find.widgetWithText(TextField, 'Password'), FakeAuth.knownPassword);
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+  }
+  await _settle(tester);
+  await tester.tap(find.text('Profile'));
+  await _settle(tester);
+  return session;
+}
+
+void profileScreenTests() {
+  testWidgets('Profile is in sections with no "coming soon" rows', (tester) async {
+    await _openProfile(tester, FakeProfiles());
+    for (final label in ['ACCOUNT', 'PREFERENCES', 'ABOUT']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    for (final gone in ['Notifications', 'Help & support', 'Location']) {
+      expect(find.text(gone), findsNothing);
+    }
+    expect(find.text(FakeAuth.knownEmail), findsOneWidget);
+    expect(find.text('5 km'), findsOneWidget, reason: 'the default distance shows');
+  });
+
+  testWidgets('editing the name saves it and shows it', (tester) async {
+    final profiles = FakeProfiles();
+    final session = await _openProfile(tester, profiles);
+    await tester.tap(find.text('Name'));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField), 'Robin');
+    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await _settle(tester);
+    expect(session.profile?.displayName, 'Robin');
+    expect(find.text(profileSaveMessage(ProfileSaveOutcome.ok)), findsOneWidget);
+  });
+
+  testWidgets('choosing a distance saves it; a failed save says so and keeps the old one', (tester) async {
+    final profiles = FakeProfiles();
+    final session = await _openProfile(tester, profiles);
+    await tester.ensureVisible(find.text('Search distance'));
+    await tester.tap(find.text('Search distance'));
+    await _settle(tester);
+    await tester.tap(find.text('2 km'));
+    await _settle(tester);
+    expect(session.profile?.defaultRadiusMeters, 2000);
+
+    profiles.saveAnswer = ProfileSaveOutcome.network;
+    await tester.tap(find.text('Search distance'));
+    await _settle(tester);
+    await tester.tap(find.text('10 km'));
+    await _settle(tester);
+    expect(session.profile?.defaultRadiusMeters, 2000);
+    expect(find.text(profileSaveMessage(ProfileSaveOutcome.network)), findsOneWidget);
+  });
+
+  testWidgets('dietary choices save as picked', (tester) async {
+    final profiles = FakeProfiles();
+    final session = await _openProfile(tester, profiles);
+    await tester.ensureVisible(find.text('Dietary preferences'));
+    await tester.tap(find.text('Dietary preferences'));
+    await _settle(tester);
+    await tester.tap(find.text('Vegan'));
+    await tester.tap(find.text('Halal'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _settle(tester);
+    expect(session.profile?.dietaryPreferences, ['vegan', 'halal']);
+  });
+
+  testWidgets('a guest sees preferences off and an honest account prompt', (tester) async {
+    final profiles = FakeProfiles();
+    await _openProfile(tester, profiles, guest: true);
+    expect(find.text('Create an account to save preferences.'), findsOneWidget);
+    expect(find.textContaining('coming'), findsNothing);
+    await tester.ensureVisible(find.text('Dietary preferences'));
+    await tester.tap(find.text('Dietary preferences'));
+    await _settle(tester);
+    expect(find.text('Save'), findsNothing, reason: 'nothing opens for a guest');
+    expect(profiles.saves, isEmpty);
   });
 }
