@@ -252,7 +252,7 @@ Return JSON only:
 - distance: "near" if they want it quick or close, else "any".
 - wants: up to 4 short qualities they asked for, in their words, e.g. "high protein", "quick", "quiet".
 - avoids: up to 4 short things to avoid, e.g. "seafood".
-If a previous intent is given, the craving refines it: keep what still applies and change only what the refinement asks for. Keep any landmark or neighborhood in the previous textQuery unless the refinement replaces it.
+If a previous intent is given, the craving refines it: keep what still applies and change only what the refinement asks for. Keep any landmark or neighborhood in the previous textQuery unless the refinement replaces it or drops it (e.g. "anywhere nearby is fine").
 Use the local hour to read phrases like "late-night" or "breakfast".`;
 
 /** Understand step. Returns a validated intent, or null to fall back. */

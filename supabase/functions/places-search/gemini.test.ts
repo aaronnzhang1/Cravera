@@ -366,7 +366,7 @@ test("understand keeps a named landmark, also across a refine", async () => {
   await handle(request({ query: "no seafood", previousIntent, ...here }), env, g.fn);
   const system = String(g.geminiCalls()[0].body.system_instruction);
   assert.ok(system.includes("Keep a landmark or neighborhood the guest named"));
-  assert.ok(system.includes("Keep any landmark or neighborhood in the previous textQuery"));
+  assert.ok(system.includes("Keep any landmark or neighborhood in the previous textQuery unless the refinement replaces it or drops it"));
   assert.ok(!system.includes("No places"));
   const body = g.placesCalls()[0].body;
   assert.equal(body.textQuery, "lunch Ferry Building");
