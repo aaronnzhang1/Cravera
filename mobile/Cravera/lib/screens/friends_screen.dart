@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../core/app_colors.dart';
 import '../widgets/glass.dart';
@@ -9,7 +10,12 @@ import '../widgets/glass.dart';
 class FriendsScreen extends StatelessWidget {
   const FriendsScreen({super.key});
 
-  /// What Invite copies. No link yet: the app isn't in a store.
+  /// Opens the system share sheet with [text]. Tests replace it.
+  @visibleForTesting
+  static Future<void> Function(String text) shareText =
+      (text) => SharePlus.instance.share(ShareParams(text: text));
+
+  /// What Invite shares. No link yet: the app isn't in a store.
   static const inviteText =
       'I’m using Cravera: tell it what you’re craving and it picks one open place nearby. Want to try it with me?';
 
@@ -103,12 +109,17 @@ class FriendsScreen extends StatelessWidget {
     );
   }
 
+  /// Opens the share sheet; if sharing isn't available, copies the invite.
   Future<void> _invite(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    await Clipboard.setData(const ClipboardData(text: inviteText));
-    messenger
-      ..clearSnackBars()
-      ..showSnackBar(const SnackBar(content: Text('Invite copied. Paste it in a message to a friend.')));
+    try {
+      await shareText(inviteText);
+    } catch (_) {
+      await Clipboard.setData(const ClipboardData(text: inviteText));
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(const SnackBar(content: Text('Invite copied. Paste it in a message to a friend.')));
+    }
   }
 }
 

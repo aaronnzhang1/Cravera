@@ -38,6 +38,18 @@ void main() {
     }
     expect(find.textContaining('coming soon'), findsNothing);
 
+    // Invite opens the share sheet with the invite text.
+    final shared = <String>[];
+    final realShare = FriendsScreen.shareText;
+    addTearDown(() => FriendsScreen.shareText = realShare);
+    FriendsScreen.shareText = (text) async => shared.add(text);
+    await tester.tap(find.text('Invite a friend'));
+    await tester.pump();
+    expect(shared, [FriendsScreen.inviteText]);
+    expect(copied, isNull, reason: 'nothing copied when sharing works');
+
+    // If sharing fails, the invite is copied instead and the guest is told.
+    FriendsScreen.shareText = (_) async => throw Exception('no share sheet');
     await tester.tap(find.text('Invite a friend'));
     await tester.pump();
     expect(copied, FriendsScreen.inviteText);
