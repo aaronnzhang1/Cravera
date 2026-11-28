@@ -3,7 +3,7 @@
 **Goal.** Profile becomes a real, tidy account page whose settings save to the person's own `profiles` row, and Friends stops looking like a ghost town: an inviting preview of what friends will do in Cravera, never a fake list. From [the v0.2 plan](plans/v0.2-hub.md) (task 3).
 
 **Release:** v0.2.0 · Accounts. TASK-002 is done (all 8 criteria checked in the app, 2026-11-27; see git history of this file). TASK-003 is merged (#30).
-**Approved:** _pending (maintainer)_
+**Approved:** 2026-11-27 (maintainer), as written. Claude may work any criterion below without asking again; anything outside this file's scope still needs approval.
 **Review level:** L2. Screens plus writes to the signed-in person's own `profiles` row through the existing RLS and column grants; no migration, no new dependency, no Edge Function change.
 
 ## Acceptance criteria
