@@ -9,7 +9,7 @@ ADR 0002 and AGENTS.md let Gemini only turn a craving into search filters and re
 
 ## Decision
 
-Gemini chooses evidence; it never writes restaurant facts. For each of up to 3 "Why this pick" items, Gemini returns only a reference: a Places field name from a fixed list (for example `takeout`, `rating`) or a review's number in the input. There is no separate claim for it to get wrong: the server derives the item from the referenced field itself. The Edge Function checks each item in code against the actual Places data: an attribute reference counts only if that attribute is `true`, a rating or price reference only if that field is present, and a review reference only if that review exists in the input; anything else in Gemini's answer (free text, labels) is ignored. The words on screen come only from the server's template for the referenced field ("Offers takeout", "Rated 4.6 on Google") or are the whole cited review with its reviewer's attribution (never an excerpt, which could drop a "not"); Gemini's own wording is never shown. Any item that fails a check is dropped. If Gemini fails, or no item survives, the card shows the Places-only reasons (Budget-friendly, Close by, Highly rated). Everything else on the card still comes straight from Places.
+Gemini chooses evidence; it never writes restaurant facts. For up to 3 "Why this pick" items, Gemini returns only references to Places field names from a fixed list (for example `takeout`, `rating`, `priceLevel`). The Edge Function checks each in code: an attribute counts only if Places reports it `true`, a rating or price only if present; anything else in Gemini's answer (free text, labels) is ignored. The words on screen come only from the server's template for that field ("Offers takeout", "Rated 4.6 on Google"); Gemini's own wording is never shown. Gemini may also return review numbers to order the reviews section, which shows whole reviews with their attribution under a neutral "Reviews" heading, never as a reason for the pick (a review can say the opposite of what the guest wants). Any reference that fails a check is dropped. If Gemini fails, or no item survives, the card shows the Places-only reasons (Budget-friendly, Close by, Highly rated). Everything else on the card still comes straight from Places.
 
 Cost and data rules decided with it (maintainer, 2026-11-27):
 
@@ -22,7 +22,7 @@ Cost and data rules decided with it (maintainer, 2026-11-27):
 
 - **No AI text on the card:** Places facts and reviews only. Safest, but loses what makes the card more than search-and-display. Rejected.
 - **Free-form AI summary with no citations:** easiest, but no way to catch invented facts. Rejected.
-- **Gemini-written sentences with a citation:** a citation proves the source exists, not that the sentence is true (a claim about a dish can cite a review that never mentions it). Also rejected: verbatim excerpts, which can reverse a review's meaning. Both found by Codex's adversarial review of PR #39.
+- **Gemini-written sentences with a citation:** a citation proves the source exists, not that the sentence is true (a claim about a dish can cite a review that never mentions it). Also rejected: verbatim excerpts, which can reverse a review's meaning, and reviews as reasons, which can contradict the craving. Both found by Codex's adversarial review of PR #39.
 
 ## Consequences
 
