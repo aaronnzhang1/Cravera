@@ -166,9 +166,9 @@ class CravingSearch extends ChangeNotifier {
   /// (an expired search shows its places again; a refine still skips them).
   List<String> _sentExcluded = const [];
 
-  /// The places shown so far in this session, newest last, capped.
-  List<String> get _excludeNow =>
-      List.unmodifiable(_shown.length > maxExcluded ? _shown.sublist(_shown.length - maxExcluded) : _shown);
+  /// Every place shown so far in this session. The request sends only the
+  /// newest [maxExcluded]; the answer is filtered against all of them.
+  List<String> get _excludeNow => List.unmodifiable(_shown);
 
   Future<void> _run({
     required String display,
@@ -210,7 +210,9 @@ class CravingSearch extends ChangeNotifier {
         near: near,
         previousIntent: previous,
         localHour: _now().hour,
-        excludePlaceIds: exclude.isEmpty ? null : exclude,
+        excludePlaceIds: exclude.isEmpty
+            ? null
+            : (exclude.length > maxExcluded ? exclude.sublist(exclude.length - maxExcluded) : exclude),
       );
       if (request != _request) return; // a newer search or a reset won
       // Also here, not only on the server: never show a place twice.

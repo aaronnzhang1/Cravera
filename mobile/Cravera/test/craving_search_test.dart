@@ -197,6 +197,27 @@ void main() {
     expect(search.current?.placeId, 'a');
   });
 
+  test('after more than 100 places, the earliest still never comes back', () async {
+    var batch = 0;
+    // Each answer: 30 new places, plus the very first place again.
+    final places = FakePlaces((_) {
+      final start = batch++ * 30;
+      return [place('p0'), for (var i = start; i < start + 30; i++) place('p${i + 1}')];
+    });
+    places.intent = {'textQuery': 'tacos'};
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    for (var round = 0; round < 5; round++) {
+      while (search.status == SearchStatus.showing) {
+        search.next();
+      }
+      await search.refine('more');
+    }
+    expect(places.excluded.last!.length, CravingSearch.maxExcluded, reason: 'the request stays capped');
+    expect(places.excluded.last, isNot(contains('p0')), reason: 'the oldest fell off the request');
+    expect(search.current?.placeId, isNot('p0'), reason: 'but the app still filters it');
+  });
+
   test('a retry sends the same exclusions as the request it repeats', () async {
     var fail = false;
     final places = FakePlaces((_) => fail ? throw const PlacesSearchException(PlacesSearchError.network) : [place('a'), place('b'), place('c')]);

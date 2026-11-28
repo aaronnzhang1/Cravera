@@ -175,7 +175,9 @@ test("a wrong model reading of the price can't put a price claim on the card", a
 });
 
 test("a refine that falls back keeps the previous filters", async () => {
-  const g = fakeGoogle([new Response(JSON.stringify({ places: [] }))], [new Error("offline")]);
+  // Two empty answers: the price-filtered search, then the relaxed retry.
+  const empty = () => new Response(JSON.stringify({ places: [] }));
+  const g = fakeGoogle([empty(), empty()], [new Error("offline")]);
   const previousIntent = { ...gymIntent, textQuery: "tacos", priceLevels: [1] };
   const body = await (await handle(request({ query: "closer", previousIntent, ...here }), env, g.fn)).json();
   assert.equal(g.placesCalls()[0].body.textQuery, "tacos closer");
@@ -268,6 +270,15 @@ test("places already shown are never returned, also after a relaxed retry (TASK-
   const res2 = await handle(request({ query: "cheaper", previousIntent: gymIntent, excludePlaceIds: ["a"], ...here }), env, g2.fn);
   assert.equal(g2.placesCalls().length, 2);
   assert.deepEqual((await res2.json()).results.map((r: { placeId: string }) => r.placeId), ["b", "c"]);
+});
+
+test("a relaxed retry that fails is a 502, not an empty answer", async () => {
+  for (const second of [new Response("boom", { status: 500 }), new Error("timeout")]) {
+    const g = fakeGoogle([new Response("{}"), second], [geminiAnswer({ ...gymIntent, priceLevels: [1] })]);
+    const res = await handle(request({ query: "cheaper", ...here }), env, g.fn);
+    assert.equal(res.status, 502);
+    assert.equal(g.placesCalls().length, 2);
+  }
 });
 
 test("excludePlaceIds is untrusted: malformed IDs are dropped and the list is capped", () => {

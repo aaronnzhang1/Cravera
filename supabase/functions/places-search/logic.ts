@@ -368,10 +368,10 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   let price = priced ? "filter" : "none";
   if (priced && results.length === 0 && left() >= MIN_CURATE_MS) {
     const relaxed = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
-    if (relaxed !== null) {
-      results = fresh(relaxed);
-      price = "relaxed";
-    }
+    // A failed retry can't say "nothing open": let the app offer Try again.
+    if (relaxed === null) return json(502, { error: "Search failed. Try again." });
+    results = fresh(relaxed);
+    price = "relaxed";
   }
 
   let curation = "skipped";
