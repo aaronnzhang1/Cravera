@@ -165,6 +165,8 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     final hub = AppSessionScope.of(context).saved;
     showModalBottomSheet<void>(
       context: context,
+      // Above the floating nav bar, so its buttons are never covered.
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
