@@ -281,6 +281,20 @@ test("a relaxed retry that fails is a 502, not an empty answer", async () => {
   }
 });
 
+test("a priced search that finds nothing near the deadline is a 502, not \"nothing open\"", async () => {
+  let t = 0;
+  const g = fakeGoogle([new Response("{}"), new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer({ ...gymIntent, priceLevels: [1] })]);
+  // The clock jumps when Places answers: the empty priced answer arrives with 1 s left.
+  const fn: typeof g.fn = async (url, init) => {
+    const res = await g.fn(url, init);
+    if (String(url) === PLACES_URL) t = REQUEST_BUDGET_MS - 1000;
+    return res;
+  };
+  const res = await handle(request({ query: "cheaper", ...here }), { ...env, now: () => t }, fn);
+  assert.equal(res.status, 502);
+  assert.equal(g.placesCalls().length, 1, "no retry that couldn't finish");
+});
+
 test("excludePlaceIds is untrusted: malformed IDs are dropped and the list is capped", () => {
   const base = { query: "tacos", latitude: 1, longitude: 2 };
   const many = Array.from({ length: 150 }, (_, i) => `id${i}`);

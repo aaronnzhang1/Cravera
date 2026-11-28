@@ -51,6 +51,8 @@ const UPSTREAM_TIMEOUT_MS = 8000;
  */
 export const REQUEST_BUDGET_MS = 11_000;
 const MIN_CURATE_MS = 1500;
+/** Time kept for the relaxed Places retry after a priced search finds nothing. */
+const MIN_RETRY_MS = 2000;
 /** "Close by" when the place is within this. */
 const NEAR_M = 1500;
 const HIGHLY_RATED = 4.5;
@@ -362,11 +364,15 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const excluded = new Set(input.excludePlaceIds);
   const fresh = (list: RestaurantResult[]) => list.filter((r) => !excluded.has(r.placeId));
   const priced = intent.priceLevels.length > 0;
-  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), priced);
+  // A priced search leaves time for the relaxed retry it may need.
+  const firstTimeout = Math.min(UPSTREAM_TIMEOUT_MS, priced ? left() - MIN_RETRY_MS : left());
+  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, firstTimeout, priced);
   if (results === null) return json(502, { error: "Search failed. Try again." });
   results = fresh(results);
   let price = priced ? "filter" : "none";
-  if (priced && results.length === 0 && left() >= MIN_CURATE_MS) {
+  if (priced && results.length === 0) {
+    // No time left to try without the price: say "Try again", never "nothing open".
+    if (left() < MIN_RETRY_MS) return json(502, { error: "Search failed. Try again." });
     const relaxed = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
     // A failed retry can't say "nothing open": let the app offer Try again.
     if (relaxed === null) return json(502, { error: "Search failed. Try again." });
