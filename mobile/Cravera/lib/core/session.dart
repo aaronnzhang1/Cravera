@@ -93,8 +93,9 @@ class AppSession extends ChangeNotifier {
   /// profile service); dropped if the account changed or signed out meanwhile.
   Future<void> _loadDisplayName(String accountId, int request) {
     return _profileLoad = () async {
-      final loaded = await profiles?.load(accountId);
-      final name = loaded?.displayName ?? await auth?.displayName();
+      // Bounded: a read that never answers shows "Try again", not "Loading…".
+      final loaded = await profiles?.load(accountId).timeout(profileWait, onTimeout: () => null);
+      final name = loaded?.displayName ?? await auth?.displayName().timeout(profileWait, onTimeout: () => null);
       if (request != _nameRequest || _accountId != accountId) return;
       _profile = loaded;
       _profileLoadFailed = profiles != null && loaded == null;

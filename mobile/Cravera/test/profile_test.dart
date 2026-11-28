@@ -197,6 +197,18 @@ void main() {
     expect(session.profileSaving, isFalse);
   }, timeout: const Timeout(Duration(seconds: 30)));
 
+  test('a profile load that never answers ends in Try again, not Loading forever', () async {
+    // Real time: the load gives up after profileWait (5 s).
+    profiles.loadGate = Completer<void>(); // never completes
+    await session.signInWithEmail(email: FakeAuth.knownEmail, password: FakeAuth.knownPassword);
+    await Future<void>.delayed(AppSession.profileWait + const Duration(milliseconds: 200));
+    expect(session.profileLoadFailed, isTrue);
+    expect(session.profile, isNull);
+    profiles.loadGate = null;
+    await session.retryProfileLoad();
+    expect(session.profile, isNotNull);
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   test('a save still pending from the previous account neither locks nor delays the next', () async {
     await signIn();
     final firstGate = Completer<void>();
