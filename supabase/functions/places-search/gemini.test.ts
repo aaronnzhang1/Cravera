@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ALLOWED_TYPES, GEMINI_URL, validateCuration, validateIntent } from "./gemini.ts";
-import { fallbackText, handle, MAX_EXCLUDED, MAX_RADIUS_M, parseInput, PLACES_URL, priceFirst, reasonsFor, REQUEST_BUDGET_MS } from "./logic.ts";
+import { fallbackRefine, fallbackText, handle, MAX_EXCLUDED, MAX_RADIUS_M, parseInput, PLACES_URL, priceFirst, reasonsFor, REQUEST_BUDGET_MS } from "./logic.ts";
 import type { RestaurantResult } from "./logic.ts";
 
 const KEY = "sb_publishable_test_key";
@@ -174,13 +174,36 @@ test("a wrong model reading of the price can't put a price claim on the card", a
   assert.ok(!JSON.stringify(results[0].reasons).toLowerCase().includes("price"), JSON.stringify(results[0].reasons));
 });
 
+test("while Gemini is down, the Cheaper and Closer chips still work in code", async () => {
+  const pricey = { ...gymIntent, textQuery: "steak", priceLevels: [3], distance: "any" as const };
+  const g = fakeGoogle([new Response(JSON.stringify({ places: [place("a")] }))], [new Error("503")]);
+  const body = await (await handle(request({ query: "cheaper", previousIntent: pricey, ...here }), env, g.fn)).json();
+  assert.deepEqual(g.placesCalls()[0].body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE"]);
+  assert.equal(g.placesCalls()[0].body.textQuery, "steak", "the text stays the previous search");
+  assert.deepEqual(body.intent.priceLevels, [1, 2]);
+
+  const g2 = fakeGoogle([new Response(JSON.stringify({ places: [place("a")] }))], [new Error("503")]);
+  const body2 = await (await handle(request({ query: "closer", previousIntent: pricey, ...here }), env, g2.fn)).json();
+  assert.equal(body2.intent.distance, "near");
+  assert.equal(g2.placesCalls()[0].body.textQuery, "steak");
+});
+
+test("fallback Cheaper steps below the lowest previous price", () => {
+  const input = { query: "cheaper", latitude: 0, longitude: 0, radiusMeters: 5000, localHour: null, previousIntent: null, excludePlaceIds: [] };
+  const base = { ...gymIntent, priceLevels: [] as number[] };
+  assert.deepEqual(fallbackRefine({ ...base, priceLevels: [] }, input).priceLevels, [1, 2]);
+  assert.deepEqual(fallbackRefine({ ...base, priceLevels: [4] }, input).priceLevels, [1, 2, 3]);
+  assert.deepEqual(fallbackRefine({ ...base, priceLevels: [2, 3] }, input).priceLevels, [1]);
+  assert.deepEqual(fallbackRefine({ ...base, priceLevels: [1] }, input).priceLevels, [1]);
+});
+
 test("a refine that falls back keeps the previous filters", async () => {
   // Two empty answers: the price-filtered search, then the relaxed retry.
   const empty = () => new Response(JSON.stringify({ places: [] }));
   const g = fakeGoogle([empty(), empty()], [new Error("offline")]);
   const previousIntent = { ...gymIntent, textQuery: "tacos", priceLevels: [1] };
-  const body = await (await handle(request({ query: "closer", previousIntent, ...here }), env, g.fn)).json();
-  assert.equal(g.placesCalls()[0].body.textQuery, "tacos closer");
+  const body = await (await handle(request({ query: "spicy", previousIntent, ...here }), env, g.fn)).json();
+  assert.equal(g.placesCalls()[0].body.textQuery, "tacos spicy");
   assert.deepEqual(body.intent.priceLevels, [1], "later refines keep it too");
 });
 

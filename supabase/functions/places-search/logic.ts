@@ -356,7 +356,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const understood = gemini ? await understand(gemini, input.query, input.previousIntent, input.localHour, left()) : null;
   // A refine that falls back keeps the previous (validated) filters.
   const intent = understood ??
-    (input.previousIntent ? { ...input.previousIntent, textQuery: fallbackText(input) } : fallbackIntent(input.query));
+    (input.previousIntent ? fallbackRefine(input.previousIntent, input) : fallbackIntent(input.query));
 
   // 2. Search: the intent's text, with its price levels when it has any.
   //    Places already shown in this session are left out. Only when Google
@@ -431,6 +431,22 @@ export function priceFirst(results: RestaurantResult[], priceLevels: number[]): 
     r.priceLevel === null ? 1 : priceLevels.includes(r.priceLevel) ? 0 : 2;
   // Array.prototype.sort is stable, so Places order holds within a group.
   return [...results].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * A refine when Gemini didn't answer: the previous filters, with the app's
+ * own chips applied in code ("cheaper" moves below the previous lowest
+ * price, "closer" means near), so they still work while Gemini is down.
+ */
+export function fallbackRefine(previous: Intent, input: SearchInput): Intent {
+  const word = input.query.trim().toLowerCase();
+  if (word === "cheaper") {
+    const lowest = previous.priceLevels.length > 0 ? Math.min(...previous.priceLevels) : null;
+    const priceLevels = lowest === null ? [1, 2] : lowest <= 1 ? [1] : Array.from({ length: lowest - 1 }, (_, i) => i + 1);
+    return { ...previous, priceLevels };
+  }
+  if (word === "closer") return { ...previous, distance: "near" };
+  return { ...previous, textQuery: fallbackText(input) };
 }
 
 /** The search text when Gemini didn't answer: the craving, or the previous text plus the refinement. */
