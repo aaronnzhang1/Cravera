@@ -383,57 +383,72 @@ Future<void> _editDiet(BuildContext context, AppSession session) async {
     isScrollControlled: true,
     // Above the floating nav bar (on the tabs' navigator it sits under it).
     useRootNavigator: true,
-    builder: (sheetContext) {
-      final picked = {...current.dietaryPreferences};
-      final text = Theme.of(sheetContext).textTheme;
-      return StatefulBuilder(
-        builder: (sheetContext, setState) => SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Dietary preferences', style: text.titleLarge),
-                const SizedBox(height: 4),
-                Text(
-                  'Saved to your account. Search doesn’t use them yet.',
-                  style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final d in Profile.dietaryChoices)
-                      FilterChip(
-                        label: Text(_capitalized(d)),
-                        selected: picked.contains(d),
-                        materialTapTargetSize: MaterialTapTargetSize.padded,
-                        onSelected: (on) => setState(() => on ? picked.add(d) : picked.remove(d)),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.of(sheetContext).pop([
-                      for (final d in Profile.dietaryChoices)
-                        if (picked.contains(d)) d,
-                    ]),
-                    child: const Text('Save'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
+    builder: (_) => _DietSheet(initial: current.dietaryPreferences),
   );
   if (chosen == null || !context.mounted) return;
   await _saveEdit(context, session, account, ProfileChange(dietaryPreferences: chosen));
+}
+
+/// The dietary choices sheet. Owns its selection: the sheet's builder can
+/// run again (route or layout changes), and a selection kept there was reset,
+/// so a tap could vanish and Save could store nothing (seen on the emulator).
+class _DietSheet extends StatefulWidget {
+  const _DietSheet({required this.initial});
+  final List<String> initial;
+
+  @override
+  State<_DietSheet> createState() => _DietSheetState();
+}
+
+class _DietSheetState extends State<_DietSheet> {
+  late final Set<String> _picked = {...widget.initial};
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Dietary preferences', style: text.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Saved to your account. Search doesn’t use them yet.',
+              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final d in Profile.dietaryChoices)
+                  FilterChip(
+                    label: Text(_capitalized(d)),
+                    selected: _picked.contains(d),
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    onSelected: (on) => setState(() => on ? _picked.add(d) : _picked.remove(d)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop([
+                  for (final d in Profile.dietaryChoices)
+                    if (_picked.contains(d)) d,
+                ]),
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _editRadius(BuildContext context, AppSession session) async {

@@ -361,6 +361,9 @@ void profileScreenTests() {
     await tester.tap(find.text('Vegan'));
     await tester.tap(find.text('Halal'));
     await tester.pump();
+    // The sheet rebuilds (here: the screen changes size); the picks must stay.
+    tester.view.physicalSize = const Size(412, 900);
+    await _settle(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
     expect(session.profile?.dietaryPreferences, ['vegan', 'halal']);
