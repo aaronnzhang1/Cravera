@@ -135,6 +135,22 @@ void main() {
     expect(session.profile?.displayName, 'Renamed Elsewhere');
   });
 
+  test('two quick saves run in order, so the later choice wins on the server and on screen', () async {
+    await signIn();
+    profiles.saveGate = Completer<void>();
+    final first = session.updateProfile(const ProfileChange(defaultRadiusMeters: 2000));
+    final second = session.updateProfile(const ProfileChange(defaultRadiusMeters: 10000));
+    await pumpEventQueue();
+    expect(profiles.saves.length, 1, reason: 'the second waits for the first');
+    profiles.saveGate!.complete();
+    expect(await first, ProfileSaveOutcome.ok);
+    expect(await second, ProfileSaveOutcome.ok);
+    expect([for (final s in profiles.saves) s.$2['default_radius_m']], [2000, 10000]);
+    expect(profiles.rows[_me]?.defaultRadiusMeters, 10000);
+    expect(session.profile?.defaultRadiusMeters, 10000);
+    expect(session.search.radiusMeters, 10000);
+  });
+
   test('a failed save says so and keeps the old values', () async {
     await signIn();
     final before = session.profile;
@@ -314,6 +330,20 @@ void profileScreenTests() {
     await _settle(tester);
     expect(find.text('10 km'), findsNothing);
     expect(profiles.saves, isEmpty, reason: 'nothing was saved by closing them');
+  });
+
+  testWidgets('an empty name says why it can\'t be saved', (tester) async {
+    final profiles = FakeProfiles();
+    await _openProfile(tester, profiles);
+    await tester.tap(find.text('Name'));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.pump();
+    expect(find.text('Enter at least one character.'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await _settle(tester);
+    expect(find.byType(AlertDialog), findsOneWidget, reason: 'stays open to fix it');
+    expect(profiles.saves, isEmpty);
   });
 
   testWidgets('a guest sees preferences off and an honest account prompt', (tester) async {

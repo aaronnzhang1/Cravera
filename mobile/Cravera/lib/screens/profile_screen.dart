@@ -347,7 +347,11 @@ class _TextDialogState extends State<_TextDialog> {
         autofocus: true,
         maxLength: widget.maxLength,
         textCapitalization: TextCapitalization.words,
-        decoration: InputDecoration(hintText: widget.hint, labelText: widget.title),
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          labelText: widget.title,
+          errorText: _ok ? null : 'Enter at least one character.',
+        ),
         onChanged: (_) => setState(() {}),
         onSubmitted: (_) => _submit(),
       ),

@@ -276,7 +276,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // Right after sign-in, wait for the profile so its distance is used.
     await session.profileReady;
     if (!mounted || session.accountGeneration != generation) return;
-    await session.search.start(prompt, near);
+    // The place may have changed while waiting: search where Home shows now.
+    final nearNow = session.searchLocation;
+    if (nearNow == null || session.locationChanging) return;
+    await session.search.start(prompt, nearNow);
   }
 
   /// Adds the user's extra words to the craving and searches again.

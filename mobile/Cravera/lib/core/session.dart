@@ -120,6 +120,25 @@ class AppSession extends ChangeNotifier {
     if (service == null || account == null || _profile == null) return ProfileSaveOutcome.failed;
     if (change.toColumns() == null) return ProfileSaveOutcome.invalid;
     final generation = _accountGeneration;
+    // One save at a time, in the order they were made: a quick second edit
+    // can't be overwritten by the first one arriving late, and an older
+    // answer can't replace a newer one on screen.
+    final before = _saving;
+    final done = Completer<void>();
+    _saving = done.future;
+    try {
+      await before;
+      if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
+      return await _save(service, account, generation, change);
+    } finally {
+      done.complete();
+    }
+  }
+
+  /// The save in flight, if any; the next one waits for it.
+  Future<void> _saving = Future.value();
+
+  Future<ProfileSaveOutcome> _save(ProfileService service, String account, int generation, ProfileChange change) async {
     final (outcome, stored) = await service.save(account, change);
     if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
     if (outcome != ProfileSaveOutcome.ok || stored == null) return outcome == ProfileSaveOutcome.ok ? ProfileSaveOutcome.failed : outcome;
