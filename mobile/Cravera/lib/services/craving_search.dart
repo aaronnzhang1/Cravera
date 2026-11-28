@@ -57,6 +57,10 @@ class CravingSearch extends ChangeNotifier {
   /// (and said No to) never comes back in the same session (TASK-005).
   final List<String> _shown = [];
 
+  /// Places the guest said No to in this session. Even a retry (after an
+  /// error, or to refresh expired results) never brings these back.
+  final List<String> _rejected = [];
+
   /// The most IDs sent with one request (the server accepts this many).
   static const maxExcluded = 100;
 
@@ -159,6 +163,7 @@ class CravingSearch extends ChangeNotifier {
     if (trimmed.isEmpty) return;
     _messages = List.unmodifiable([trimmed]);
     _shown.clear(); // a new craving starts a new session
+    _rejected.clear();
     await _run(display: trimmed, send: trimmed, previous: null, near: near);
   }
 
@@ -235,6 +240,8 @@ class CravingSearch extends ChangeNotifier {
   void next() {
     if (!checkFresh() || _status != SearchStatus.showing) return;
     _rejections++;
+    final id = _results[_index].placeId;
+    if (!_rejected.contains(id)) _rejected.add(id);
     if (_index + 1 < _results.length) {
       _index++;
       _markShown();
@@ -286,13 +293,16 @@ class CravingSearch extends ChangeNotifier {
   Future<void> retry() async {
     final near = _near;
     if (near == null || _sentQuery.isEmpty) return;
-    await _run(display: _query, send: _sentQuery, previous: _sentIntent, near: near, exclude: _sentExcluded);
+    // The same request, but never a place said No to since it was sent.
+    final exclude = [..._sentExcluded, for (final id in _rejected) if (!_sentExcluded.contains(id)) id];
+    await _run(display: _query, send: _sentQuery, previous: _sentIntent, near: near, exclude: exclude);
   }
 
   /// Back to no search. A search still in flight is dropped.
   void reset() {
     _request++;
     _shown.clear();
+    _rejected.clear();
     _status = SearchStatus.idle;
     _query = '';
     _messages = const [];

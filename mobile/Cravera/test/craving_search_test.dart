@@ -218,6 +218,23 @@ void main() {
     expect(search.current?.placeId, isNot('p0'), reason: 'but the app still filters it');
   });
 
+  test('refreshing an expired refine never brings back a place said No to', () async {
+    var now = DateTime(2026, 1, 1, 12);
+    final places = FakePlaces((_) => [place('a'), place('b'), place('c')]);
+    places.intent = {'textQuery': 'tacos'};
+    final search = CravingSearch(places: places, clock: () => now);
+    await search.start('tacos', here);
+    await search.refine('cheaper'); // shows b (a was shown first)
+    expect(search.current?.placeId, 'b');
+    search.next(); // No to b
+    expect(search.current?.placeId, 'c');
+    now = now.add(const Duration(minutes: 16));
+    expect(search.checkFresh(), isFalse);
+    await search.retry(); // "Search again"
+    expect(search.current?.placeId, 'c', reason: 'b was said No to; c is still fine to show');
+    expect(places.excluded.last, containsAll(['a', 'b']));
+  });
+
   test('a retry sends the same exclusions as the request it repeats', () async {
     var fail = false;
     final places = FakePlaces((_) => fail ? throw const PlacesSearchException(PlacesSearchError.network) : [place('a'), place('b'), place('c')]);
