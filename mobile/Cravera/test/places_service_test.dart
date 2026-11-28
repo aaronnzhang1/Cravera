@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:cravera/core/constants.dart';
+import 'package:cravera/models/place_details.dart';
 import 'package:cravera/services/location_service.dart';
 import 'package:cravera/services/places_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -44,6 +45,16 @@ Future<PlacesSearchError?> errorFor(MockClient client) async {
 }
 
 void main() {
+  detailsTests();
+  test('a long refined craving sends its most recent part, within the limit', () {
+    final long = '${'tacos ' * 40}no seafood please';
+    final sent = recentCraving(long);
+    expect(sent.length, lessThanOrEqualTo(CravingLimits.maxQuery));
+    expect(sent.endsWith('no seafood please'), isTrue);
+    expect(sent.startsWith(' '), isFalse);
+    expect(recentCraving('  ramen '), 'ramen');
+  });
+
   group('request', () {
     test('posts the query and location to the function with the publishable key', () async {
       late http.Request sent;
@@ -468,4 +479,57 @@ class _ClosingClient extends http.BaseClient {
 
   @override
   void close() => closed = true;
+}
+
+/// TASK-UI-4: details requests.
+void detailsTests() {
+  group('details (TASK-UI-4)', () {
+    test('posts only the place ID to place-details with the publishable key, and reads the answer', () async {
+      late http.Request sent;
+      final client = MockClient((request) async {
+        sent = request;
+        return http.Response(
+          jsonEncode({
+            'placeId': 'fake-1',
+            'photos': [
+              {'name': 'places/fake-1/photos/p1', 'authors': [{'name': 'Test Author'}]},
+              {'name': 'places/fake-1/photos/p2', 'authors': []},
+            ],
+            'reviews': [
+              {'authorName': 'Test Reviewer', 'text': 'Fictional review', 'rating': 5},
+              {'authorName': 'No Text'},
+            ],
+            'editorialSummary': 'Fictional summary',
+            'reviewSummary': {'text': 'People like it.', 'disclosure': 'Summarized with Gemini'},
+            'websiteUri': 'https://example.com',
+            'attributes': {'takeout': true, 'delivery': false, 'odd': 'yes'},
+          }),
+          200,
+        );
+      });
+      final d = await serviceWith(client).details('fake-1');
+      expect(sent.url, PlacesService.detailsEndpoint);
+      expect(sent.headers['apikey'], 'sb_publishable_test');
+      expect(jsonDecode(sent.body), {'placeId': 'fake-1'});
+      expect(d!.photos.map((p) => p.name), ['places/fake-1/photos/p1']);
+      expect(d.reviews.single.authorName, 'Test Reviewer');
+      expect(d.reviews.single.rating, 5);
+      expect(d.editorialSummary, 'Fictional summary');
+      expect(d.reviewSummary, 'People like it.');
+      expect(d.reviewSummaryDisclosure, 'Summarized with Gemini');
+      expect(d.attributes, {'takeout': true, 'delivery': false});
+    });
+
+    test('any failure, or an answer for another place, is null; bad IDs are never sent', () async {
+      var calls = 0;
+      Future<PlaceDetails?> with_(http.Response r) =>
+          serviceWith(MockClient((_) async { calls++; return r; })).details('fake-1');
+      expect(await with_(http.Response('', 502)), isNull);
+      expect(await with_(http.Response('not json', 200)), isNull);
+      expect(await with_(http.Response(jsonEncode({'placeId': 'other'}), 200)), isNull);
+      final before = calls;
+      expect(await serviceWith(MockClient((_) async { calls++; return http.Response('{}', 200); })).details('a/b'), isNull);
+      expect(calls, before);
+    });
+  });
 }

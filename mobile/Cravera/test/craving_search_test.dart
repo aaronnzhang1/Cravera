@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:cravera/models/place_details.dart';
 import 'package:cravera/models/restaurant.dart';
 import 'package:cravera/services/craving_search.dart';
 import 'package:cravera/services/location_service.dart';
@@ -65,6 +66,18 @@ class FakePlaces extends PlacesService {
   Future<Uint8List?> photoBytes(String photoName) async {
     photoRequests.add(photoName);
     return photo?.call(photoName);
+  }
+
+  /// Answers details requests; null (failed) when not set.
+  FutureOr<PlaceDetails?> Function(String placeId)? detailsAnswer;
+  final detailRequests = <String>[];
+  final detailCravings = <String?>[];
+
+  @override
+  Future<PlaceDetails?> details(String placeId, {String? craving, List<int> priceLevels = const []}) async {
+    detailCravings.add(craving);
+    detailRequests.add(placeId);
+    return detailsAnswer?.call(placeId);
   }
 }
 
@@ -383,5 +396,205 @@ void main() {
 
     expect(places.queries, ['tacos', 'no seafood', 'no seafood']);
     expect(places.previousIntents.last, {'textQuery': 'tacos'});
+  });
+
+  group('details (TASK-UI-4)', () {
+    test('each place shown loads its details by itself, once; places not reached load nothing', () async {
+      final places = FakePlaces((_) => [place('a'), place('b'), place('c')])
+        ..detailsAnswer = (id) => PlaceDetails(placeId: id, editorialSummary: 'Fictional summary');
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      expect(search.currentDetails!.status, DetailsStatus.loading);
+      search.openDetails(); // a rebuild or tap while loading sends nothing
+      await pumpEventQueue();
+      expect(places.detailRequests, ['a']);
+      expect(search.currentDetails!.status, DetailsStatus.loaded);
+      expect(search.currentDetails!.details!.editorialSummary, 'Fictional summary');
+      search.openDetails(); // already loaded: nothing new
+      search.next();
+      await pumpEventQueue();
+      expect(places.detailRequests, ['a', 'b']); // 'c' not reached
+    });
+
+    test('a failed load can be tried again', () async {
+      final places = FakePlaces((_) => [place('a')]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.openDetails();
+      await pumpEventQueue();
+      expect(search.currentDetails!.status, DetailsStatus.failed);
+
+      places.detailsAnswer = (id) => PlaceDetails(placeId: id);
+      search.openDetails();
+      await pumpEventQueue();
+      expect(places.detailRequests, ['a', 'a']);
+      expect(search.currentDetails!.status, DetailsStatus.loaded);
+    });
+
+    test('details that arrive after a new search or reset are dropped', () async {
+      final gates = <Completer<PlaceDetails?>>[];
+      final places = FakePlaces((_) => [place('a')])
+        ..detailsAnswer = (_) {
+          gates.add(Completer<PlaceDetails?>());
+          return gates.last.future;
+        };
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here); // loads by itself
+      search.reset();
+      await search.start('tacos', here); // the new search's own request
+      gates.first.complete(const PlaceDetails(placeId: 'a', editorialSummary: 'Old'));
+      await pumpEventQueue();
+      expect(gates.length, 2);
+      expect(search.currentDetails!.status, DetailsStatus.loading); // the old answer is ignored
+    });
+  });
+
+  group('gallery (TASK-UI-4)', () {
+    DetailPhoto photo(String n) => DetailPhoto(name: n, authors: const [PhotoAuthor(name: 'Test Author')]);
+
+    test('a gallery photo is fetched only when asked, once; the search photo is reused', () async {
+      final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0');
+      final places = FakePlaces((_) => [first])..photo = (n) => Uint8List.fromList([n.length]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      await pumpEventQueue();
+      expect(places.photoRequests, ['places/a/photos/p0']);
+
+      search.loadGalleryPhoto(photo('places/a/photos/p0')); // already have it
+      expect(places.photoRequests, ['places/a/photos/p0']);
+      expect(search.galleryPhoto('places/a/photos/p0'), isNotNull);
+
+      expect(search.galleryPhoto('places/a/photos/p1'), isNull);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      await pumpEventQueue();
+      expect(places.photoRequests, ['places/a/photos/p0', 'places/a/photos/p1']);
+      expect(search.galleryPhoto('places/a/photos/p1'), isNotNull);
+    });
+
+    test('a gallery photo that arrives after a reset is dropped', () async {
+      final gate = Completer<Uint8List?>();
+      final places = FakePlaces((_) => [place('a')])..photo = (_) => gate.future;
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      search.reset();
+      await search.start('tacos', here);
+      gate.complete(Uint8List.fromList([1]));
+      await pumpEventQueue();
+      expect(search.galleryPhoto('places/a/photos/p1'), isNull);
+    });
+  });
+
+  group('gallery failures (TASK-UI-4 review)', () {
+    DetailPhoto photo(String n) => DetailPhoto(name: n, authors: const [PhotoAuthor(name: 'Test Author')]);
+
+    test('a failed photo is not asked again on rebuilds, only on Try again', () async {
+      Uint8List? answer;
+      final places = FakePlaces((_) => [place('a')])..photo = (_) => answer;
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      await pumpEventQueue();
+      expect(search.galleryFailed('places/a/photos/p1'), isTrue);
+      search.loadGalleryPhoto(photo('places/a/photos/p1')); // a rebuild
+      expect(places.photoRequests, ['places/a/photos/p1']);
+
+      answer = Uint8List.fromList([1]);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'), retry: true);
+      await pumpEventQueue();
+      expect(places.photoRequests, ['places/a/photos/p1', 'places/a/photos/p1']);
+      expect(search.galleryFailed('places/a/photos/p1'), isFalse);
+      expect(search.galleryPhoto('places/a/photos/p1'), isNotNull);
+    });
+
+    test('opening keeps the search photo first, with its own credit, and every details photo', () async {
+      const credit = PhotoAuthor(name: 'Search Author');
+      final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0', photoAuthors: const [credit]);
+      final places = FakePlaces((_) => [first])
+        ..photo = ((_) => Uint8List.fromList([1]))
+        ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: [photo('places/a/photos/p1'), photo('places/a/photos/p2')]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      await pumpEventQueue();
+      expect(search.currentGallery.map((p) => p.name), ['places/a/photos/p0', 'places/a/photos/p1', 'places/a/photos/p2']);
+      expect(search.currentGallery.first.authors.single.name, 'Search Author');
+    });
+  });
+
+  group('gallery order and broken images (TASK-UI-4 review round 2)', () {
+    DetailPhoto photo(String n) => DetailPhoto(name: n, authors: const [PhotoAuthor(name: 'Test Author')]);
+
+    test('the order is fixed by names, not by what has loaded', () async {
+      final gate = Completer<Uint8List?>();
+      final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0');
+      final places = FakePlaces((_) => [first])
+        ..photo = ((_) => gate.future)
+        ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: [photo('places/a/photos/p1'), photo('places/a/photos/p0')]);
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.openDetails(); // details arrive before the search photo
+      await pumpEventQueue();
+      final before = search.currentGallery.map((p) => p.name).toList();
+      gate.complete(Uint8List.fromList([1]));
+      await pumpEventQueue();
+      expect(before, ['places/a/photos/p0', 'places/a/photos/p1']); // search photo first even from later in the list
+      expect(search.currentGallery.map((p) => p.name), before);
+    });
+
+    test('an unreadable image becomes a failure with Try again', () async {
+      final places = FakePlaces((_) => [place('a')])..photo = ((_) => Uint8List.fromList([1]));
+      final search = CravingSearch(places: places);
+      await search.start('tacos', here);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'));
+      await pumpEventQueue();
+      expect(search.galleryPhoto('places/a/photos/p1'), isNotNull);
+      search.galleryPhotoBroken('places/a/photos/p1');
+      expect(search.galleryPhoto('places/a/photos/p1'), isNull);
+      expect(search.galleryFailed('places/a/photos/p1'), isTrue);
+      search.loadGalleryPhoto(photo('places/a/photos/p1'), retry: true);
+      await pumpEventQueue();
+      expect(places.photoRequests.length, 2);
+      expect(search.galleryFailed('places/a/photos/p1'), isFalse);
+    });
+  });
+
+  test('opening while the header photo downloads shares that download (review round 3)', () async {
+    final gate = Completer<Uint8List?>();
+    final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/p0');
+    final places = FakePlaces((_) => [first])
+      ..photo = ((_) => gate.future)
+      ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: [DetailPhoto(name: 'places/a/photos/p0', authors: const [PhotoAuthor(name: 'A')])]);
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    search.openDetails();
+    await pumpEventQueue();
+    search.loadGalleryPhoto(search.currentGallery.first);
+    expect(places.photoRequests, ['places/a/photos/p0']); // no second download
+    gate.complete(null); // the header download fails
+    await pumpEventQueue();
+    expect(search.galleryFailed('places/a/photos/p0'), isTrue);
+    places.photo = (_) => Uint8List.fromList([1]);
+    search.loadGalleryPhoto(search.currentGallery.first, retry: true);
+    await pumpEventQueue();
+    expect(places.photoRequests.length, 2);
+    expect(search.galleryPhoto('places/a/photos/p0'), isNotNull);
+    expect(search.galleryFailed('places/a/photos/p0'), isFalse);
+  });
+
+  test('the first details photo by the same authors as the search photo is that picture, shown once', () async {
+    const credit = PhotoAuthor(name: 'Same Author');
+    final first = Restaurant(placeId: 'a', name: 'Test Place a', photoName: 'places/a/photos/s0', photoAuthors: const [credit]);
+    final places = FakePlaces((_) => [first])
+      ..photo = ((_) => Uint8List.fromList([1]))
+      ..detailsAnswer = (id) => PlaceDetails(placeId: id, photos: const [
+            DetailPhoto(name: 'places/a/photos/d0', authors: [credit]),
+            DetailPhoto(name: 'places/a/photos/d1', authors: [credit]),
+            DetailPhoto(name: 'places/a/photos/d2', authors: [PhotoAuthor(name: 'Other')]),
+          ]);
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    await pumpEventQueue();
+    expect(search.currentGallery.map((p) => p.name), ['places/a/photos/s0', 'places/a/photos/d1', 'places/a/photos/d2']);
   });
 }

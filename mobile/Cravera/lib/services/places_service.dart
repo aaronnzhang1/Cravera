@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/constants.dart';
+import '../models/place_details.dart';
 import '../models/restaurant.dart';
 import 'location_service.dart';
 
@@ -113,6 +114,39 @@ class PlacesService {
   Future<Uint8List?> avatarBytes(String avatarUri) async {
     if (!isSafePhotoUri(avatarUri)) return null;
     return _downloadImage(Uri.parse(avatarUri), maxAvatarBytes);
+  }
+
+  /// The function that returns one place's details for the smart card.
+  static final detailsEndpoint = Uri.parse('${AppConstants.supabaseUrl}/functions/v1/place-details');
+
+  /// Only Places place IDs are sent, matching what the function accepts.
+  static final _placeId = RegExp(r'^[A-Za-z0-9_-]{1,300}$');
+
+  /// Details for [placeId] (photos, reviews, summaries, attributes, links),
+  /// asked for only when the guest opens the card. Null on any failure: the
+  /// card then keeps its search facts and offers Try again.
+  ///
+  /// [craving] (the guest's words) and [priceLevels] (the search's requested
+  /// range) let the server write Cravera's take and check price reasons.
+  Future<PlaceDetails?> details(String placeId, {String? craving, List<int> priceLevels = const []}) async {
+    if (!_placeId.hasMatch(placeId)) return null;
+    final request = http.Request('POST', detailsEndpoint)
+      ..followRedirects = false
+      ..headers.addAll({'Content-Type': 'application/json', 'apikey': publishableKey})
+      ..body = jsonEncode({
+        'placeId': placeId,
+        // After several refines the whole conversation can pass the limit:
+        // send its most recent part, which holds the latest wishes.
+        if (craving != null && craving.trim().isNotEmpty) 'craving': recentCraving(craving),
+        if (priceLevels.isNotEmpty) 'priceLevels': priceLevels,
+      });
+    try {
+      final response = await _client.send(request).then(http.Response.fromStream).timeout(timeout);
+      if (response.statusCode != 200) return null;
+      return PlaceDetails.fromJson(jsonDecode(utf8.decode(response.bodyBytes)), placeId);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Downloads an image from [link] without following redirects, reading at
@@ -360,4 +394,21 @@ class PlacesService {
   static String? _string(Object? v) => v is String && v.trim().isNotEmpty ? v : null;
   static double? _double(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
   static int? _int(Object? v) => v is num && v.isFinite ? v.round() : null;
+}
+
+/// The craving as sent with a details request: whole when it fits the
+/// server's limit, else its last [CravingLimits.maxQuery] characters, starting
+/// at a word.
+String recentCraving(String craving) {
+  final c = craving.trim();
+  if (c.length <= CravingLimits.maxQuery) return c;
+  final tail = c.substring(c.length - CravingLimits.maxQuery);
+  final space = tail.indexOf(' ');
+  return (space > 0 && space < tail.length - 1 ? tail.substring(space + 1) : tail).trim();
+}
+
+/// Shared limits for what the app sends.
+abstract final class CravingLimits {
+  /// The server refuses longer cravings.
+  static const maxQuery = 200;
 }

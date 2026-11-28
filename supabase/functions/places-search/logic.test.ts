@@ -298,3 +298,11 @@ test("a network failure is a 502", async () => {
   const res = await handle(request({ query: "ramen", ...here }), env, fn);
   assert.equal(res.status, 502);
 });
+
+test("Budget-friendly only inside a requested price range (ADR 0005)", async () => {
+  const { reasonsFor } = await import("./logic.ts");
+  const cheap = { priceLevel: 1, distanceMeters: 5000, rating: null } as unknown as Parameters<typeof reasonsFor>[0];
+  assert.deepEqual(reasonsFor(cheap), []); // no range asked
+  assert.deepEqual(reasonsFor(cheap, [3, 4]), []); // a relaxed retry found it outside the range
+  assert.deepEqual(reasonsFor(cheap, [1, 2]), ["Budget-friendly"]);
+});

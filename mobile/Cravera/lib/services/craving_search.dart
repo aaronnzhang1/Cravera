@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/place_details.dart';
 import '../models/restaurant.dart';
 import 'location_service.dart';
 import 'places_service.dart';
@@ -128,7 +129,13 @@ class CravingSearch extends ChangeNotifier {
     _photos[place.placeId] = null;
     final request = _request;
     service.photoBytes(name).then((bytes) {
-      if (request != _request || bytes == null) return;
+      if (request != _request) return;
+      if (bytes == null) {
+        // The gallery shares this download: its first page offers Try again.
+        _galleryFailed.add(name);
+        notifyListeners();
+        return;
+      }
       _photos[place.placeId] = bytes;
       notifyListeners();
       _loadAvatars(place, service, request);
@@ -137,8 +144,18 @@ class CravingSearch extends ChangeNotifier {
 
   /// Fetches the avatars of the photo's authors, once the photo is shown
   /// (their credit only appears with it).
-  void _loadAvatars(Restaurant place, PlacesService service, int request) {
-    for (final author in place.photoAuthors) {
+  void _loadAvatars(Restaurant place, PlacesService service, int request) =>
+      _loadAvatarsOf(place.photoAuthors, service, request);
+
+  /// Loads the avatars of [authors] (for example reviewers) for the current
+  /// search; each loads once. Never notifies synchronously.
+  void loadAvatars(List<PhotoAuthor> authors) {
+    final service = places;
+    if (service != null) _loadAvatarsOf(authors, service, _request);
+  }
+
+  void _loadAvatarsOf(List<PhotoAuthor> authors, PlacesService service, int request) {
+    for (final author in authors) {
       final link = author.avatarUri;
       if (link == null || _avatars.containsKey(link)) continue;
       _avatars[link] = null;
@@ -148,6 +165,142 @@ class CravingSearch extends ChangeNotifier {
         notifyListeners();
       });
     }
+  }
+
+  /// Details by place ID (TASK-UI-4). Each place loads its own as it is
+  /// shown (the first pick, then each place after No), never during the
+  /// search request and never for places the guest hasn't reached.
+  final Map<String, DetailsLoad> _details = {};
+
+  /// The details of [current], or null if the guest hasn't opened it.
+  DetailsLoad? get currentDetails {
+    final place = current;
+    return place == null ? null : _details[place.placeId];
+  }
+
+  /// Loads [current]'s details: one automatic attempt per shown place; only
+  /// Try again after a failure sends another; calls while one is on its way
+  /// share it. A late answer from an older search is dropped.
+  void openDetails() {
+    final service = places;
+    final place = current;
+    if (place == null || service == null) return;
+    final id = place.placeId;
+    final existing = _details[id];
+    if (existing != null && existing.status != DetailsStatus.failed) return;
+    _details[id] = const DetailsLoad(DetailsStatus.loading);
+    notifyListeners();
+    final request = _request;
+    final levels = _intent?['priceLevels'];
+    service.details(
+      id,
+      craving: _query,
+      priceLevels: [if (levels is List) for (final l in levels) if (l is int) l],
+    ).then((details) {
+      if (request != _request) return;
+      _details[id] = details == null ? const DetailsLoad(DetailsStatus.failed) : DetailsLoad(DetailsStatus.loaded, details);
+      notifyListeners();
+    });
+  }
+
+  /// Gallery photo bytes by photo name (TASK-UI-4), for the opened card.
+  /// A key with a null value means "asked, nothing (yet)".
+  final Map<String, Uint8List?> _gallery = {};
+
+  /// The gallery photo [name], once loaded. The first gallery photo is
+  /// usually the search photo, which is reused rather than fetched again.
+  Uint8List? galleryPhoto(String name) {
+    final place = current;
+    if (place != null && place.photoName == name && _photos[place.placeId] != null) return _photos[place.placeId];
+    return _gallery[name];
+  }
+
+  /// Fetches one gallery photo, when the guest swipes to it (never ahead),
+  /// and its authors' avatars. Never notifies synchronously, so a screen
+  /// may call it while building. A late answer from an older search is dropped.
+  ///
+  /// A failed photo is not asked for again on rebuilds, only when the guest
+  /// taps Try again ([retry]).
+  void loadGalleryPhoto(DetailPhoto photo, {bool retry = false}) {
+    final service = places;
+    if (service == null || current == null) return;
+    if (galleryPhoto(photo.name) != null) {
+      _loadAvatarsOf(photo.authors, service, _request);
+      return;
+    }
+    // The search photo's own download is still on its way: share it rather
+    // than starting a second one that could finish differently.
+    final place = current!;
+    if (place.photoName == photo.name && _photos.containsKey(place.placeId) && !_galleryFailed.contains(photo.name)) {
+      return;
+    }
+    if (_galleryFailed.contains(photo.name)) {
+      if (!retry) return;
+      _galleryFailed.remove(photo.name);
+      notifyListeners();
+    }
+    if (_gallery.containsKey(photo.name)) return; // already on its way
+    _gallery[photo.name] = null;
+    final request = _request;
+    service.photoBytes(photo.name).then((bytes) {
+      if (request != _request) return;
+      if (bytes == null) {
+        _gallery.remove(photo.name);
+        _galleryFailed.add(photo.name);
+        notifyListeners();
+        return;
+      }
+      _gallery[photo.name] = bytes;
+      notifyListeners();
+      _loadAvatarsOf(photo.authors, service, request);
+    });
+  }
+
+  /// Gallery photos whose download failed in this search.
+  final Set<String> _galleryFailed = {};
+
+  /// True when the gallery photo [name] failed to load (show Try again).
+  bool galleryFailed(String name) => _galleryFailed.contains(name) && galleryPhoto(name) == null;
+
+  /// The opened card's gallery: the search photo first whenever the pick
+  /// has one (so opening the card never loses a photo that already shows),
+  /// then the other details photos, at most [maxGallery] in all. The order depends only on the names, never on what has
+  /// loaded, so pages don't move while the guest swipes.
+  /// The most photos the gallery shows (TASK-UI-4).
+  static const maxGallery = 5;
+
+  List<DetailPhoto> get currentGallery {
+    final place = current;
+    final photos = currentDetails?.details?.photos ?? const <DetailPhoto>[];
+    if (place == null || photos.isEmpty) return const [];
+    final name = place.photoName;
+    if (name == null) return photos;
+    final same = photos.where((p) => p.name == name);
+    final first = same.isNotEmpty
+        ? same.first
+        : DetailPhoto(name: name, authors: place.photoCredits, mapsUri: place.photoMapsUri);
+    // Google names the same picture differently in search and in details, and
+    // sends photos in the same order: a first details photo by the same
+    // authors as the search photo is that picture, so it isn't shown twice.
+    final rest = [
+      for (final (i, p) in photos.indexed)
+        if (p.name != name && !(i == 0 && same.isEmpty && _sameAuthors(p.authors, place.photoCredits))) p,
+    ];
+    return [first, ...rest].take(maxGallery).toList();
+  }
+
+  static bool _sameAuthors(List<PhotoAuthor> a, List<PhotoAuthor> b) =>
+      a.isNotEmpty && a.length == b.length && [for (var i = 0; i < a.length; i++) a[i].name == b[i].name].every((x) => x);
+
+  /// The gallery photo [name] arrived but can't be shown (not a readable
+  /// image): forget its bytes and offer Try again, like a failed download.
+  void galleryPhotoBroken(String name) {
+    if (_galleryFailed.contains(name)) return;
+    _gallery.remove(name);
+    final place = current;
+    if (place != null && place.photoName == name) _photos[place.placeId] = null;
+    _galleryFailed.add(name);
+    notifyListeners();
   }
 
   /// True when the craving is longer than the server accepts.
@@ -205,6 +358,9 @@ class CravingSearch extends ChangeNotifier {
     _searchedAt = null;
     _photos.clear(); // photo links are short-lived; each search starts fresh
     _avatars.clear();
+    _details.clear();
+    _gallery.clear();
+    _galleryFailed.clear();
     if (send.length > maxQueryLength) {
       // Retrying can't help: the user has to shorten it.
       _fail(PlacesSearchError.rejected);
@@ -245,6 +401,7 @@ class CravingSearch extends ChangeNotifier {
     }
     notifyListeners();
     _loadPhoto();
+    openDetails(); // TASK-UI-4: each place shown loads its details by itself
   }
 
   /// "No": shows the next result from the same answer, without a request.
@@ -260,6 +417,7 @@ class CravingSearch extends ChangeNotifier {
       _status = SearchStatus.exhausted;
     }
     notifyListeners();
+    openDetails(); // only the place now shown; places not reached load nothing
   }
 
   /// False (and [SearchStatus.expired]) when the results are older than
@@ -328,6 +486,9 @@ class CravingSearch extends ChangeNotifier {
     _searchedAt = null;
     _photos.clear();
     _avatars.clear();
+    _details.clear();
+    _gallery.clear();
+    _galleryFailed.clear();
     notifyListeners();
   }
 
@@ -336,4 +497,15 @@ class CravingSearch extends ChangeNotifier {
     _status = SearchStatus.failed;
     notifyListeners();
   }
+}
+
+enum DetailsStatus { loading, loaded, failed }
+
+/// Where loading one place's details stands.
+class DetailsLoad {
+  final DetailsStatus status;
+
+  /// Set when [status] is [DetailsStatus.loaded].
+  final PlaceDetails? details;
+  const DetailsLoad(this.status, [this.details]);
 }

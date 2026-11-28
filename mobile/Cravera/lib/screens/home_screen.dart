@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_colors.dart';
 import '../core/session.dart';
+import '../models/place_details.dart';
 import '../models/restaurant.dart';
 import '../services/craving_search.dart';
 import '../services/location_service.dart';
@@ -12,6 +13,7 @@ import '../services/places_service.dart';
 import '../widgets/cravera_logo.dart';
 import '../widgets/floating_cards.dart';
 import '../widgets/glass.dart';
+import '../widgets/place_details_section.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +23,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  /// Keeps the drifting cards' state (positions, motion) from Home into the search.
+  final _floatingCardsKey = GlobalKey();
+
   final _promptController = TextEditingController();
   final _repromptController = TextEditingController();
 
@@ -122,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return Stack(
           fit: StackFit.expand,
           children: [
-            const FloatingCards(),
+            FloatingCards(key: _floatingCardsKey),
             // Fade the cards out toward the bottom, so the examples and the
             // input always sit on a calm background.
             IgnorePointer(
@@ -228,7 +233,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildLoading(BuildContext context) {
-    return PopScope(canPop: false, child: const Center(child: _LoadingView()));
+    // The same drifting cards as Home keep moving behind Cravera at work
+    // (one widget, moved between the two screens by its key, so they don't jump).
+    return PopScope(
+      canPop: false,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FloatingCards(key: _floatingCardsKey),
+          const Center(child: _LoadingView()),
+        ],
+      ),
+    );
   }
 
   Widget _buildResult(BuildContext context, AppSession session) {
@@ -645,13 +661,9 @@ class _PickView extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final saved = session.isBookmarked(restaurant.placeId);
-    final facts = [
-      if (restaurant.rating != null) '★ ${restaurant.rating!.toStringAsFixed(1)}',
-      if ((restaurant.cuisine ?? '').trim().isNotEmpty) restaurant.cuisine!.trim(),
-      ?priceLabel(restaurant.priceLevel),
-      if (restaurant.distanceMeters != null) '${(restaurant.distanceMeters! / 1000).toStringAsFixed(1)} km',
-    ];
     final hasAddress = (restaurant.address ?? '').trim().isNotEmpty;
+    final checked = session.search.currentDetails?.details?.why ?? const <String>[];
+    final why = checked.isNotEmpty ? checked : restaurant.reasons;
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -667,12 +679,13 @@ class _PickView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
+                    _PhotoArea(
+                      key: ValueKey(restaurant.placeId),
                       height: photoHeight,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _PhotoHeader(photo: photo),
+                      restaurant: restaurant,
+                      photo: photo,
+                      search: session.search,
+                      overlays: [
                           Positioned(
                             top: 12,
                             left: 12,
@@ -697,22 +710,8 @@ class _PickView extends StatelessWidget {
                               onPressed: () => session.toggleBookmark(restaurant),
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
-                    // Google requires crediting every photo author (avatar, name,
-                    // profile link) and a link to the photo on Maps. Directly under
-                    // the photo, so any number of credits can wrap without covering
-                    // the photo's controls.
-                    if (photo != null && (restaurant.photoCredits.isNotEmpty || restaurant.photoMapsUri != null))
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
-                        child: _PhotoCredit(
-                          authors: restaurant.photoCredits,
-                          avatar: session.search.avatar,
-                          mapsUri: restaurant.photoMapsUri,
-                        ),
-                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
                       child: Column(
@@ -724,38 +723,40 @@ class _PickView extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: text.headlineMedium,
                           ),
-                          // Why this pick: reasons the server built from Places facts.
-                          if (restaurant.reasons.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              restaurant.reasons.join(' · '),
-                              style: text.bodyLarge?.copyWith(color: AppColors.tomato, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                          if (facts.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(facts.join(' · '), style: text.bodyLarge?.copyWith(color: AppColors.textSecondary)),
-                          ],
+                          const SizedBox(height: 10),
+                          // At a glance: rating, kind, price, distance as tidy pills.
+                          _FactPills(restaurant: restaurant),
                           if (hasAddress) ...[
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.place_outlined, size: 18, color: AppColors.textMuted),
-                                const SizedBox(width: 6),
+                                const Icon(Icons.place_outlined, size: 16, color: AppColors.textMuted),
+                                const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     restaurant.address!.trim(),
-                                    maxLines: 2,
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: text.bodyMedium?.copyWith(color: AppColors.textMuted),
+                                    style: text.bodySmall?.copyWith(color: AppColors.textMuted),
                                   ),
                                 ),
                               ],
                             ),
                           ],
-                          // Places data shown outside a Google map needs this credit,
-                          // styled per Google's text-attribution rules.
+                          // Why this pick: facts the server checked for this craving
+                          // (ADR 0005), else the Places-only reasons from search.
+                          if (why.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [for (final w in why) _WhyChip(label: w)],
+                            ),
+                          ],
+                          // TASK-UI-4: Cravera's take and more, loaded as the place shows.
+                          PlaceDetailsSection(search: session.search, restaurant: restaurant),
+                          // Places data shown outside a Google map needs this credit
+                          // (the official logo, unmodified), at the end of the card.
                           const _GoogleMapsCredit(),
                         ],
                       ),
@@ -1393,7 +1394,10 @@ class _PhotoHeader extends StatelessWidget {
   /// Already downloaded by [PlacesService.photoBytes], so nothing here goes
   /// to the network. Null shows the placeholder.
   final Uint8List? photo;
-  const _PhotoHeader({required this.photo});
+
+  /// Called when [photo] can't be decoded (the placeholder shows instead).
+  final VoidCallback? onBroken;
+  const _PhotoHeader({required this.photo, this.onBroken});
 
   @override
   Widget build(BuildContext context) {
@@ -1418,8 +1422,166 @@ class _PhotoHeader extends StatelessWidget {
               fit: BoxFit.cover,
               gaplessPlayback: true,
               // Bytes that aren't a valid image show the placeholder.
-              errorBuilder: (context, error, stack) => placeholder,
+              errorBuilder: (context, error, stack) {
+                final broken = onBroken;
+                if (broken != null) WidgetsBinding.instance.addPostFrameCallback((_) => broken());
+                return placeholder;
+              },
             ),
+    );
+  }
+}
+
+/// The pick's photo, then its credit. Before details load it is the search
+/// photo. Once the guest opens the card (TASK-UI-4) it becomes a gallery of
+/// up to 5 Places photos: each is fetched only when swiped to, and the credit
+/// under it is always that photo's own authors, as Google requires.
+class _PhotoArea extends StatefulWidget {
+  final double height;
+  final Restaurant restaurant;
+  final Uint8List? photo;
+  final CravingSearch search;
+
+  /// Controls drawn over the photo (New craving, Bookmark).
+  final List<Widget> overlays;
+
+  const _PhotoArea({
+    super.key,
+    required this.height,
+    required this.restaurant,
+    required this.photo,
+    required this.search,
+    required this.overlays,
+  });
+
+  @override
+  State<_PhotoArea> createState() => _PhotoAreaState();
+}
+
+class _PhotoAreaState extends State<_PhotoArea> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final search = widget.search;
+    final gallery = search.currentGallery;
+    final r = widget.restaurant;
+    if (gallery.isEmpty) {
+      final credit = widget.photo != null && (r.photoCredits.isNotEmpty || r.photoMapsUri != null)
+          ? _PhotoCredit(authors: r.photoCredits, avatar: search.avatar, mapsUri: r.photoMapsUri)
+          : null;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: widget.height,
+            child: Stack(fit: StackFit.expand, children: [_PhotoHeader(photo: widget.photo), ...widget.overlays]),
+          ),
+          // Google requires crediting every photo author (avatar, name,
+          // profile link) and a link to the photo on Maps. Directly under the
+          // photo, so any number of credits can wrap without covering controls.
+          if (credit != null) Padding(padding: const EdgeInsets.fromLTRB(14, 2, 14, 0), child: credit),
+        ],
+      );
+    }
+    final page = _page.clamp(0, gallery.length - 1);
+    // The page in view is loaded here, and only it: swiping is what asks.
+    search.loadGalleryPhoto(gallery[page]);
+    return SizedBox(
+      height: widget.height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            itemCount: gallery.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            // Each page carries its own credit, so a photo is never seen
+            // next to another photo's authors, even mid-swipe.
+            itemBuilder: (context, i) => _GalleryPage(
+              photo: gallery[i],
+              index: i,
+              count: gallery.length,
+              search: search,
+            ),
+          ),
+          ...widget.overlays,
+        ],
+      ),
+    );
+  }
+}
+
+/// One gallery photo with its own credit along its bottom edge (on the cream
+/// scrim, readable over any photo), its place in the gallery, and Try again
+/// when it failed to load.
+class _GalleryPage extends StatelessWidget {
+  final DetailPhoto photo;
+  final int index;
+  final int count;
+  final CravingSearch search;
+  const _GalleryPage({required this.photo, required this.index, required this.count, required this.search});
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = search.galleryPhoto(photo.name);
+    final failed = search.galleryFailed(photo.name);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Semantics(
+          label: 'Photo ${index + 1} of $count',
+          image: true,
+          child: _PhotoHeader(photo: bytes, onBroken: () => search.galleryPhotoBroken(photo.name)),
+        ),
+        if (failed)
+          Center(
+            child: TextButton.icon(
+              onPressed: () => search.loadGalleryPhoto(photo, retry: true),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Photo didn’t load. Try again'),
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.scrim,
+                foregroundColor: AppColors.textPrimary,
+                minimumSize: const Size(48, 48),
+              ),
+            ),
+          ),
+        if (count > 1)
+          Positioned(
+            top: 22,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: ExcludeSemantics(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: AppColors.scrim, borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    child: Text(
+                      '${index + 1} / $count',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textPrimary),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: ColoredBox(
+            color: AppColors.scrim,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              // Credit only once the photo shows: it belongs to the image.
+              child: bytes == null || failed
+                  ? const SizedBox(height: 48)
+                  : _PhotoCredit(authors: photo.authors, avatar: search.avatar, mapsUri: photo.mapsUri),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1545,18 +1707,101 @@ class _AuthorAvatar extends StatelessWidget {
 /// The official Google Maps logo (unmodified, non-outlined on the plain
 /// background), as Google's Places policies prefer: 18 dp tall (16–19), with
 /// at least 10 dp clear space above and 5 dp below, labelled for screen readers.
+/// Rating, kind, price and distance as small pills, so the facts read at a glance.
+class _FactPills extends StatelessWidget {
+  final Restaurant restaurant;
+  const _FactPills({required this.restaurant});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = restaurant;
+    final cuisine = (r.cuisine ?? '').trim();
+    final price = priceLabel(r.priceLevel);
+    final pills = <(IconData, String, String, Color)>[
+      if (r.rating != null) (Icons.star_rounded, r.rating!.toStringAsFixed(1), 'Rated ${r.rating!.toStringAsFixed(1)} on Google', AppColors.gold),
+      if (cuisine.isNotEmpty) (Icons.local_dining_rounded, cuisine, cuisine, AppColors.textSecondary),
+      if (price != null) (Icons.payments_outlined, price, 'Price $price', AppColors.textSecondary),
+      if (r.distanceMeters != null)
+        (Icons.near_me_outlined, '${(r.distanceMeters! / 1000).toStringAsFixed(1)} km', '${(r.distanceMeters! / 1000).toStringAsFixed(1)} kilometres away', AppColors.sage),
+    ];
+    if (pills.isEmpty) return const SizedBox.shrink();
+    final style = Theme.of(context).textTheme.labelLarge;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final (icon, label, spoken, color) in pills)
+          Semantics(
+            label: spoken,
+            excludeSemantics: true,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16, color: color),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(label, style: style?.copyWith(color: AppColors.textPrimary))),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One checked reason for the pick (ADR 0005), as a quiet tomato chip.
+class _WhyChip extends StatelessWidget {
+  final String label;
+  const _WhyChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.tomato.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_rounded, size: 16, color: AppColors.tomato),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppColors.tomato, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _GoogleMapsCredit extends StatelessWidget {
   const _GoogleMapsCredit();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 10, bottom: 5),
+      padding: const EdgeInsets.only(top: 20, bottom: 5),
       child: Semantics(
         label: 'Google Maps',
         image: true,
         excludeSemantics: true,
-        child: Image.asset('assets/images/google_maps_logo.png', height: 18, fit: BoxFit.contain),
+        child: Image.asset('assets/images/google_maps_logo.png', height: 16, fit: BoxFit.contain),
       ),
     );
   }

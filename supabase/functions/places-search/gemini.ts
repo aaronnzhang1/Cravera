@@ -183,6 +183,7 @@ export async function callGemini(
   schema: unknown,
   maxOutputTokens: number,
   timeoutMs: number,
+  maxTimeoutMs = GEMINI_TIMEOUT_MS,
 ): Promise<unknown | null> {
   const thinking = THINKING_LEVELS[config.model];
   try {
@@ -204,7 +205,7 @@ export async function callGemini(
           max_output_tokens: maxOutputTokens,
         },
       }),
-      signal: AbortSignal.timeout(Math.min(timeoutMs, GEMINI_TIMEOUT_MS)),
+      signal: AbortSignal.timeout(Math.min(timeoutMs, maxTimeoutMs)),
       redirect: "error",
     });
     if (!res.ok) {

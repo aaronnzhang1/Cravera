@@ -158,7 +158,7 @@ const fact = (o: Record<string, unknown>) =>
   ({ priceLevel: null, rating: null, distanceMeters: 5000, ...o }) as unknown as Parameters<typeof reasonsFor>[0];
 
 test("reasons come only from this place's Places facts", () => {
-  assert.deepEqual(reasonsFor(fact({ priceLevel: 1, rating: 4.7, distanceMeters: 800 })), ["Budget-friendly", "Close by", "Highly rated"]);
+  assert.deepEqual(reasonsFor(fact({ priceLevel: 1, rating: 4.7, distanceMeters: 800 }), [1, 2]), ["Budget-friendly", "Close by", "Highly rated"]);
   assert.deepEqual(reasonsFor(fact({ priceLevel: 3, rating: 4.4, distanceMeters: 1600 })), []);
   assert.deepEqual(reasonsFor(fact({ priceLevel: null, rating: null, distanceMeters: 1500 })), ["Close by"]);
 });
