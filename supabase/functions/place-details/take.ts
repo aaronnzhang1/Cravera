@@ -93,7 +93,7 @@ const NUMBER_WORDS = /\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|e
 const PRICE_WORDS = /\b(dollars?|bucks?|cents?|price[sd]?|pricing|cost|costs|usd)\b/i;
 // Hours and availability, including indirect ones ("late night", "any time"):
 // open-now comes only from the search, in code.
-const HOURS_WORDS = /\b(open|opens|opened|opening|closed?|closes|closing|hours?|am|pm|o'clock|midnight|noon|tonight|today|tomorrow|until|till|late|later|overnight|night|nights|early|morning|evening|weekends?|weekdays?|now|anytime)\b|24\/7|around the clock|all day|any time|after dark/i;
+const HOURS_WORDS = /\b(open|opens|opened|opening|closed?|closes|closing|hours?|am|pm|o'clock|midnight|noon|tonight|today|tomorrow|until|till|late|later|overnight|night|nights|early|morning|evening|weekends?|weekdays?|now|anytime|still|currently|available|availability|kitchen)\b|24\/7|around the clock|all day|any time|after dark|at the moment|right away/i;
 const LINK = /(https?:|www\.|\.(com|net|org|io|co|app)\b|@)/i;
 
 /** The take if it passes every check, else null (then the template is used). */

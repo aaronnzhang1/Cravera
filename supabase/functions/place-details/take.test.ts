@@ -61,6 +61,9 @@ test("take: anything we can't check is dropped", () => {
     "Open late, so no rush.", // hours
     "It closes soon, go now.",
     "A great late night taco spot.", // availability, indirectly
+    "The kitchen is still serving.",
+    "Tables are available at the moment.",
+    "Currently a quiet spot.",
     "They serve tacos late into the night.",
     "Perfect for a weekend brunch.",
     "Grab a bite any time.",
