@@ -40,8 +40,9 @@ A release ships when its tasks are merged, its exit criteria are checked on `mai
 
 | Release | Tasks | Exit criteria | Status |
 |---|---|---|---|
-| v0.1.0 · Guest MVP (Phase 1) | TASK-001 guest search on Places; TASK-UI-1 UI rehaul and Cravera rename; TASK-002 Gemini craving parsing | On an Android emulator and an iPhone: a guest types a craving and gets a real open place nearby; No/refine work; Yes opens directions to that exact place; no Google or Gemini key in the app bundle | In progress |
+| v0.1.0 · Guest MVP (Phase 1) | TASK-001 guest search on Places; TASK-UI-1 UI rehaul and Cravera rename; TASK-002 Gemini craving parsing; TASK-005 refine that really refines ([spec](plans/v0.1-refine.md), blocker) | On an Android emulator and an iPhone: a guest types a craving and gets a real open place nearby; No/refine work; Yes opens directions to that exact place; no Google or Gemini key in the app bundle | In progress; **blocked by TASK-005** (refine returned the same places on iPhone, 2026-11-27) |
 | v0.2.0 · Accounts (Phase 1.5) | TASK-003 accounts; TASK-004 Saved hub (map, cities, want to go / been); TASK-UI-3 Profile and Friends preview ([plan](plans/v0.2-hub.md)) | Supabase sign-up/sign-in; RLS denial-path tests; saved places persist per account | Planned (direction decided 2026-11-27) |
+| v0.3.0 · Smart card | TASK-UI-4 smart restaurant card ([plan](plans/v0.3-smart-card.md)) | The pick opens into a detail page from Google Places (photos, reviews with attribution, summary, attributes, website/Maps link) and an AI "Why this pick" built only from those facts, each claim traceable, with a Places-only fallback | Scheduled (maintainer, 2026-11-27); needs an ADR and cost decisions before building |
 
 ## Idea backlog (unscheduled)
 
