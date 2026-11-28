@@ -39,6 +39,10 @@ export const MIN_RADIUS_M = 500;
 export const MAX_RADIUS_M = 20000;
 export const MAX_QUERY_LENGTH = 200;
 export const MAX_ABS_LATITUDE = 85;
+/** At most this many place IDs to leave out (places already shown; TASK-005). */
+export const MAX_EXCLUDED = 100;
+/** Places IDs are short URL-safe strings; anything else is dropped. */
+const PLACE_ID = /^[A-Za-z0-9_-]{1,300}$/;
 const UPSTREAM_TIMEOUT_MS = 8000;
 /**
  * The whole request must answer within this, below the app's 15 s timeout:
@@ -57,6 +61,11 @@ export type SearchInput = {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  /**
+   * Places already shown in this search session, from the app; left out of
+   * the answer. Untrusted: only well-formed IDs, at most [MAX_EXCLUDED].
+   */
+  excludePlaceIds: string[];
   /** The intent of the search being refined, from the app. Untrusted: validated. */
   previousIntent: Intent | null;
   /** The guest's local hour (0-23), so "late-night" or "breakfast" make sense. */
@@ -86,6 +95,8 @@ export type RestaurantResult = {
    * intent (price, distance, rating). Never text from the model.
    */
   reasons: string[];
+  /** Places types, for curation only; removed before the answer is sent. */
+  types?: string[];
 };
 
 export type Env = {
@@ -128,7 +139,11 @@ export function parseInput(body: unknown): SearchInput | string {
   const localHour = Number.isInteger(b.localHour) && (b.localHour as number) >= 0 && (b.localHour as number) <= 23
     ? b.localHour as number
     : null;
-  return { query, latitude, longitude, radiusMeters, previousIntent, localHour };
+  // A hint too: malformed entries are dropped, the list is capped.
+  const excludePlaceIds = Array.isArray(b.excludePlaceIds)
+    ? [...new Set(b.excludePlaceIds.filter((id): id is string => typeof id === "string" && PLACE_ID.test(id)))].slice(-MAX_EXCLUDED)
+    : [];
+  return { query, latitude, longitude, radiusMeters, previousIntent, localHour, excludePlaceIds };
 }
 
 function wrapLongitude(lng: number): number {
@@ -139,12 +154,16 @@ function wrapLongitude(lng: number): number {
  * Text Search (New) only *restricts* to a rectangle, so we send the box around
  * the circle and then drop anything outside the circle in [mapPlaces].
  */
+/** Places price names for the intent's levels 1-4. */
+const PRICE_NAMES = ["", "PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE", "PRICE_LEVEL_VERY_EXPENSIVE"];
+
 /**
- * Only the intent's search text goes to Places. Its type, price and distance
- * steer curation instead of filtering here, so a filter can never turn a
- * match into "nothing open", and each search stays one Places call.
+ * The intent's search text goes to Places, and with [withPrice] its price
+ * levels too ("cheaper" must change what Google returns; TASK-005). Type and
+ * distance only steer curation. The caller retries without the price filter
+ * if it leaves nothing, so a filter never turns a match into "nothing open".
  */
-export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIntent(input.query)) {
+export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIntent(input.query), withPrice = false) {
   // Same sphere as distanceMeters, plus 1% margin, so the box always holds the
   // whole circle; mapPlaces then drops the corners.
   const angular = (input.radiusMeters * 1.01) / EARTH_RADIUS_M;
@@ -154,6 +173,7 @@ export function buildRequestBody(input: SearchInput, intent: Intent = fallbackIn
   const dLng = Math.sin(angular) >= cosLat ? 179 : Math.min(toDeg(Math.asin(Math.sin(angular) / cosLat)), 179);
   return {
     textQuery: intent.textQuery,
+    ...(withPrice && intent.priceLevels.length > 0 ? { priceLevels: intent.priceLevels.map((l) => PRICE_NAMES[l]) } : {}),
     includedType: "restaurant",
     // Without this, Google may skip the type filter (e.g. for an address query).
     strictTypeFiltering: true,
@@ -234,6 +254,8 @@ export function mapPlaces(data: unknown, input: SearchInput): RestaurantResult[]
       latitude: lat,
       longitude: lng,
       reasons: [],
+      // For curation only (e.g. "seafood_restaurant"); not sent to the app.
+      types: (p.types as unknown[]).filter((t): t is string => typeof t === "string").slice(0, 12),
     });
   }
   return results;
@@ -334,9 +356,23 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   const intent = understood ??
     (input.previousIntent ? { ...input.previousIntent, textQuery: fallbackText(input) } : fallbackIntent(input.query));
 
-  // 2. Search: one Places call, with only the intent's text.
-  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()));
+  // 2. Search: the intent's text, with its price levels when it has any.
+  //    Places already shown in this session are left out. If the price
+  //    filter leaves nothing, one retry without it (when there's time).
+  const excluded = new Set(input.excludePlaceIds);
+  const fresh = (list: RestaurantResult[]) => list.filter((r) => !excluded.has(r.placeId));
+  const priced = intent.priceLevels.length > 0;
+  let results = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), priced);
   if (results === null) return json(502, { error: "Search failed. Try again." });
+  results = fresh(results);
+  let price = priced ? "filter" : "none";
+  if (priced && results.length === 0 && left() >= MIN_CURATE_MS) {
+    const relaxed = await searchPlaces(input, intent, env.placesKey, fetchFn, Math.min(UPSTREAM_TIMEOUT_MS, left()), false);
+    if (relaxed !== null) {
+      results = fresh(relaxed);
+      price = "relaxed";
+    }
+  }
 
   let curation = "skipped";
   // 3. Curate, only if Gemini understood the craving and there is time. It
@@ -350,6 +386,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
       priceLevel: r.priceLevel,
       rating: r.rating,
       distanceMeters: r.distanceMeters,
+      types: r.types ?? [],
     }));
     const order = await curate(gemini, intent, candidates, left() - 500);
     curation = order ? "ok" : "fallback";
@@ -364,10 +401,10 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn): Promise<
   if (curation !== "ok") results = priceFirst(results, intent.priceLevels);
 
   // Outcomes only (no craving, intent or places), to see how Gemini is doing.
-  console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "curate", curation, "results", results.length);
+  console.log("places-search: understand", gemini ? (understood ? "ok" : "fallback") : "off", "price", price, "excluded", excluded.size, "curate", curation, "results", results.length);
 
   // 4. Explain, from Places facts only.
-  results = results.map((r) => ({ ...r, reasons: reasonsFor(r) }));
+  results = results.map(({ types: _types, ...r }) => ({ ...r, reasons: reasonsFor(r) }));
   return json(200, { results, intent });
 }
 
@@ -411,6 +448,7 @@ async function searchPlaces(
   placesKey: string,
   fetchFn: FetchFn,
   timeoutMs: number,
+  withPrice: boolean,
 ): Promise<RestaurantResult[] | null> {
   if (timeoutMs <= 0) return null;
   let upstream: Response;
@@ -422,7 +460,7 @@ async function searchPlaces(
         "X-Goog-Api-Key": placesKey,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify(buildRequestBody(input, intent)),
+      body: JSON.stringify(buildRequestBody(input, intent, withPrice)),
       signal: AbortSignal.timeout(timeoutMs),
       // A redirect could replay the craving and location elsewhere: fail instead.
       redirect: "error",

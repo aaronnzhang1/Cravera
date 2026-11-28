@@ -50,6 +50,21 @@ class CravingSearch extends ChangeNotifier {
   List<Restaurant> _results = const [];
   int _index = 0;
   int _rejections = 0;
+
+  /// Place IDs shown in this search session (the first craving and every
+  /// refine of it), oldest first. A refine sends them so the server leaves
+  /// them out, and they are filtered here too: a place the guest already saw
+  /// (and said No to) never comes back in the same session (TASK-005).
+  final List<String> _shown = [];
+
+  /// The most IDs sent with one request (the server accepts this many).
+  static const maxExcluded = 100;
+
+  void _markShown() {
+    if (_status != SearchStatus.showing) return;
+    final id = _results[_index].placeId;
+    if (!_shown.contains(id)) _shown.add(id);
+  }
   PlacesSearchError? _error;
 
   /// Numbers each search. Only the newest may write its result, so a slow
@@ -143,16 +158,27 @@ class CravingSearch extends ChangeNotifier {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
     _messages = List.unmodifiable([trimmed]);
+    _shown.clear(); // a new craving starts a new session
     await _run(display: trimmed, send: trimmed, previous: null, near: near);
   }
+
+  /// The place IDs the last request left out, so [retry] repeats it exactly
+  /// (an expired search shows its places again; a refine still skips them).
+  List<String> _sentExcluded = const [];
+
+  /// The places shown so far in this session, newest last, capped.
+  List<String> get _excludeNow =>
+      List.unmodifiable(_shown.length > maxExcluded ? _shown.sublist(_shown.length - maxExcluded) : _shown);
 
   Future<void> _run({
     required String display,
     required String send,
     required Map<String, Object?>? previous,
     required SearchLocation near,
+    List<String> exclude = const [],
   }) async {
     final request = ++_request;
+    _sentExcluded = exclude;
     _query = display;
     _sentQuery = send;
     _sentIntent = previous;
@@ -184,13 +210,16 @@ class CravingSearch extends ChangeNotifier {
         near: near,
         previousIntent: previous,
         localHour: _now().hour,
+        excludePlaceIds: exclude.isEmpty ? null : exclude,
       );
       if (request != _request) return; // a newer search or a reset won
-      final results = answer.results;
+      // Also here, not only on the server: never show a place twice.
+      final results = [for (final r in answer.results) if (!exclude.contains(r.placeId)) r];
       _results = List.unmodifiable(results);
       _intent = answer.intent;
       _searchedAt = _now();
       _status = results.isEmpty ? SearchStatus.exhausted : SearchStatus.showing;
+      _markShown();
     } on PlacesSearchException catch (e) {
       if (request != _request) return;
       _error = e.error;
@@ -206,6 +235,7 @@ class CravingSearch extends ChangeNotifier {
     _rejections++;
     if (_index + 1 < _results.length) {
       _index++;
+      _markShown();
     } else {
       _status = SearchStatus.exhausted;
     }
@@ -244,9 +274,9 @@ class CravingSearch extends ChangeNotifier {
     _messages = List.unmodifiable([..._messages, added]);
     if (intent == null) {
       final combined = '$_query $added';
-      await _run(display: combined, send: combined, previous: null, near: near);
+      await _run(display: combined, send: combined, previous: null, near: near, exclude: _excludeNow);
     } else {
-      await _run(display: '$_query $added', send: added, previous: intent, near: near);
+      await _run(display: '$_query $added', send: added, previous: intent, near: near, exclude: _excludeNow);
     }
   }
 
@@ -254,12 +284,13 @@ class CravingSearch extends ChangeNotifier {
   Future<void> retry() async {
     final near = _near;
     if (near == null || _sentQuery.isEmpty) return;
-    await _run(display: _query, send: _sentQuery, previous: _sentIntent, near: near);
+    await _run(display: _query, send: _sentQuery, previous: _sentIntent, near: near, exclude: _sentExcluded);
   }
 
   /// Back to no search. A search still in flight is dropped.
   void reset() {
     _request++;
+    _shown.clear();
     _status = SearchStatus.idle;
     _query = '';
     _messages = const [];

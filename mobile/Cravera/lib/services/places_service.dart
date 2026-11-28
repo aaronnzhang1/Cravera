@@ -197,6 +197,7 @@ class PlacesService {
     int? radiusMeters,
     Map<String, Object?>? previousIntent,
     int? localHour,
+    List<String>? excludePlaceIds,
   }) async {
     // Never follow a redirect: it could replay the location to another server.
     // A 3xx answer is treated as a server failure below. (Browsers ignore
@@ -211,6 +212,7 @@ class PlacesService {
         'radiusMeters': ?radiusMeters,
         'previousIntent': ?previousIntent,
         'localHour': ?localHour,
+        'excludePlaceIds': ?excludePlaceIds,
       });
     final http.Response response;
     try {

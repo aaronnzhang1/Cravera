@@ -24,6 +24,7 @@ class FakePlaces extends PlacesService {
   Map<String, Object?>? intent;
   final previousIntents = <Map<String, Object?>?>[];
   final localHours = <int?>[];
+  final excluded = <List<String>?>[];
 
   /// Returns photo bytes for a photo name; no photo when not set.
   FutureOr<Uint8List?> Function(String name)? photo;
@@ -48,7 +49,9 @@ class FakePlaces extends PlacesService {
     int? radiusMeters,
     Map<String, Object?>? previousIntent,
     int? localHour,
+    List<String>? excludePlaceIds,
   }) async {
+    excluded.add(excludePlaceIds);
     queries.add(query);
     locations.add(near);
     previousIntents.add(previousIntent);
@@ -166,6 +169,47 @@ void main() {
 
     expect(search.status, SearchStatus.idle);
     expect(search.current, isNull);
+  });
+
+  test('a refine never shows a place already said No to, and sends their IDs (TASK-005)', () async {
+    // The server keeps answering with the same places, rejected ones first.
+    final places = FakePlaces((_) => [place('a'), place('b'), place('c'), place('d')]);
+    places.intent = {'textQuery': 'tacos'};
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    expect(search.current?.placeId, 'a');
+    search.next();
+    expect(search.current?.placeId, 'b');
+
+    await search.refine('cheaper');
+    expect(places.excluded.last, ['a', 'b'], reason: 'the server is told what was shown');
+    expect(search.current?.placeId, 'c', reason: 'never a place already seen');
+    search.next();
+    expect(search.current?.placeId, 'd');
+
+    await search.refine('no seafood');
+    expect(places.excluded.last, ['a', 'b', 'c', 'd']);
+    expect(search.status, SearchStatus.exhausted, reason: 'everything was already seen');
+
+    // A new craving is a new session.
+    await search.start('ramen', here);
+    expect(places.excluded.last, isNull);
+    expect(search.current?.placeId, 'a');
+  });
+
+  test('a retry sends the same exclusions as the request it repeats', () async {
+    var fail = false;
+    final places = FakePlaces((_) => fail ? throw const PlacesSearchException(PlacesSearchError.network) : [place('a'), place('b'), place('c')]);
+    places.intent = {'textQuery': 'tacos'};
+    final search = CravingSearch(places: places);
+    await search.start('tacos', here);
+    fail = true;
+    await search.refine('cheaper');
+    expect(search.status, SearchStatus.failed);
+    fail = false;
+    await search.retry();
+    expect(places.excluded.sublist(1), [['a'], ['a']]);
+    expect(search.current?.placeId, 'b');
   });
 
   test('results older than 15 minutes expire before No or Yes can use them', () async {

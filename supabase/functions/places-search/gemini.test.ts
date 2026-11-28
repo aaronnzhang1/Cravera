@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ALLOWED_TYPES, GEMINI_URL, validateCuration, validateIntent } from "./gemini.ts";
-import { fallbackText, handle, MAX_RADIUS_M, PLACES_URL, priceFirst, reasonsFor, REQUEST_BUDGET_MS } from "./logic.ts";
+import { fallbackText, handle, MAX_EXCLUDED, MAX_RADIUS_M, parseInput, PLACES_URL, priceFirst, reasonsFor, REQUEST_BUDGET_MS } from "./logic.ts";
 import type { RestaurantResult } from "./logic.ts";
 
 const KEY = "sb_publishable_test_key";
@@ -190,9 +190,10 @@ test("understand shapes the Places request; open-now, restaurants and the box st
   assert.equal(res.status, 200);
   const body = g.placesCalls()[0].body;
   assert.equal(body.textQuery, "healthy protein bowls");
-  // Type and price steer curation; they never narrow the Places call.
+  // Price narrows the Places call (TASK-005: "cheaper" must change what
+  // Google returns); the cuisine type only steers curation.
   assert.equal(body.includedType, "restaurant");
-  assert.equal(body.priceLevels, undefined);
+  assert.deepEqual(body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE"]);
   assert.equal(body.openNow, true);
   assert.equal(body.strictTypeFiltering, true);
   assert.ok(body.locationRestriction);
@@ -215,16 +216,83 @@ test("curation reorders results; every field and reason still comes from Places"
   assert.ok(!sent.includes('"a"') && !sent.includes("37.001"), sent);
 });
 
-test("every search is exactly one Places call, even when it finds nothing", async () => {
+test("a search without a price is one Places call, even when it finds nothing", async () => {
+  const g = fakeGoogle([new Response("{}")], [geminiAnswer({ ...gymIntent, priceLevels: [] })]);
+  const res = await handle(request({ query: "gym food", ...here }), env, g.fn);
+  assert.equal(res.status, 200);
+  assert.equal(g.placesCalls().length, 1);
+  assert.equal(g.placesCalls()[0].body.priceLevels, undefined);
+});
+
+test("a price filter that finds nothing is retried once without it (TASK-005)", async () => {
   for (const previousIntent of [undefined, { ...gymIntent, textQuery: "tacos", priceLevels: [1] }]) {
-    const g = fakeGoogle([new Response("{}")], [geminiAnswer(gymIntent)]);
-    const res = await handle(request({ query: "gym food", previousIntent, ...here }), env, g.fn);
-    assert.equal(res.status, 200);
-    assert.equal(g.placesCalls().length, 1);
+    const g = fakeGoogle(
+      [new Response("{}"), new Response(JSON.stringify({ places: [place("a")] }))],
+      [geminiAnswer({ ...gymIntent, priceLevels: [1] })],
+    );
+    const res = await handle(request({ query: "cheaper", previousIntent, ...here }), env, g.fn);
+    const calls = g.placesCalls();
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[0].body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE"]);
+    assert.equal(calls[1].body.priceLevels, undefined, "relaxed: no price filter");
+    assert.equal(calls[1].body.openNow, true, "still open now");
+    assert.deepEqual((await res.json()).results.map((r: { placeId: string }) => r.placeId), ["a"]);
   }
-  const noGemini = fakeGoogle([new Response("{}")], []);
+  // Without Gemini a refine keeps the previous price, and the same rule applies.
+  const noGemini = fakeGoogle([new Response("{}"), new Response("{}")], []);
   await handle(request({ query: "x", previousIntent: { ...gymIntent, priceLevels: [1] }, ...here }), { ...env, geminiKey: undefined }, noGemini.fn);
-  assert.equal(noGemini.placesCalls().length, 1);
+  assert.equal(noGemini.placesCalls().length, 2);
+});
+
+test("\"cheaper\" changes the Places request (TASK-005)", async () => {
+  const tacos = { ...gymIntent, textQuery: "tacos", priceLevels: [] as number[] };
+  const before = fakeGoogle([new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer(tacos)]);
+  await handle(request({ query: "tacos", ...here }), env, before.fn);
+  const after = fakeGoogle([new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer({ ...tacos, priceLevels: [1, 2] })]);
+  await handle(request({ query: "cheaper", previousIntent: tacos, ...here }), env, after.fn);
+  assert.equal(before.placesCalls()[0].body.priceLevels, undefined);
+  assert.deepEqual(after.placesCalls()[0].body.priceLevels, ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE"]);
+});
+
+test("places already shown are never returned, also after a relaxed retry (TASK-005)", async () => {
+  const all = JSON.stringify({ places: [place("a"), place("b"), place("c")] });
+  const g = fakeGoogle([new Response(all)], [geminiAnswer({ ...gymIntent, priceLevels: [] })]);
+  const res = await handle(request({ query: "no seafood", previousIntent: gymIntent, excludePlaceIds: ["a", "b"], ...here }), env, g.fn);
+  assert.deepEqual((await res.json()).results.map((r: { placeId: string }) => r.placeId), ["c"]);
+
+  // Price filter leaves only shown places: the relaxed search runs, and still skips them.
+  const g2 = fakeGoogle(
+    [new Response(JSON.stringify({ places: [place("a")] })), new Response(all)],
+    [geminiAnswer({ ...gymIntent, priceLevels: [1] })],
+  );
+  const res2 = await handle(request({ query: "cheaper", previousIntent: gymIntent, excludePlaceIds: ["a"], ...here }), env, g2.fn);
+  assert.equal(g2.placesCalls().length, 2);
+  assert.deepEqual((await res2.json()).results.map((r: { placeId: string }) => r.placeId), ["b", "c"]);
+});
+
+test("excludePlaceIds is untrusted: malformed IDs are dropped and the list is capped", () => {
+  const base = { query: "tacos", latitude: 1, longitude: 2 };
+  const many = Array.from({ length: 150 }, (_, i) => `id${i}`);
+  const parsed = parseInput({ ...base, excludePlaceIds: ["ok_1", 7, "bad id", "x".repeat(301), "ok_1", ...many] });
+  assert.ok(typeof parsed !== "string");
+  assert.equal(parsed.excludePlaceIds.length, MAX_EXCLUDED);
+  assert.ok(!parsed.excludePlaceIds.includes("bad id"));
+  assert.equal(parsed.excludePlaceIds.at(-1), "id149", "keeps the newest");
+  const notList = parseInput({ ...base, excludePlaceIds: "a,b" });
+  assert.ok(typeof notList !== "string");
+  assert.deepEqual(notList.excludePlaceIds, []);
+});
+
+test("curation sees each place's types; they never reach the app", async () => {
+  const g = fakeGoogle(
+    [new Response(JSON.stringify({ places: [place("a", { types: ["seafood_restaurant", "restaurant"] }), place("b")] }))],
+    [geminiAnswer({ ...gymIntent, avoids: ["seafood"] }), geminiAnswer({ order: [] })],
+  );
+  const res = await handle(request({ query: "no seafood", ...here }), env, g.fn);
+  const sent = JSON.parse(String(g.geminiCalls()[1].body.input));
+  assert.deepEqual(sent.candidates[0].types, ["seafood_restaurant", "restaurant"]);
+  const { results } = await res.json();
+  assert.equal(results[0].types, undefined);
 });
 
 test("curation is told the price and cuisine the guest wants", async () => {
