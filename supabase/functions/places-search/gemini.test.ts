@@ -299,6 +299,19 @@ test("a relaxed retry that fails is a 502, not an empty answer", async () => {
   }
 });
 
+test("a malformed Places answer is a failure, never an empty result or a reason to retry", async () => {
+  for (const bad of ["null", "[]", JSON.stringify({ places: "none" })]) {
+    // On the priced attempt: no retry, 502.
+    const g = fakeGoogle([new Response(bad), new Response(JSON.stringify({ places: [place("a")] }))], [geminiAnswer({ ...gymIntent, priceLevels: [1] })]);
+    const res = await handle(request({ query: "cheaper", ...here }), env, g.fn);
+    assert.equal(res.status, 502, bad);
+    assert.equal(g.placesCalls().length, 1);
+    // On the relaxed attempt: 502, not "nothing open".
+    const g2 = fakeGoogle([new Response("{}"), new Response(bad)], [geminiAnswer({ ...gymIntent, priceLevels: [1] })]);
+    assert.equal((await handle(request({ query: "cheaper", ...here }), env, g2.fn)).status, 502, bad);
+  }
+});
+
 test("a priced batch our filters empty (closed, outside the circle) is never retried", async () => {
   const far = place("far", { location: { latitude: 40, longitude: -100 } });
   const closed = place("closed", { currentOpeningHours: { openNow: false } });

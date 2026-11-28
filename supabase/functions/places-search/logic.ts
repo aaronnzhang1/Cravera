@@ -489,8 +489,12 @@ async function searchPlaces(
   }
   try {
     const data = await upstream.json();
-    const raw = (data as { places?: unknown })?.places;
-    return { results: mapPlaces(data, input), googleEmpty: !Array.isArray(raw) || raw.length === 0 };
+    // Google's empty answer is {} or { places: [] }; anything else malformed
+    // is a failure, so it can't pass for "nothing found" or cause a retry.
+    if (typeof data !== "object" || data === null || Array.isArray(data)) throw new Error("not an object");
+    const raw = (data as { places?: unknown }).places;
+    if (raw !== undefined && !Array.isArray(raw)) throw new Error("places is not a list");
+    return { results: mapPlaces(data, input), googleEmpty: raw === undefined || raw.length === 0 };
   } catch {
     console.error("places-search: upstream returned invalid JSON");
     return null;
