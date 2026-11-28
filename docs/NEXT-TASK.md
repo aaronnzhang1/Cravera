@@ -1,31 +1,25 @@
-# TASK-UI-3 · Profile and Friends
+# TASK-UI-4 · Smart restaurant card
 
-**Goal.** Profile becomes a real, tidy account page whose settings save to the person's own `profiles` row, and Friends stops looking like a ghost town: an inviting preview of what friends will do in Cravera, never a fake list. From [the v0.2 plan](plans/v0.2-hub.md) (task 3).
+**Goal.** The pick opens into a detail page that tells the guest about the place and why Cravera picked it, so the app is more than search-and-display. Everything shown comes from Google Places; Gemini only writes the cited "Why this pick" claims ([ADR 0005](adr/0005-traceable-ai-summaries.md)). Background and the maintainer's words: [the smart card plan](plans/v0.3-smart-card.md).
 
-**Release:** v0.2.0 · Accounts. TASK-002 is done (all 8 criteria checked in the app, 2026-11-27; see git history of this file). TASK-003 is merged (#30).
-**Approved:** 2026-11-27 (maintainer), as written. Claude may work any criterion below without asking again; anything outside this file's scope still needs approval.
-**Review level:** L3 (raised from L2 after Codex round 3 on PR #35: CONTRIBUTING lists personal data and data isolation as L3). The app now reads and writes personal data (home city, dietary preferences) in the person's own `profiles` row, and closes popups when the account on the device changes. No migration, no Edge Function change: RLS and column grants are TASK-003's. One new dependency, `share_plus` (system share sheet for Invite; maintainer approved 2026-11-27).
+**Release:** moved ahead of TASK-004 by the maintainer (2026-11-27: "move onto the next part first"). TASK-UI-3 is merged (#35); its criterion 6 (tab slide) is unit-tested but not yet checked in the app (see CURRENT.md).
+**Approved:** pending. The maintainer made the four decisions on 2026-11-27 (ADR 0005); the criteria below still need their OK.
+**Review level:** L3: new Places data and SKUs, a new Gemini call fed with review text, Google attribution rules, a new Edge Function path.
 
 ## Acceptance criteria
 
 Tick a box only after checking it in the running app. Never delete or reword a criterion. Propose any change to the maintainer instead.
 
-- [x] Profile is in sections: **Account** (name, email, edit display name, sign out, delete account), **Preferences** (dietary preferences, home city, default search distance), **About** (privacy, help). No "coming soon" rows: a row works or is removed.
-- [x] A signed-in person can change display name, home city, dietary preferences (pick from a short list) and default distance (e.g. 1, 2, 5, 10 km); changes save to their own `profiles` row, survive an app restart, and show on another sign-in. Invalid input (empty or over-long name) shows a clear message; a failed save says so and keeps the old value.
-- [x] The default distance is used as the search radius for new searches (within the server's existing cap). Dietary preferences are stored only; using them in search is a later task.
-- [x] A guest sees Preferences disabled with a "Create an account to save preferences" prompt that promises only what exists.
-- [x] Friends shows a designed preview (sharing picks, seeing where friends eat) with an **Invite** button that opens the system share sheet with a short invite text; the demo people list is gone.
-- [ ] Fast tab taps (Home → Saved → Friends) no longer make a page jump sides as it leaves (deferred P2 from PR #22): it starts its exit from its current offset.
-- [x] Profile and Friends pass the tap-target, label and contrast guideline tests, also at 2x text on a 320 x 568 phone.
-- [x] `flutter analyze` and `flutter test` pass, with tests for saving each preference (fake service), a failed save, and the guest state; checked on the Android emulator signed in and as a guest.
-
-## Checked
-
-- 2026-11-27, `Pixel_10_Pro`, guest: Profile shows Account/Preferences/About sections with Preferences off and "Create an account to save preferences."; Privacy & data and Help open; Friends shows the preview, no fake people; **Invite opens the Android share sheet** with the invite text (`share_plus`, approved by the maintainer).
-- Accessibility guideline tests pass for Profile (signed in, guest) and Friends, at the top and scrolled, also at 2x text on 320 x 568.
-- 2026-11-27 ~19:05 PST, `Pixel_10_Pro`, signed in with the maintainer's test account: Profile loads name, email and preferences from the server; search distance, dietary preferences (two choices), home city and name were each changed and "Saved."; after closing and reopening the app all four were kept, and a read-only query on that account's `profiles` row showed the same values. A search then found only places within the new, smaller distance. All four were set back to their earlier values afterwards (checked in the row). Found and fixed on the way: the sheets opened under the nav bar; the dietary sheet lost picks when it rebuilt.
-- Still to check in the app: the tab slide (criterion 6; unit-tested in `tab_slide_test.dart`).
+- [ ] Tapping the pick opens a scrollable detail page. Details load only then, with one Places Details request through an Edge Function (key server-side); search makes no extra Places calls and keeps its 11 s budget.
+- [ ] Photo gallery: up to 5 Places photos, each fetched only as the guest swipes to it, each with its author attribution; a place with no photos shows the placeholder.
+- [ ] Up to 5 Places reviews, each with author name, photo, rating, relative time and a link (Google's attribution rules), plus Google's `editorialSummary` and review summary when Places has them.
+- [ ] Attributes from Places only (for example takeout, delivery, dine-in, vegetarian, outdoor seating, good for groups, beer/wine); an attribute Places doesn't report is not shown.
+- [ ] Menu and more: buttons to the restaurant's `websiteUri` (when present) and its Google Maps page; Places has no menu items, so none are shown.
+- [ ] "Why this pick": up to 3 short claims from Gemini, given only the craving and that place's Places fields and reviews. Each claim cites its source field or review; the function drops any claim whose citation is missing or not in the input. If Gemini fails or nothing survives, the page shows today's Places-only reasons (Budget-friendly, Close by, Highly rated).
+- [ ] Failure paths: a details request that fails or times out shows the card's existing facts with a "Couldn't load more about this place" message and Try again; No and Yes keep working from the detail page.
+- [ ] Function tests for the citation check, the fallback and input validation (place ID format, publishable-key check, no logging of the craving or place); `flutter analyze` and `flutter test` pass, with widget tests for the loaded, partial (no photos/reviews) and failed states, and the accessibility guidelines at 1x and 2x text.
+- [ ] Checked in the app on Android and iPhone: a real craving → pick → detail page with photos, reviews and cited claims; key scan of the built app finds no Google key.
 
 ## Out of scope
 
-- Real friends, invites that create links between accounts, notifications settings, a profile photo, Saved hub (TASK-004), using dietary preferences in search.
+- Menu items or dishes (Places has none), using reviews in search ranking (the search rework), saving reviews, the paid Gemini tier switch (a release gate, not this task).
