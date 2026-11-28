@@ -18,7 +18,9 @@ class ProfileScreen extends StatelessWidget {
     final name = session.isGuest ? 'Guest' : session.displayName;
     final rated = session.bookmarks.where((r) => session.bookmarkRating(r.placeId) > 0).length;
     final profile = session.profile;
-    final canEdit = session.isSignedIn && profile != null;
+    // Not while a save is on its way: an editor opened now would start from
+    // the old value and could undo the change being saved.
+    final canEdit = session.isSignedIn && profile != null && !session.profileSaving;
 
     return ListView(
       // Bottom padding clears the floating nav bar.
@@ -111,6 +113,7 @@ class ProfileScreen extends StatelessWidget {
                   title: 'Name',
                   value: profile?.displayName ?? session.displayName,
                   onTap: canEdit ? () => _editName(context, session) : null,
+                  enabled: canEdit || profile == null,
                 ),
                 const _RowDivider(),
                 _Row(icon: Icons.mail_outline_rounded, title: 'Email', value: session.email ?? ''),
@@ -119,7 +122,7 @@ class ProfileScreen extends StatelessWidget {
           ),
         ],
         const _SectionLabel('Preferences'),
-        if (!canEdit)
+        if (!canEdit && !session.profileSaving)
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
             child: Row(

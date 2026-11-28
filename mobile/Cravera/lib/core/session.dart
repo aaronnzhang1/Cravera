@@ -82,7 +82,11 @@ class AppSession extends ChangeNotifier {
 
   /// Completes when the signed-in person's profile has loaded (or failed), so
   /// a search right after sign-in uses their saved distance.
-  Future<void> get profileReady => _profileLoad ?? Future.value();
+  /// Waits at most [profileWait]: a stalled load never blocks search (it
+  /// then uses the server's default distance).
+  Future<void> get profileReady =>
+      (_profileLoad ?? Future.value()).timeout(profileWait, onTimeout: () {});
+  static const profileWait = Duration(seconds: 5);
   Future<void>? _profileLoad;
 
   /// Loads the signed-in person's profile (or just the display name without a
@@ -126,17 +130,26 @@ class AppSession extends ChangeNotifier {
     final before = _saving;
     final done = Completer<void>();
     _saving = done.future;
+    _savesInFlight++;
+    notifyListeners();
     try {
       await before;
       if (_accountId != account || _accountGeneration != generation) return ProfileSaveOutcome.failed;
       return await _save(service, account, generation, change);
     } finally {
       done.complete();
+      _savesInFlight--;
+      notifyListeners();
     }
   }
 
   /// The save in flight, if any; the next one waits for it.
   Future<void> _saving = Future.value();
+
+  /// True while a profile save is on its way. Editors are closed meanwhile,
+  /// so an edit can't start from a value that is about to change.
+  bool get profileSaving => _savesInFlight > 0;
+  int _savesInFlight = 0;
 
   Future<ProfileSaveOutcome> _save(ProfileService service, String account, int generation, ProfileChange change) async {
     final (outcome, stored) = await service.save(account, change);

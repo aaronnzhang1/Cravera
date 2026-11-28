@@ -108,6 +108,19 @@ void main() {
     expect(session.search.radiusMeters, 1000);
   });
 
+  testWidgets('a profile load that never answers does not hold search forever', (tester) async {
+    // Widget tests run on a fake clock, so the 5 s wait passes instantly.
+    profiles.loadGate = Completer<void>(); // never completes
+    await session.signInWithEmail(email: FakeAuth.knownEmail, password: FakeAuth.knownPassword);
+    var ready = false;
+    unawaited(session.profileReady.then((_) => ready = true));
+    await tester.pump(AppSession.profileWait - const Duration(milliseconds: 1));
+    expect(ready, isFalse);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(ready, isTrue);
+    expect(session.search.radiusMeters, isNull, reason: 'the server default is used');
+  });
+
   test('a saved change is kept and comes back on the next sign-in', () async {
     await signIn();
     expect(await session.updateProfile(const ProfileChange(displayName: '  Sam  ')), ProfileSaveOutcome.ok);
@@ -349,6 +362,30 @@ void profileScreenTests() {
     await _settle(tester);
     expect(find.byType(AlertDialog), findsOneWidget, reason: 'stays open to fix it');
     expect(profiles.saves, isEmpty);
+  });
+
+  testWidgets('while a save is on its way, the editors stay closed', (tester) async {
+    final profiles = FakeProfiles()..saveGate = Completer<void>();
+    final session = await _openProfile(tester, profiles);
+    await tester.ensureVisible(find.text('Dietary preferences'));
+    await tester.tap(find.text('Dietary preferences'));
+    await _settle(tester);
+    await tester.tap(find.text('Vegan'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _settle(tester);
+    expect(session.profileSaving, isTrue);
+    // Reopening now would start from the old list and could drop Vegan.
+    await tester.tap(find.text('Dietary preferences'));
+    await _settle(tester);
+    expect(find.text('Halal'), findsNothing, reason: 'the sheet does not open mid-save');
+    profiles.saveGate!.complete();
+    await _settle(tester);
+    expect(session.profileSaving, isFalse);
+    expect(session.profile?.dietaryPreferences, ['vegan']);
+    await tester.tap(find.text('Dietary preferences'));
+    await _settle(tester);
+    expect(find.text('Halal'), findsOneWidget, reason: 'open again once saved');
   });
 
   testWidgets('a guest sees preferences off and an honest account prompt', (tester) async {
