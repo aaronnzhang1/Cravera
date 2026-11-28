@@ -18,6 +18,9 @@ enum AuthOutcome {
   invalidEmail,
   tooManyRequests,
   network,
+
+  /// The auth server answered with an error (5xx): not the guest's connection.
+  server,
   failed,
 }
 
@@ -32,6 +35,7 @@ String authMessage(AuthOutcome outcome) => switch (outcome) {
       AuthOutcome.invalidEmail => 'That doesn’t look like an email address.',
       AuthOutcome.tooManyRequests => 'Too many tries. Wait a few minutes and try again.',
       AuthOutcome.network => 'No connection. Check your internet and try again.',
+      AuthOutcome.server => 'Our sign-in service isn’t working right now. Try again in a few minutes.',
       AuthOutcome.failed => 'Something went wrong. Try again.',
     };
 
@@ -210,6 +214,9 @@ class SupabaseAuthService implements AuthService {
 
   /// Maps Supabase errors to outcomes by their stable codes, never by text.
   static AuthOutcome outcomeFor(Object error) {
+    // gotrue throws AuthRetryableFetchException both when the request never
+    // got an answer (no status) and for a 5xx answer (status set).
+    if (error is AuthRetryableFetchException && error.statusCode != null) return AuthOutcome.server;
     if (error is SocketException || error is TimeoutException || error is AuthRetryableFetchException) {
       return AuthOutcome.network;
     }

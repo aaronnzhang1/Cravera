@@ -350,6 +350,10 @@ void main() {
     expect(map(const AuthException('x', code: 'over_email_send_rate_limit')), AuthOutcome.tooManyRequests);
     expect(map(const AuthException('invalid_credentials', code: 'something_new')), AuthOutcome.failed);
     expect(map(AuthRetryableFetchException()), AuthOutcome.network);
+    // A 5xx answer is the server's problem, not the guest's connection.
+    expect(map(AuthRetryableFetchException(statusCode: '500')), AuthOutcome.server);
+    expect(map(AuthRetryableFetchException(statusCode: '503')), AuthOutcome.server);
+    expect(authMessage(AuthOutcome.server), isNot(contains('connection')));
     expect(map(TimeoutException('slow')), AuthOutcome.network);
     expect(map(StateError('?')), AuthOutcome.failed);
   });
