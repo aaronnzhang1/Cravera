@@ -7,7 +7,7 @@
 
 - **App:** Flutter, pinned to 3.41.9 stable (Dart 3.11.5) in CI. go_router for navigation, geolocator for location, url_launcher for maps.
 - **Backend and database:** Supabase (Postgres, Auth, Edge Functions, RLS).
-- **Craving parsing:** Gemini, chosen by the maintainer on 2026-11-26. It returns search filters only. (Narrowed by [0005](0005-traceable-ai-summaries.md): it may also write cited "Why this pick" claims on the card.)
+- **Craving parsing:** Gemini, chosen by the maintainer on 2026-11-26. It returns search filters only. (Narrowed by [0005](0005-traceable-ai-summaries.md): it may also choose the Places evidence behind the card's "Why this pick".)
 - **Restaurant data:** Google Places.
 
 ## Context
