@@ -9,7 +9,7 @@ ADR 0002 and AGENTS.md let Gemini only turn a craving into search filters and re
 
 ## Decision
 
-Gemini may write short "Why this pick" claims, only from Google Places facts and reviews that the server passes to it for that place. Each claim must cite the Places field or review it came from. The Edge Function checks every citation in code and drops any claim whose source is missing or wasn't in the input. If Gemini fails, or no claim survives, the card shows the Places-only reasons (Budget-friendly, Close by, Highly rated). Everything else on the card (name, photos, address, price, hours, distance, attributes, review text) still comes straight from Places, never from Gemini.
+Gemini chooses evidence; it never writes restaurant facts. For each of up to 3 "Why this pick" items, Gemini returns only a claim kind from a fixed list, a reference to the Places field or review it rests on, and, for a review, a short quote from it. The Edge Function checks each item in code against the actual Places data: an attribute item needs that attribute to be `true` (for example `takeout`), a rating or price item needs that field present, and a review quote must appear word for word in the cited review. The words on screen come from server-owned templates ("Offers takeout", "Rated 4.6 on Google") or are the verified quote with its reviewer's name; Gemini's own wording is never shown. Any item that fails a check is dropped. If Gemini fails, or no item survives, the card shows the Places-only reasons (Budget-friendly, Close by, Highly rated). Everything else on the card still comes straight from Places.
 
 Cost and data rules decided with it (maintainer, 2026-11-27):
 
@@ -21,9 +21,10 @@ Cost and data rules decided with it (maintainer, 2026-11-27):
 
 - **No AI text on the card:** Places facts and reviews only. Safest, but loses what makes the card more than search-and-display. Rejected.
 - **Free-form AI summary with no citations:** easiest, but no way to catch invented facts. Rejected.
+- **Gemini-written sentences with a citation:** a citation proves the source exists, not that the sentence is true (a claim about a dish can cite a review that never mentions it). Rejected after Codex's adversarial review of PR #39.
 
 ## Consequences
 
 - AGENTS.md's rule gets one narrow exception, pointing here.
 - A new server path (place details + Gemini explain) needs its own time budget, tests for the citation check and the fallback, and Google's review attribution on screen.
-- The paid Gemini tier joins the release gates in CURRENT.md.
+- The details path (`place-details` and the explanation call) and the paid Gemini tier join the release gates in CURRENT.md.
