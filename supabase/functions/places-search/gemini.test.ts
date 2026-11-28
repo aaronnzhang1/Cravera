@@ -355,6 +355,16 @@ test("refining sends the previous intent to Gemini and uses the new intent", asy
   assert.deepEqual((await res.json()).intent.priceLevels, [1]);
 });
 
+test("understand keeps a named landmark, also across a refine", async () => {
+  // "lunch at the Ferry Building" + "no seafood" lost "Ferry Building" (2026-11-27).
+  const g = fakeGoogle([new Response(JSON.stringify({ places: [] }))], [geminiAnswer(gymIntent)]);
+  await handle(request({ query: "no seafood", previousIntent: { ...gymIntent, textQuery: "lunch Ferry Building" }, ...here }), env, g.fn);
+  const system = String(g.geminiCalls()[0].body.system_instruction);
+  assert.ok(system.includes("Keep a landmark or neighborhood the guest named"));
+  assert.ok(system.includes("Keep any landmark or neighborhood in the previous textQuery"));
+  assert.ok(!system.includes("No places"));
+});
+
 test("refining without Gemini adds the text to the previous search text", async () => {
   const g = fakeGoogle([new Response(JSON.stringify({ places: [] }))], [new Error("offline")]);
   await handle(request({ query: "spicy", previousIntent: { ...gymIntent, textQuery: "tacos" }, ...here }), env, g.fn);
