@@ -47,6 +47,15 @@ class SavedHub extends ChangeNotifier {
   /// before one can't overwrite it when it answers later.
   int _changes = 0;
 
+  /// Numbers list reads: only the newest one's answer is applied, so an
+  /// older snapshot that answers late can't replace a fresher one.
+  int _readRequest = 0;
+
+  /// The write on its way, if any. Writes go one at a time, each waiting
+  /// until the previous one has really settled (not just timed out on
+  /// screen), so an older write can never land after a newer one.
+  Future<void> _lastWrite = Future.value();
+
   String? _account;
   int _generation = 0;
 
@@ -77,6 +86,7 @@ class SavedHub extends ChangeNotifier {
     if (accountId == _account) return;
     _account = accountId;
     _generation++;
+    _lastWrite = Future.value();
     _items = const [];
     _basics.clear();
     _status = SavedLoadStatus.idle;
@@ -94,10 +104,11 @@ class SavedHub extends ChangeNotifier {
     if (s == null || account == null) return;
     final generation = _generation;
     final changesBefore = _changes;
+    final read = ++_readRequest;
     if (_status != SavedLoadStatus.loaded) _status = SavedLoadStatus.loading;
     notifyListeners();
     final list = await s.list().timeout(const Duration(seconds: 10), onTimeout: () => null);
-    if (!_current(generation, account)) return;
+    if (!_current(generation, account) || read != _readRequest) return;
     if (list != null && _changes != changesBefore) {
       // A change landed while this read was on its way: it may not include
       // it. Read again rather than show an older snapshot.
@@ -147,7 +158,16 @@ class SavedHub extends ChangeNotifier {
     if (s == null || account == null) return SavedOutcome.failed;
     if (_status != SavedLoadStatus.loaded) return SavedOutcome.notReady;
     final generation = _generation;
+    final before = _lastWrite;
+    final settled = Completer<void>();
+    _lastWrite = settled.future;
+    await before;
+    if (!_current(generation, account)) {
+      settled.complete();
+      return SavedOutcome.failed;
+    }
     final write = call(s);
+    unawaited(write.then((_) {}, onError: (_) {}).whenComplete(settled.complete));
     // A write that times out keeps running: when it finally settles (either
     // way) the list is read again, so a late commit still shows.
     var timedOut = false;

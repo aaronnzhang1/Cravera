@@ -203,6 +203,77 @@ void main() {
     await pumpEventQueue();
     expect(hub.contains('p1'), isFalse, reason: 're-read again once the write settled');
   });
+
+  test('a newer note never lands before an older, timed-out one', () async {
+    final service = _GatedNotes()..rows.add(const SavedPlace(placeId: 'p1'));
+    final hub = SavedHub(service: service, writeTimeout: const Duration(milliseconds: 20));
+    hub.switchAccount('account-a');
+    await pumpEventQueue();
+    expect(await hub.setNote('p1', 'first'), SavedOutcome.network); // still on its way
+    final second = hub.setNote('p1', 'second');
+    await pumpEventQueue();
+    expect(service.sent, ['first'], reason: 'the second waits for the first to settle');
+    service.release();
+    expect(await second, SavedOutcome.ok);
+    expect(service.sent, ['first', 'second']);
+    await pumpEventQueue();
+    expect(hub.items.single.note, 'second');
+  });
+
+  test('an older list read that answers last is dropped', () async {
+    final service = _GatedLists()..rows.add(const SavedPlace(placeId: 'p1', note: 'old'));
+    final hub = SavedHub(service: service);
+    hub.switchAccount('account-a');
+    service.releaseNext(); // the first load
+    await pumpEventQueue();
+    final older = hub.load(); // snapshot: note 'old'
+    service.rows[0] = const SavedPlace(placeId: 'p1', note: 'new'); // another phone edits
+    final newer = hub.load(); // snapshot: note 'new'
+    service.releaseLast(); // the newer answers first
+    await pumpEventQueue();
+    service.releaseNext(); // then the older
+    await older;
+    await newer;
+    expect(hub.items.single.note, 'new');
+  });
+}
+
+/// Note updates that settle only when released, recording what was sent.
+class _GatedNotes extends FakeSavedPlaces {
+  final sent = <String?>[];
+  final _gates = <Completer<void>>[];
+  void release() {
+    for (final g in _gates) {
+      if (!g.isCompleted) g.complete();
+    }
+  }
+
+  @override
+  Future<SavedOutcome> update(String placeId, {SavedStatus? status, String? note, bool clearNote = false}) async {
+    sent.add(note);
+    if (sent.length == 1) {
+      final g = Completer<void>();
+      _gates.add(g);
+      await g.future;
+    }
+    return super.update(placeId, status: status, note: note, clearNote: clearNote);
+  }
+}
+
+/// List reads that take their snapshot at once and answer when released.
+class _GatedLists extends FakeSavedPlaces {
+  final _pending = <(Completer<void>, List<SavedPlace>)>[];
+  void releaseNext() => _pending.removeAt(0).$1.complete();
+  void releaseLast() => _pending.removeLast().$1.complete();
+
+  @override
+  Future<List<SavedPlace>?> list() async {
+    final snapshot = List.of(rows);
+    final gate = Completer<void>();
+    _pending.add((gate, snapshot));
+    await gate.future;
+    return snapshot;
+  }
 }
 
 /// A remove that commits only when told to (a slow network).
