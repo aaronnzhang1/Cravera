@@ -109,3 +109,21 @@ test("city: locality, else postal town, else county", () => {
   assert.equal(cityOf([{ longText: "Testshire", types: ["administrative_area_level_2"] }]), "Testshire");
   assert.equal(cityOf(null), null);
 });
+
+test("the deadline covers the database read too: a slow read leaves less time for Google", async () => {
+  const calls: string[] = [];
+  const fn = async (url: string, init: RequestInit) => {
+    calls.push(url);
+    if (url.includes("/rest/v1/")) {
+      await new Promise((r) => setTimeout(r, 150));
+      return new Response(JSON.stringify([{ place_id: "stuck" }]));
+    }
+    await new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+    return new Response("{}");
+  };
+  const started = Date.now();
+  const { places } = await (await handle(request(), env, fn, 250)).json();
+  const took = Date.now() - started;
+  assert.ok(took < 600, `answered in ${took} ms`);
+  assert.deepEqual(places, [{ placeId: "stuck", error: "unavailable" }]);
+});

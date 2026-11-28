@@ -30,7 +30,10 @@ class SavedBasics {
 /// an answer that arrives after a sign-out or account switch is dropped, so
 /// one person's places never show for another.
 class SavedHub extends ChangeNotifier {
-  SavedHub({this.service, this.places, this.accessToken});
+  SavedHub({this.service, this.places, this.accessToken, this.writeTimeout = const Duration(seconds: 10)});
+
+  /// How long a change waits for the server before it counts as a lost answer.
+  final Duration writeTimeout;
 
   /// Null when the app has no Supabase key; tests pass a fake.
   final SavedPlacesService? service;
@@ -144,7 +147,22 @@ class SavedHub extends ChangeNotifier {
     if (s == null || account == null) return SavedOutcome.failed;
     if (_status != SavedLoadStatus.loaded) return SavedOutcome.notReady;
     final generation = _generation;
-    final outcome = await call(s).timeout(const Duration(seconds: 10), onTimeout: () => SavedOutcome.network);
+    final write = call(s);
+    // A write that times out keeps running: when it finally settles (either
+    // way) the list is read again, so a late commit still shows.
+    var timedOut = false;
+    final outcome = await write.timeout(writeTimeout, onTimeout: () {
+      timedOut = true;
+      return SavedOutcome.network;
+    });
+    if (timedOut) {
+      unawaited(write.then((_) {
+        if (_current(generation, account)) {
+          _changes++;
+          unawaited(load());
+        }
+      }, onError: (_) {}));
+    }
     if (!_current(generation, account)) return SavedOutcome.failed;
     if (outcome == SavedOutcome.ok) {
       _changes++;

@@ -31,7 +31,12 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     final hub = AppSessionScope.of(context).saved;
     if (hub.status == SavedLoadStatus.loaded) {
       _asked = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => hub.loadBasics());
+      // Each visit re-reads the stored rows (cheap, our own database) before
+      // the fresh names, so Saved never shows an out-of-date list for long.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await hub.load();
+        await hub.loadBasics();
+      });
     }
   }
 

@@ -81,12 +81,12 @@ async function one(placeId: string, key: string, fetchFn: FetchFn, signal: Abort
 }
 
 /** The caller's own saved place IDs, newest first, read with their token (RLS). */
-async function ownPlaceIds(base: string, apikey: string, token: string, fetchFn: FetchFn): Promise<string[] | "unauthorized" | null> {
+async function ownPlaceIds(base: string, apikey: string, token: string, fetchFn: FetchFn, timeoutMs: number): Promise<string[] | "unauthorized" | null> {
   try {
     const res = await fetchFn(`${base}/rest/v1/saved_places?select=place_id&order=created_at.desc&limit=${MAX_PLACES}`, {
       method: "GET",
       headers: { apikey, Authorization: `Bearer ${token}`, Accept: "application/json" },
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      signal: AbortSignal.timeout(Math.max(1, Math.min(UPSTREAM_TIMEOUT_MS, timeoutMs))),
       redirect: "error",
     });
     if (res.status === 401 || res.status === 403) return "unauthorized";
@@ -104,6 +104,9 @@ async function ownPlaceIds(base: string, apikey: string, token: string, fetchFn:
 }
 
 export async function handle(req: Request, env: Env, fetchFn: FetchFn, deadlineMs = DEADLINE_MS): Promise<Response> {
+  // One deadline for the whole request, database read included.
+  const started = Date.now();
+  const left = () => deadlineMs - (Date.now() - started);
   if (req.method !== "POST") return json(405, { error: "Use POST." });
   const apikey = req.headers.get("apikey");
   if (!apikey || !parsePublishableKeys(env.publishableKeys).includes(apikey)) return json(401, { error: "Unauthorized." });
@@ -113,7 +116,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn, deadlineM
     console.error("saved-places: GOOGLE_MAPS_API_KEY or SUPABASE_URL is not set");
     return json(500, { error: "Saved places are not configured." });
   }
-  const ids = await ownPlaceIds(env.supabaseUrl.replace(/\/+$/, ""), apikey, token, fetchFn);
+  const ids = await ownPlaceIds(env.supabaseUrl.replace(/\/+$/, ""), apikey, token, fetchFn, left());
   if (ids === "unauthorized") return json(401, { error: "Sign in again." });
   if (ids === null) return json(502, { error: "Couldn't read your saved places." });
 
@@ -132,7 +135,7 @@ export async function handle(req: Request, env: Env, fetchFn: FetchFn, deadlineM
     timer = setTimeout(() => {
       stop.abort();
       resolve();
-    }, deadlineMs);
+    }, Math.max(0, left()));
   });
   await Promise.race([Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, worker)), deadline]);
   clearTimeout(timer);

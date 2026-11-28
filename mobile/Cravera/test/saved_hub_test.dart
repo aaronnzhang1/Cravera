@@ -190,4 +190,32 @@ void main() {
     await hub.loadBasics();
     expect(places.requests, isEmpty);
   });
+
+  test('a write that times out and commits later is shown once it settles', () async {
+    final service = _SlowRemove()..rows.add(const SavedPlace(placeId: 'p1'));
+    final hub = SavedHub(service: service, writeTimeout: const Duration(milliseconds: 20));
+    hub.switchAccount('account-a');
+    await pumpEventQueue();
+    expect(await hub.remove('p1'), SavedOutcome.network); // the app stops waiting
+    await pumpEventQueue();
+    expect(hub.contains('p1'), isTrue, reason: 'the first re-read ran before the delete landed');
+    service.finish(); // the delete commits now
+    await pumpEventQueue();
+    expect(hub.contains('p1'), isFalse, reason: 're-read again once the write settled');
+  });
+}
+
+/// A remove that commits only when told to (a slow network).
+class _SlowRemove extends FakeSavedPlaces {
+  final _done = Completer<void>();
+  void finish() {
+    rows.clear();
+    _done.complete();
+  }
+
+  @override
+  Future<SavedOutcome> remove(String placeId) async {
+    await _done.future;
+    return SavedOutcome.ok;
+  }
 }
