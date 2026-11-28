@@ -11,7 +11,9 @@ import 'package:cravera/services/location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'auth_test.dart' show FakeAuth;
 import 'craving_search_test.dart' show FakePlaces;
+import 'profile_test.dart' show FakeProfiles;
 
 const _nearby = SearchLocation(latitude: 10, longitude: 20, label: 'Near you');
 
@@ -79,6 +81,36 @@ Future<void> _meetsAll(WidgetTester tester) async {
   await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
   await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
   await expectLater(tester, meetsGuideline(textContrastGuideline));
+}
+
+/// Opens a tab ([tab]: 'Profile' or 'Friends'), signed in with a profile or as a guest.
+Future<void> _tab(WidgetTester tester, String tab, {bool signedIn = false}) async {
+  final session = AppSession(
+    locationService: const _FoundLocation(),
+    search: CravingSearch(places: FakePlaces((_) => [])),
+    auth: signedIn ? FakeAuth() : null,
+    profiles: signedIn ? FakeProfiles() : null,
+  );
+  await tester.pumpWidget(MyApp(session: session));
+  await tester.pump();
+  if (signedIn) {
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), FakeAuth.knownEmail);
+    await tester.enterText(find.widgetWithText(TextField, 'Password'), FakeAuth.knownPassword);
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+  } else {
+    await tester.tap(find.text('Continue as guest'));
+  }
+  await _settle(tester);
+  await tester.tap(find.text(tab));
+  await _settle(tester);
+}
+
+/// Checks the page at the top, then scrolled to the end (the checks only see what's on screen).
+Future<void> _meetsAllScrolled(WidgetTester tester) async {
+  await _meetsAll(tester);
+  await tester.drag(find.byType(ListView).last, const Offset(0, -3000));
+  await _settle(tester);
+  await _meetsAll(tester);
 }
 
 void main() {
@@ -191,4 +223,26 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'no overflow');    await _meetsAll(tester);
     handle.dispose();
   });
+  for (final (tab, signedIn) in [('Profile', true), ('Profile', false), ('Friends', false)]) {
+    testWidgets('$tab${signedIn ? ' (signed in)' : ' (guest)'} meets the accessibility guidelines', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _tab(tester, tab, signedIn: signedIn);
+      await _meetsAllScrolled(tester);
+      handle.dispose();
+    });
+
+    testWidgets('$tab${signedIn ? ' (signed in)' : ' (guest)'} meets them at 2x text on a small phone', (tester) async {
+      final handle = tester.ensureSemantics();
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await _tab(tester, tab, signedIn: signedIn);
+      tester.view.devicePixelRatio = 2;
+      tester.view.physicalSize = const Size(640, 1136); // 320 x 568
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      await _settle(tester);
+      expect(tester.takeException(), isNull, reason: 'no overflow');
+      await _meetsAllScrolled(tester);
+      handle.dispose();
+    });
+  }
 }
