@@ -1,2 +1,4 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
+// The Maps SDK key for iOS (ADR 0006), git-ignored: MAPS_IOS_API_KEY=...
+#include? "MapsKey.xcconfig"

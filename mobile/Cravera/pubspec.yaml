@@ -43,6 +43,7 @@ dependencies:
   geocoding: ^5.0.1
   supabase_flutter: ^2.18.3
   share_plus: ^13.3.1
+  google_maps_flutter: ^2.18.1
 
 dev_dependencies:
   flutter_test:

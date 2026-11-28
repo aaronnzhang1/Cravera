@@ -8,6 +8,7 @@ import '../core/session.dart';
 import '../services/saved_hub.dart';
 import '../services/saved_places_service.dart';
 import '../widgets/glass.dart';
+import '../widgets/saved_map.dart';
 
 /// Saved (TASK-004): the signed-in person's places, in Want to go and Been,
 /// grouped by city. Each place's name and address are fetched fresh when this
@@ -21,6 +22,7 @@ class BookmarksScreen extends StatefulWidget {
 
 class _BookmarksScreenState extends State<BookmarksScreen> {
   SavedStatus _tab = SavedStatus.wantToGo;
+  bool _showMap = false;
   bool _asked = false;
 
   @override
@@ -89,7 +91,17 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
           selected: {_tab},
           onSelectionChanged: (s) => setState(() => _tab = s.first),
         ),
-        const SizedBox(height: 16),
+        if (mapsAvailable && places.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _showMap = !_showMap),
+              icon: Icon(_showMap ? Icons.view_list_rounded : Icons.map_outlined),
+              label: Text(_showMap ? 'Show list' : 'Show map'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+            ),
+          ),
+        const SizedBox(height: 8),
         if (hub.status == SavedLoadStatus.loading && hub.items.isEmpty)
           const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
         else if (hub.status == SavedLoadStatus.failed && hub.items.isEmpty)
@@ -107,6 +119,8 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                 ? 'Tap the bookmark on a pick you like.'
                 : 'Open a saved place and mark it as Been after you go.',
           )
+        else if (_showMap && mapsAvailable)
+          SavedMap(places: places, hub: hub, onOpen: (p) => _openPlace(context, p))
         else ...[
           if (hub.basicsStatus == SavedLoadStatus.failed)
             Padding(
