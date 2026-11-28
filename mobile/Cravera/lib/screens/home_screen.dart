@@ -10,6 +10,7 @@ import '../models/restaurant.dart';
 import '../services/craving_search.dart';
 import '../services/location_service.dart';
 import '../services/places_service.dart';
+import '../services/saved_places_service.dart';
 import '../widgets/cravera_logo.dart';
 import '../widgets/floating_cards.dart';
 import '../widgets/glass.dart';
@@ -707,7 +708,7 @@ class _PickView extends StatelessWidget {
                               icon: saved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
                               color: saved ? AppColors.accent : AppColors.textPrimary,
                               tooltip: saved ? 'Remove bookmark' : 'Bookmark',
-                              onPressed: () => session.toggleBookmark(restaurant),
+                              onPressed: () => _toggleSaved(context, session, restaurant),
                             ),
                           ),
                       ],
@@ -1824,4 +1825,19 @@ class _RoundIcon extends StatelessWidget {
       icon: Icon(icon),
     );
   }
+}
+
+/// The bookmark on the pick (TASK-004): saves the place for a signed-in
+/// person; guests are asked to create an account, and nothing is stored.
+Future<void> _toggleSaved(BuildContext context, AppSession session, Restaurant restaurant) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final wasSaved = session.isBookmarked(restaurant.placeId);
+  final outcome = await session.toggleBookmark(restaurant);
+  messenger.hideCurrentSnackBar();
+  final message = switch (outcome) {
+    null => 'Create an account to save places.',
+    SavedOutcome.ok => wasSaved ? 'Removed from Saved.' : 'Saved to Want to go.',
+    final failed => savedMessage(failed),
+  };
+  messenger.showSnackBar(SnackBar(content: Text(message)));
 }

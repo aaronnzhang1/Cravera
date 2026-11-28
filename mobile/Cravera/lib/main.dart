@@ -11,6 +11,8 @@ import 'services/auth_service.dart';
 import 'services/craving_search.dart';
 import 'services/places_service.dart';
 import 'services/profile_service.dart';
+import 'services/saved_hub.dart';
+import 'services/saved_places_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,11 +22,16 @@ Future<void> main() async {
     // `.env` is treated as an asset; if a developer runs without it, we still want UI to boot.
   }
   final auth = await _startAuth();
+  final places = PlacesService.fromEnv();
   runApp(MyApp(
     session: AppSession(
-      search: CravingSearch(places: PlacesService.fromEnv()),
+      search: CravingSearch(places: places),
       auth: auth,
       profiles: auth == null ? null : SupabaseProfileService(Supabase.instance.client),
+      saved: SavedHub(
+        service: auth == null ? null : SupabaseSavedPlacesService(Supabase.instance.client),
+        places: places,
+      ),
     ),
   ));
 }
