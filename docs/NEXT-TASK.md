@@ -24,19 +24,14 @@ Tick a box only after checking it in the running app with real data. Never delet
 - [ ] Function tests (input validation, publishable-key and caller checks, field mask is Essentials only, no logging of place IDs with a user); `flutter analyze` and `flutter test` pass, with tests for each state (empty, loading, loaded, a failed row, guest) and the accessibility guidelines at 1x and 2x text.
 - [ ] Checked in the app on Android and iPhone with real saved places; the built app's key scan finds only the restricted Maps SDK key.
 
-## Open decision (found while building, 2026-11-27)
+## Decided while building (maintainer, 2026-11-27)
 
-The list criterion says "basic Place Details fields (Google's Essentials tier)", but Google bills a place's **name** (`displayName`) in the **Pro** tier; Essentials has only address, location and address parts (Codex on PR #41 found the same). Both ways below stay inside a free monthly allowance; the maintainer asked to stay free:
-
-- **Pro for the list:** name + address + location, about 5,000 free a month (about 160 a day), then $17 per 1,000; a daily Pro quota keeps it free.
-- **Essentials for the list:** address and location only (about 10,000 free a month); the name shows after a tap (the full page).
-
-Until the maintainer picks, the list criterion isn't worked; the rest is.
+Google bills a place's name (`displayName`) in the **Pro** tier, not Essentials (Codex on PR #41 found the same). The maintainer chose **Pro for the list** (name, address, location, address parts), kept free by a daily Place Details Pro quota of about 150 (about 5,000 free a month). The list criterion's "Essentials tier" reads as "Pro tier" from here on; everything else in it stands.
 
 ## Needs from the maintainer before building
 
-1. Create two Maps SDK keys in Google Cloud Console (a key takes one kind of app restriction): an Android key (package `com.cravera.app`, debug SHA-1 `E5:1C:1B:BE:54:88:19:82:6F:93:07:80:3B:BB:0C:A3:88:8A:6D:E5`; API: Maps SDK for Android only) and an iOS key (bundle ID; API: Maps SDK for iOS only). Put them in a local file Claude names, not in chat.
-2. A daily quota on Place Details Essentials (for example 300/day; about 10,000 a month are free).
+1. Create two Maps SDK keys in Google Cloud Console (a key takes one kind of app restriction): an Android key (package `com.cravera.app`, debug SHA-1 `E5:1C:1B:BE:54:88:19:82:6F:93:07:80:3B:BB:0C:A3:88:8A:6D:E5`; API: Maps SDK for Android only) and an iOS key (bundle ID; API: Maps SDK for iOS only). Android key in `mobile/Cravera/android/local.properties` as `MAPS_ANDROID_KEY=…` (git-ignored); the iOS key on the Mac, in a file Claude names then. Never in chat.
+2. A daily quota on Place Details Pro (about 150/day; about 5,000 a month are free); Text Search back to about 30/day; a $1 budget alert.
 3. OK to add `google_maps_flutter` (official Flutter plugin) and to apply the migration after review.
 
 ## Out of scope
