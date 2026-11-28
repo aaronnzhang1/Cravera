@@ -11,13 +11,13 @@ ADR 0002 and AGENTS.md let Gemini only turn a craving into search filters and re
 
 The card has two AI parts, kept visibly apart.
 
-**1. Checked facts ("Why this pick").** Gemini returns only references to Places field names from a fixed list (for example `takeout`, `rating`, `priceLevel`). The Edge Function checks each in code: an attribute counts only if Places reports it `true`, a rating only if present, a price only if it lies inside the search's own price range; anything else is ignored. The words come only from the server's template for that field ("Offers takeout", "Rated 4.6 on Google"). Reviews are never reasons (a review can say the opposite of what the guest wants); Gemini may only order the reviews section. If Gemini fails or nothing survives, the Places-only reasons show (Budget-friendly only inside the requested price range).
+**1. Checked facts ("Why this pick").** Gemini returns only references to Places field names from a fixed list (for example `takeout`, `rating`, `priceLevel`). The Edge Function checks each in code: an attribute counts only if Places reports it `true`, a rating only if present, a price only if the guest asked for a price range and it lies inside it (with no requested range, price is never a reason); anything else is ignored. The words come only from the server's template for that field ("Offers takeout", "Rated 4.6 on Google"). Reviews are never reasons (a review can say the opposite of what the guest wants); Gemini may only order the reviews section. If Gemini fails or nothing survives, the Places-only reasons show (Budget-friendly only when the guest asked for a price range and the price is inside it).
 
 **2. Cravera's take.** Gemini writes a short note in Cravera's voice (at most 3 sentences, 280 characters) on how the place fits the craving and what it thinks of it, given only the craving and that place's Places fields and reviews. Guardrails, in code:
 
 - The note is labelled as Cravera's AI take on Google data and reviews, and always shows next to the checked facts and Google's own content, never in place of them.
 - It is dropped if it contains any digit or number word, any currency sign or price word (for example dollar, bucks, cents, price), a link, or anything about opening hours or being open. Quantities (rating, price, distance) appear only in the server's wording of checked fields, never in Gemini's prose; open-now comes only from the search, in code.
-- If Gemini fails, times out or the note is dropped, the server builds the take from a template in the same voice using only checked fields ("For your cozy ramen craving: ramen, open now, 0.3 km away, rated 4.4.").
+- If Gemini fails, times out or the note is dropped, the server builds the take from a template in the same voice, under the same rules (no numbers, prices or hours), from checked fields only ("For your cozy ramen craving, this ramen spot looks like a good fit, and you can eat in."). Quantities and open-now stay in the card's own fact rows.
 
 Everything else on the card (name, photos, address, price, hours, distance, attributes, Google's summaries, reviews) comes straight from Places.
 
