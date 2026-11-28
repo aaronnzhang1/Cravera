@@ -3,7 +3,6 @@ import 'package:cravera/core/session.dart';
 import 'package:cravera/main.dart';
 import 'package:cravera/screens/friends_screen.dart';
 import 'package:cravera/services/craving_search.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
